@@ -17,33 +17,36 @@ int main()
     //std::cout << std::endl;
 
     // a rectangle
-    //for (int y = 30; y < 60; y++)
-    //    for (int x = 123; x < 130; x++)
-    //        bm.clear(x, y);
+    for (int y = 30; y < 60; y++)
+        for (int x = 123; x < 130; x++)
+            bm.clear(x, y);
 
-    //// circles
-    //int cx = 150, cy = 76, cr = 34;
-    //for (int y = 0; y < sy; y++)
-    //    for (int x = 0; x < sx; x++)
-    //        if (((x - cx) * (x - cx) + (y - cy) * (y - cy)) < cr * cr)
-    //            bm.clear(x, y);
+    // circles
+    int cx = 150, cy = 76, cr = 34;
+    for (int y = 0; y < sy; y++)
+        for (int x = 0; x < sx; x++)
+            if (((x - cx) * (x - cx) + (y - cy) * (y - cy)) < cr * cr)
+                bm.clear(x, y);
 
-    //cx = 35; cy = 212; cr = 78;
-    //for (int y = 0; y < sy; y++)
-    //    for (int x = 0; x < sx; x++)
-    //        if (((x - cx) * (x - cx) + (y - cy) * (y - cy)) < cr * cr)
-    //            bm.clear(x, y);
+    cx = 35; cy = 212; cr = 78;
+    for (int y = 0; y < sy; y++)
+        for (int x = 0; x < sx; x++)
+            if (((x - cx) * (x - cx) + (y - cy) * (y - cy)) < cr * cr)
+                bm.clear(x, y);
 
-    //cx = 79; cy = 235; cr = 135;
-    //for (int y = 0; y < sy; y++)
-    //    for (int x = 0; x < sx; x++)
-    //        if (((x - cx) * (x - cx) + (y - cy) * (y - cy)) < cr * cr)
-    //            bm.clear(x, y);
+    cx = 79; cy = 235; cr = 135;
+    for (int y = 0; y < sy; y++)
+        for (int x = 0; x < sx; x++)
+            if (((x - cx) * (x - cx) + (y - cy) * (y - cy)) < cr * cr)
+                bm.clear(x, y);
 
     BitstreamOut s;
     std::cout << std::endl << bm.dsize() * 8 << std::endl;
-    std::cout << bm.pack(s) * 8 << std::endl;
-    std::cout << s.v.size() * 8 - s.len << std::endl;
+    bm.pack(s);
+    bm.dump(std::string("file.raw"));
+    std::cout << s.v.size() * 8 << std::endl;
+    RLE(s.v, s.v);
+    std::cout << s.v.size() * 8 << std::endl;
 }
 
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu
