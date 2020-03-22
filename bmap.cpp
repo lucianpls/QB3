@@ -60,38 +60,100 @@ void RLE(std::vector<uint8_t> &v, std::vector<uint8_t>& result) {
 
 size_t BMap::pack(BitstreamOut& s) {
 	for (auto it : _v) {
-		if (0 == it || ~0 == it) {
+		// Primary encoding
+		if (0 == it or ~0 == it) {
 			s.push(it & 0b11, 2);
+			continue;
 		}
-		else {
-			// If a single 16 bit quart is 0 or ~0, it's worth subdividing
-			bool quarts = false;
-			uint16_t q[4];
-			for (int i = 0; i < 4; i++) {
-				q[i] = static_cast<uint16_t>(it >> (i * 16));
-				if (0 == q[i] || 0xffff == q[i])
-					quarts = true;
+
+		// Test for secondary/tertiary
+		// If at least two halves are 0 or 0xff
+		int halves = 0;
+		uint16_t q[4], b;
+		for (int i = 0; i < 4; i++) {
+			q[i] = static_cast<uint16_t>(it >> (i * 16));
+			b = static_cast<uint8_t>(q[i]);
+			if (0 == b or 0xff == b)
+				halves++;
+			b = static_cast<uint8_t>(q[i] >> 8);
+			if (0 == b or 0xff == b)
+				halves++;
+		}
+
+		if (halves < 2) { // Nope, encode as raw 64bit
+			s.push(0b01, 2);
+			s.push(it, 64);
+			continue;
+		}
+
+		s.push(0b10, 2); // switch to secondary/tertiary
+		for (int i = 0; i < 4; i++) { // Check secondary encoding
+			if (0 == q[i] or 0xffff == q[i]) {
+				s.push(q[i] & 0b11, 2);
+				continue;
 			}
-			if (quarts) {
-				// subdivide the 64bit int in quarters
-				s.push(0b10, 2);
-				for (int i = 0; i < 4; i++)
-					// Codes 00 and 11 means 0000 and ffff
-					if (0 == q[i] || 0xffff == q[i]) {
-						s.push(q[i] & 0b11, 2);
-					}
-					else {
-						// We have two codes left, but subdiving doesn't make sense.
-						// So we just use the codes to encode the top bit
-						// 01 means bit 15 is 1, 10 means bit 15 is 0
-						s.push((q[i] > 0x7fff) ? 0b01 : 0b10, 2);
-						s.push(q[i] & 0x7fff, 15);
-					}
+
+			// This is a twice loop, can be written that way
+			uint8_t code = 0, val = 0;
+			b = q[i] & 0xff;
+			if (0 == b or 0xff == b) {
+				code |= b & 0b11;
 			}
 			else {
-				s.push(0b01, 2);
-				s.push(it, 64);
+				val = b & 0x7f;
+				code |= (val == b) ? 0b10 : 0b01;
 			}
+
+			code <<= 2;
+			b = static_cast<uint8_t>(q[i] >> 8);
+			if (0 == b or 0xff == b) {
+				code |= b & 0b11;
+			}
+			else {
+				val = b & 0x7f;
+				code |= (val == b) ? 0b10 : 0b01;
+			}
+
+			// Translate the meaning to tertiary code
+			static uint8_t xlate[16] = {
+				0xf0,   // 0000 secondary 00
+				0b1100, // 0001
+				0b010,  // 0010
+				0b000,  // 0011
+				0b1101, // 0100
+				0xce,   // 0101 secondary 01, magic value
+				0xce,   // 0110 secondary 01, magic value
+				0b101,  // 0111
+				0b011,  // 1000
+				0xce,   // 1001 secondary 01, magic value
+				0xce,   // 1010 secondary 01, magic value
+				0b1111, // 1011
+				0b001,  // 1100
+				0b100,  // 1101
+				0b1110, // 1110
+				0xff    // 1111 secondary 11
+			};
+
+			code = xlate[code];
+			if (code >= 0xf0) { // secondary double 00 or 11
+				s.push(code & 0b11, 2);
+				continue;
+			}
+
+			if (code > 0xf) { // secondary 16 bit raw
+				s.push(0b01, 2);
+				s.push(q[i], 16);
+				continue;
+			}
+
+			// Tertiary code
+			if (code < 2) {
+				s.push(code, 3);
+				continue;
+			}
+
+			s.push(code, (code < 6) ? 3 : 4);
+			s.push(val, 7);
 		}
 	}
 
