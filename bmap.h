@@ -21,8 +21,6 @@ struct BStream {
 };
 #endif
 
-// XY addressing
-extern uint8_t _xy[64];
 
 // Output stream
 struct BitstreamOut {
@@ -91,11 +89,24 @@ private:
 		return _lw * (y / 8) + x / 8;
 	}
 	int bitl(int x, int y) {
+		// 2D interbit addressing
+		static const uint8_t _xy[64] = {
+			0,  1,  4,  5, 16, 17, 20, 21,
+			2,  3,  6,  7, 18, 19, 22, 23,
+			8,  9, 12, 13, 24, 25, 28, 29,
+		   10, 11, 14, 15, 26, 27, 30, 31,
+		   32, 33, 36, 37, 48, 49, 52, 53,
+		   34, 35, 38, 39, 50, 51, 54, 55,
+		   40, 41, 44, 45, 56, 57, 60, 61,
+		   42, 43, 46, 47, 58, 59, 62, 63
+		};
 		return _xy[((y & 7) << 3) + (x & 7)];
 	}
 	int _x, _y;
 	size_t _lw; // Line width
 	std::vector<uint64_t> _v;
+	// XY addressing
+	static const uint8_t _xy[64];
 };
 
 void RLE(std::vector<uint8_t>& v, std::vector<uint8_t> &result);
