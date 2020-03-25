@@ -9,24 +9,26 @@
 #include <iostream>
 #include <cstdio>
 
-struct BStream {
-	BStream() : len(0) {};
-	size_t len;
-	void push(uint64_t val, size_t bits) {
-		for (int i = 0; i < bits; i++)
-			std::cout << ((val >> i) & 1);
-		std::cout << std::endl;
-		len += bits;
-	}
-};
+//struct BStream {
+//	BStream() : len(0) {};
+//	size_t len;
+//	void push(uint64_t val, size_t bits) {
+//		for (int i = 0; i < bits; i++)
+//			std::cout << ((val >> i) & 1);
+//		std::cout << std::endl;
+//		len += bits;
+//	}
+//};
 #endif
 
 
 // Output stream
-struct BitstreamOut {
+struct Bitstream {
 	std::vector<uint8_t> v;
 	size_t len; // available bits in last byte
-	BitstreamOut() : len(0) {};
+	size_t pos; // Next bit for input
+	Bitstream() : len(0), pos(0) {};
+
 	void push(uint64_t val, size_t bits) {
 		while (bits) {
 			if (0 == len)
@@ -39,13 +41,7 @@ struct BitstreamOut {
 			val >>= used;
 		}
 	}
-};
 
-struct BitstreamIn {
-	std::vector<uint8_t> v;
-	size_t pos; // Next bit position
-	BitstreamIn(std::vector<uint8_t>& other) :
-		v(other), pos(0) {};
 	template<typename T = uint64_t> bool pull(T& val, size_t bits) {
 		uint64_t acc = 0;
 		while (bits && ((pos / 8) < v.size())) {
@@ -59,6 +55,7 @@ struct BitstreamIn {
 		val = static_cast<T>(acc);
 		return true;
 	}
+
 private:
 	static const uint8_t usemask[8];
 };
@@ -76,7 +73,7 @@ public:
 	void clear(int x, int y) {
 		_v[unit(x, y)] &= ~(1ULL << bitl(x, y));
 	}
-	size_t pack(BitstreamOut & stream);
+	size_t pack(Bitstream& stream);
 	size_t dsize() { return _v.size()*sizeof(uint64_t); }
 	void getsize(int& x, int& y) { x = _x; y = _y; }
 	void dump(const std::string& name) {
@@ -110,3 +107,4 @@ private:
 };
 
 void RLE(std::vector<uint8_t>& v, std::vector<uint8_t> &result);
+void unRLE(std::vector<uint8_t>& v, std::vector<uint8_t>& result);

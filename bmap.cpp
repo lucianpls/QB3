@@ -13,13 +13,13 @@ int rlen(const uint8_t* ch, size_t mlen) {
 	return r;
 }
 
+#define CODE 0xC5
 void RLE(std::vector<uint8_t> &v, std::vector<uint8_t>& result) {
 	// Then do an RLE across everything
 	// This is buggy, needs a lot more tweaks
 
-	std::vector<uint8_t> compr;
+	std::vector<uint8_t> tmp;
 
-#define CODE 0xC5
 	size_t len = 0;
 	while (len < v.size()) {
 		int l = rlen(&v[len], v.size() - len);
@@ -27,26 +27,49 @@ void RLE(std::vector<uint8_t> &v, std::vector<uint8_t>& result) {
 		if (l < 4) {
 			l = 1;
 			if (CODE == c) {
-				compr.push_back(CODE);
-				compr.push_back(0);
+				tmp.push_back(CODE);
+				tmp.push_back(0);
 			}
 			else {
-				compr.push_back(c);
+				tmp.push_back(c);
 			}
 		}
 		else {
-			compr.push_back(CODE);
+			tmp.push_back(CODE);
 			if (l > 255)
-				compr.push_back(l >> 8);
-			compr.push_back(l);
-			compr.push_back(c);
+				tmp.push_back(l >> 8);
+			tmp.push_back(l);
+			tmp.push_back(c);
 		}
 		len += l;
 	}
-	result.swap(compr);
+	result.swap(tmp);
 }
 
-size_t BMap::pack(BitstreamOut& s) {
+void unRLE(std::vector<uint8_t>& v, std::vector<uint8_t>& result) {
+	std::vector<uint8_t> tmp;
+	for (int i = 0; i < v.size(); i++) {
+		uint8_t c = v[i];
+		if (CODE != c) {
+			tmp.push_back(c);
+			continue;
+		}
+		// magic sequence, use at so it checks for overflow
+		c = v.at(++i);
+		if (0 == c) {
+			tmp.push_back(CODE);
+			continue;
+		}
+		size_t len = c;
+		if (len < 4)
+			len = len << 8 + v.at(++i);
+		c = v.at(++i);
+		tmp.insert(tmp.end(), len, c);
+	}
+	result.swap(tmp);
+}
+
+size_t BMap::pack(Bitstream& s) {
 	for (auto it : _v) {
 		// Primary encoding
 		if (0 == it or ~0 == it) {
@@ -141,4 +164,4 @@ size_t BMap::pack(BitstreamOut& s) {
 	return s.v.size();
 }
 
-const uint8_t BitstreamIn::usemask[8] = {0, 0b1, 0b11, 0b111, 0b1111, 0b11111, 0b111111, 0b1111111};
+const uint8_t Bitstream::usemask[8] = {0, 0b1, 0b11, 0b111, 0b1111, 0b11111, 0b111111, 0b1111111};
