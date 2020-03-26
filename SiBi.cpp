@@ -40,13 +40,19 @@ int main()
             if (((x - cx) * (x - cx) + (y - cy) * (y - cy)) < cr * cr)
                 bm.clear(x, y);
 
-    BitstreamOut s;
+    Bitstream s;
     std::cout << std::endl << bm.dsize() * 8 << std::endl;
     bm.pack(s);
     bm.dump(std::string("file.raw"));
     std::cout << s.v.size() * 8 << std::endl;
     RLE(s.v, s.v);
     std::cout << s.v.size() * 8 << std::endl;
+    unRLE(s.v, s.v);
+    std::cout << s.v.size() * 8 << std::endl;
+
+    BMap bm1(sx, sy);
+    bm1.unpack(s);
+    bm1.compare(bm);
 }
 
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu
