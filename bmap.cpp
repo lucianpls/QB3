@@ -2,6 +2,8 @@
 #include <iostream>
 #include <algorithm>
 
+const uint8_t Bitstream::mask[8] = { 0, 1, 3, 7, 0xf, 0x1f, 0x3f, 0x7f };
+
 BMap::BMap(int x, int y) : _x(x), _y(y), _lw((x + 7) / 8) {
 	_v.assign(_lw * ((y + 7) / 8), ~0); // All data
 }
@@ -62,7 +64,7 @@ void unRLE(std::vector<uint8_t>& v, std::vector<uint8_t>& result) {
 		}
 		size_t len = c;
 		if (len < 4)
-			len = len << 8 + v.at(++i);
+			len = (len << 8) + v.at(++i);
 		c = v.at(++i);
 		tmp.insert(tmp.end(), len, c);
 	}
@@ -70,7 +72,9 @@ void unRLE(std::vector<uint8_t>& v, std::vector<uint8_t>& result) {
 }
 
 size_t BMap::unpack(Bitstream& s) {
+	int k = 0;
 	for (auto &it : _v) {
+		k++;
 		int code;
 		s.pull(code, 2);
 		if (0b00 == code || 0b11 == code) {
@@ -95,8 +99,47 @@ size_t BMap::unpack(Bitstream& s) {
 			else if (0b01 == q) { // Secondary, as such
 				s.pull(q, 16);
 			}
-			else if (0b10 == q) { // Tertiary
+			else if (0b10 == q) { // Tertiary, need to read the code for this quart
+				uint8_t code;
+				s.pull(code, 3); // Try three bits, more frequent
+				if (5 < code) { // code needs one more bit
+					s.pull(q, 1);
+					code = static_cast<uint8_t>(code * 2 + q);
+				}
 
+				if (2 > code) { // two halves, no value
+					q = code ? 0xff00 : 0x00ff;
+				}
+				else {
+					s.pull(q, 7); // Read the value and prepare the short int
+					switch (code) {
+					case 0b010: // 0b0010
+						break; 
+					case 0b011: // 0b1000
+						q = q << 8;     
+						break;
+					case 0b100: // 0b1101
+						q = q | 0xff80;        
+						break;
+					case 0b101: // 0b0111
+						q = (q << 8) | 0x80ff; 
+						break;
+					case 0b1100: // 0b0001 
+						q = (q | 0x80);       
+						break;
+					case 0b1101: // 0b0100
+						q = (q | 0x80) << 8;  
+						break;
+					case 0b1110: // 0b1110
+						q = q | 0xff00;       
+						break;
+					case 0b1111: // 0b1011
+						q = (q << 8) | 0xff;  
+						break;
+					default: // error
+						return 0;
+					}
+				}
 			}
 			it |= static_cast<uint64_t>(q) << (i * 16);
 		}
@@ -105,9 +148,12 @@ size_t BMap::unpack(Bitstream& s) {
 }
 
 size_t BMap::pack(Bitstream& s) {
+	int k = 0;
 	for (auto it : _v) {
+		std::cout << "Packing " << std::hex << it << std::endl;
+		k++;
 		// Primary encoding
-		if (0 == it or ~0 == it) {
+		if (0 == it or ~(0ULL) == it) {
 			s.push(it & 0b11, 2);
 			continue;
 		}
@@ -141,7 +187,7 @@ size_t BMap::pack(Bitstream& s) {
 
 			// This is a twice loop, can be written that way
 			uint8_t code = 0, val = 0;
-			b = q[i] & 0xff;
+			b = static_cast<uint8_t>(q[i] >> 8); // high byte first
 			if (0 == b or 0xff == b) {
 				code |= b & 0b11;
 			}
@@ -151,7 +197,7 @@ size_t BMap::pack(Bitstream& s) {
 			}
 
 			code <<= 2;
-			b = static_cast<uint8_t>(q[i] >> 8);
+			b = static_cast<uint8_t>(q[i] & 0xff);
 			if (0 == b or 0xff == b) {
 				code |= b & 0b11;
 			}
@@ -196,5 +242,3 @@ size_t BMap::pack(Bitstream& s) {
 
 	return s.v.size();
 }
-
-const uint8_t Bitstream::usemask[8] = {0, 0b1, 0b11, 0b111, 0b1111, 0b11111, 0b111111, 0b1111111};

@@ -30,6 +30,7 @@ struct Bitstream {
 	Bitstream() : len(0), pos(0) {};
 
 	void push(uint64_t val, size_t bits) {
+		std::cout << "Pushing " << bits << "bits " << std::hex << val << std::endl;
 		while (bits) {
 			if (0 == len)
 				v.push_back(static_cast<uint8_t>(val));
@@ -43,21 +44,25 @@ struct Bitstream {
 	}
 
 	template<typename T = uint64_t> bool pull(T& val, size_t bits) {
+		std::cout << "Pulling " << bits << "bits ";
 		uint64_t acc = 0;
+		int pulled = 0;
 		while (bits && ((pos / 8) < v.size())) {
 			size_t use = std::min(8 - pos % 8, bits);
-			acc = (acc << use) | ((v[pos / 8] >> (pos % 8)) & usemask[use]);
+			acc |= static_cast<uint64_t>((v[pos / 8] >> (pos % 8)) & mask[use]) << pulled;
 			bits -= use;
 			pos += use;
+			pulled += use;
 		}
 		if (0 != bits)
 			return false;
 		val = static_cast<T>(acc);
+		std::cout << std::hex << uint64_t(val) << std::endl;
 		return true;
 	}
 
 private:
-	static const uint8_t usemask[8];
+	static const uint8_t mask[8];
 };
 
 class BMap {
@@ -83,6 +88,16 @@ public:
 
 	size_t pack(Bitstream& stream);
 	size_t unpack(Bitstream& streamm);
+
+	bool compare(BMap& other) {
+		if (_v.size() != other._v.size())
+			return false;
+		for (int i = 0; i < _v.size(); i++) {
+			if (_v[i] != other._v[i])
+				return false;
+		}
+		return true;
+	};
 
 private:
 	size_t unit(int x, int y) {
