@@ -45,23 +45,16 @@ int main()
     bm.pack(s);
     bm.dump(std::string("file.raw"));
     std::cout << s.v.size() * 8 << std::endl;
+    auto v(s.v);
     RLE(s.v, s.v);
     std::cout << s.v.size() * 8 << std::endl;
     unRLE(s.v, s.v);
     std::cout << s.v.size() * 8 << std::endl;
+    for (int i = 0; i < v.size(); i++)
+        if (v[i] != s.v[i])
+            break;
 
     BMap bm1(sx, sy);
     bm1.unpack(s);
     bm1.compare(bm);
 }
-
-// Run program: Ctrl + F5 or Debug > Start Without Debugging menu
-// Debug program: F5 or Debug > Start Debugging menu
-
-// Tips for Getting Started: 
-//   1. Use the Solution Explorer window to add/manage files
-//   2. Use the Team Explorer window to connect to source control
-//   3. Use the Output window to see build output and other messages
-//   4. Use the Error List window to view errors
-//   5. Go to Project > Add New Item to create new code files, or Project > Add Existing Item to add existing code files to the project
-//   6. In the future, to open this project again, go to File > Open > Project and select the .sln file

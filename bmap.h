@@ -30,7 +30,6 @@ struct Bitstream {
 	Bitstream() : len(0), pos(0) {};
 
 	void push(uint64_t val, size_t bits) {
-		std::cout << "Pushing " << bits << "bits " << std::hex << val << std::endl;
 		while (bits) {
 			if (0 == len)
 				v.push_back(static_cast<uint8_t>(val));
@@ -44,7 +43,6 @@ struct Bitstream {
 	}
 
 	template<typename T = uint64_t> bool pull(T& val, size_t bits) {
-		std::cout << "Pulling " << bits << "bits ";
 		uint64_t acc = 0;
 		int pulled = 0;
 		while (bits && ((pos / 8) < v.size())) {
@@ -57,12 +55,11 @@ struct Bitstream {
 		if (0 != bits)
 			return false;
 		val = static_cast<T>(acc);
-		std::cout << std::hex << uint64_t(val) << std::endl;
 		return true;
 	}
 
 private:
-	static const uint8_t mask[8];
+	static const uint8_t mask[9];
 };
 
 class BMap {

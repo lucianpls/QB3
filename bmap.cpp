@@ -2,7 +2,7 @@
 #include <iostream>
 #include <algorithm>
 
-const uint8_t Bitstream::mask[8] = { 0, 1, 3, 7, 0xf, 0x1f, 0x3f, 0x7f };
+const uint8_t Bitstream::mask[9] = { 0, 1, 3, 7, 15, 31, 63, 127, 255 };
 
 BMap::BMap(int x, int y) : _x(x), _y(y), _lw((x + 7) / 8) {
 	_v.assign(_lw * ((y + 7) / 8), ~0); // All data
@@ -72,9 +72,7 @@ void unRLE(std::vector<uint8_t>& v, std::vector<uint8_t>& result) {
 }
 
 size_t BMap::unpack(Bitstream& s) {
-	int k = 0;
 	for (auto &it : _v) {
-		k++;
 		int code;
 		s.pull(code, 2);
 		if (0b00 == code || 0b11 == code) {
@@ -84,7 +82,7 @@ size_t BMap::unpack(Bitstream& s) {
 			continue;
 		}
 		if (0b01 == code) { // Stored as such
-			s.pull(it, sizeof(it));
+			s.pull(it, 64);
 			continue;
 		}
 		// code was 10, switch to secondary/tertiary
@@ -148,10 +146,7 @@ size_t BMap::unpack(Bitstream& s) {
 }
 
 size_t BMap::pack(Bitstream& s) {
-	int k = 0;
 	for (auto it : _v) {
-		std::cout << "Packing " << std::hex << it << std::endl;
-		k++;
 		// Primary encoding
 		if (0 == it or ~(0ULL) == it) {
 			s.push(it & 0b11, 2);
@@ -174,7 +169,7 @@ size_t BMap::pack(Bitstream& s) {
 
 		if (halves < 2) { // Nope, encode as raw 64bit
 			s.push(0b01, 2);
-			s.push(it, sizeof(it));
+			s.push(it, 64);
 			continue;
 		}
 
@@ -229,12 +224,22 @@ size_t BMap::pack(Bitstream& s) {
 
 			if (code > 0xf) { // secondary, as such
 				s.push(0b01, 2);
-				s.push(q[i], sizeof(q[i]));
+				s.push(q[i], 16);
 				continue;
 			}
 
 			s.push(0b10, 2); // Tertiary code, split half or one half
-			s.push(code, (code < 6) ? 3 : 4); // var len code
+			// Push the code, first the top three bits then the optional fourth
+			// This is because the decoder needs to see the top three before it can
+			// decide if there is a fourth.
+			if (code < 6) {
+				s.push(code, 3);
+			}
+			else {
+				s.push(code >> 1, 3);
+				s.push(code & 1, 1);
+				// TODO: Test if this could this be s.push((code >> 1) | ((code << 3) & 0x8), 4);
+			}
 			if (code > 1) // one half has data
 				s.push(val, 7);
 		}
