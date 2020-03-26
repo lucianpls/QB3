@@ -74,9 +74,9 @@ void unRLE(std::vector<uint8_t>& v, std::vector<uint8_t>& result) {
 size_t BMap::unpack(Bitstream& s) {
 	for (auto &it : _v) {
 		int code;
+		it = 0;
 		s.pull(code, 2);
 		if (0b00 == code || 0b11 == code) {
-			it = 0;
 			if (code)
 				it = ~it;
 			continue;
@@ -86,7 +86,6 @@ size_t BMap::unpack(Bitstream& s) {
 			continue;
 		}
 		// code was 10, switch to secondary/tertiary
-		it = 0;
 		for (int i = 0; i < 4; i++) {
 			uint64_t q;
 			s.pull(q, 2);
@@ -99,10 +98,10 @@ size_t BMap::unpack(Bitstream& s) {
 			}
 			else if (0b10 == q) { // Tertiary, need to read the code for this quart
 				uint8_t code;
-				s.pull(code, 3); // Try three bits, more frequent
+				s.pull(code, 3); // three bits, more frequent
 				if (5 < code) { // code needs one more bit
 					s.pull(q, 1);
-					code = static_cast<uint8_t>(code * 2 + q);
+					code = static_cast<uint8_t>((code << 1) | q);
 				}
 
 				if (2 > code) { // two halves, no value
@@ -139,7 +138,7 @@ size_t BMap::unpack(Bitstream& s) {
 					}
 				}
 			}
-			it |= static_cast<uint64_t>(q) << (i * 16);
+			it |= q << (i * 16);
 		}
 	}
 	return _v.size();
@@ -180,9 +179,9 @@ size_t BMap::pack(Bitstream& s) {
 				continue;
 			}
 
-			// This is a twice loop, can be written that way
+			// This is a twice loop, could be written that way
 			uint8_t code = 0, val = 0;
-			b = static_cast<uint8_t>(q[i] >> 8); // high byte first
+			b = static_cast<uint8_t>(q[i] >> 8); // low byte first
 			if (0 == b or 0xff == b) {
 				code |= b & 0b11;
 			}
@@ -222,25 +221,22 @@ size_t BMap::pack(Bitstream& s) {
 			};
 			code = xlate[code];
 
-			if (code > 0xf) { // secondary, as such
+			if (code > 0xf) { // secondary 01, stored
 				s.push(0b01, 2);
 				s.push(q[i], 16);
 				continue;
 			}
 
-			s.push(0b10, 2); // Tertiary code, split half or one half
-			// Push the code, first the top three bits then the optional fourth
-			// This is because the decoder needs to see the top three before it can
-			// decide if there is a fourth.
-			if (code < 6) {
+			s.push(0b10, 2); // Tertiary encoding, one or two uniform halves
+			// Push the top three bits of code first
+			// This is because the decoder needs to see the top three
+			// to decide if there is a fourth
+			if (code < 6)
 				s.push(code, 3);
-			}
-			else {
-				s.push(code >> 1, 3);
-				s.push(code & 1, 1);
-				// TODO: Test if this could this be s.push((code >> 1) | ((code << 3) & 0x8), 4);
-			}
-			if (code > 1) // one half has data
+			else // equiv to push(code>>1,3); push(code&1,1);
+				s.push((code >> 1) | ((code & 1) << 3), 4);
+
+			if (code > 1) // One half needs the 7 bits of data
 				s.push(val, 7);
 		}
 	}
