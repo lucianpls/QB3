@@ -69,6 +69,41 @@ void unRLE(std::vector<uint8_t>& v, std::vector<uint8_t>& result) {
 	result.swap(tmp);
 }
 
+size_t BMap::unpack(Bitstream& s) {
+	for (auto &it : _v) {
+		int code;
+		s.pull(code, 2);
+		if (0b00 == code || 0b11 == code) {
+			it = 0;
+			if (code)
+				it = ~it;
+			continue;
+		}
+		if (0b01 == code) { // Stored as such
+			s.pull(it, sizeof(it));
+			continue;
+		}
+		// code was 10, switch to secondary/tertiary
+		it = 0;
+		for (int i = 0; i < 4; i++) {
+			uint64_t q;
+			s.pull(q, 2);
+			// 0 is a NOP
+			if (0b11 == q) {
+				q = 0xffff;
+			}
+			else if (0b01 == q) { // Secondary, as such
+				s.pull(q, 16);
+			}
+			else if (0b10 == q) { // Tertiary
+
+			}
+			it |= static_cast<uint64_t>(q) << (i * 16);
+		}
+	}
+	return _v.size();
+}
+
 size_t BMap::pack(Bitstream& s) {
 	for (auto it : _v) {
 		// Primary encoding
@@ -93,13 +128,13 @@ size_t BMap::pack(Bitstream& s) {
 
 		if (halves < 2) { // Nope, encode as raw 64bit
 			s.push(0b01, 2);
-			s.push(it, 64);
+			s.push(it, sizeof(it));
 			continue;
 		}
 
-		s.push(0b10, 2); // switch to secondary/tertiary, by quart
+		s.push(0b10, 2); // switch to secondary, by quart
 		for (int i = 0; i < 4; i++) {
-			if (0 == q[i] or 0xffff == q[i]) { // short secondary
+			if (0 == q[i] or 0xffff == q[i]) { // uniform secondary
 				s.push(q[i] & 0b11, 2);
 				continue;
 			}
@@ -127,7 +162,7 @@ size_t BMap::pack(Bitstream& s) {
 
 			// Translate the meaning to tertiary code
 			static uint8_t xlate[16] = {
-				0xf0,   // 0000 Not valid
+				0xff,   // 0000 Not valid
 				0b1100, // 0001
 				0b010,  // 0010
 				0b000,  // 0011
@@ -146,18 +181,16 @@ size_t BMap::pack(Bitstream& s) {
 			};
 			code = xlate[code];
 
-			if (code < 2) { // Tertiary code, H split block
-				s.push(code, 3);
+			if (code > 0xf) { // secondary, as such
+				s.push(0b01, 2);
+				s.push(q[i], sizeof(q[i]));
 				continue;
 			}
 
-			if (code < 0x10) { // Half uniform, tertiary
-				s.push(code, (code < 6) ? 3 : 4);
+			s.push(0b10, 2); // Tertiary code, split half or one half
+			s.push(code, (code < 6) ? 3 : 4); // var len code
+			if (code > 1) // one half has data
 				s.push(val, 7);
-			} else { // magic value, secondary 16 bit raw
-				s.push(0b01, 2);
-				s.push(q[i], 16);
-			}
 		}
 	}
 

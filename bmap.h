@@ -73,7 +73,6 @@ public:
 	void clear(int x, int y) {
 		_v[unit(x, y)] &= ~(1ULL << bitl(x, y));
 	}
-	size_t pack(Bitstream& stream);
 	size_t dsize() { return _v.size()*sizeof(uint64_t); }
 	void getsize(int& x, int& y) { x = _x; y = _y; }
 	void dump(const std::string& name) {
@@ -81,6 +80,10 @@ public:
 		fwrite(_v.data(), _v.size(), sizeof(uint64_t), f);
 		fclose(f);
 	}
+
+	size_t pack(Bitstream& stream);
+	size_t unpack(Bitstream& streamm);
+
 private:
 	size_t unit(int x, int y) {
 		return _lw * (y / 8) + x / 8;
