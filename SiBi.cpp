@@ -1,4 +1,4 @@
-// SiBi.cpp : This file contains the 'main' function. Program execution begins and ends there.
+// SiBi.cpp : Test only
 //
 
 #include <iostream>

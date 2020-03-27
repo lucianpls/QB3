@@ -92,8 +92,7 @@ size_t BMap::unpack(Bitstream& s) {
 		// code was 10, switch to secondary/tertiary
 		for (int i = 0; i < 4; i++) {
 			uint64_t q;
-			s.pull(q, 2);
-			// 0 is a NOP
+			s.pull(q, 2); // 0 is a NOP
 			if (0b11 == q) {
 				q = 0xffff;
 			}
@@ -205,43 +204,38 @@ size_t BMap::pack(Bitstream& s) {
 			}
 
 			// Translate the meaning to tertiary code
+			// Codes 6 to 15 are twisted from the normal abbreviated binary
+			// to allow detection of code length from the low 3 bits
+			// Roll the b10 switch encoding into the codeword
 			static uint8_t xlate[16] = {
 				0xff,   // 0000 Not valid
-				0b1100, // 0001
-				0b010,  // 0010
-				0b000,  // 0011
-				0b1101, // 0100
-				0xce,   // 0101 secondary 01, magic value
-				0xce,   // 0110 secondary 01, magic value
-				0b101,  // 0111
-				0b011,  // 1000
-				0xce,   // 1001 secondary 01, magic value
-				0xce,   // 1010 secondary 01, magic value
-				0b1111, // 1011
-				0b001,  // 1100
-				0b100,  // 1101
-				0b1110, // 1110
+				0b011000 | 0b10,  // 0001 Twisted from 0b1100
+				 0b01000 | 0b10,  // 0010
+				 0b00000 | 0b10,  // 0011
+				0b111000 | 0b10,  // 0100 Twisted from 0b0111
+				0, // 0101 secondary 01, magic value
+				0, // 0110 secondary 01, magic value
+				0b10100  | 0b10,  // 0111
+				0b01100  | 0b10,  // 1000
+				0, // 1001 secondary 01, magic value
+				0, // 1010 secondary 01, magic value
+				0b111100 | 0b10,  // 1011 Twisted from 0b1111
+				 0b00100 | 0b10,  // 1100
+				 0b10000 | 0b10,  // 1101
+				0b011100 | 0b10,  // 1110 Twisted from 0b1110
 				0xff    // 1111 Not valid
 			};
 			code = xlate[code];
 
-			if (code > 0xf) { // secondary 01, stored
-				s.push(0b01, 2);
-				s.push(q[i], 16);
-				continue;
+			if (code) {
+				// Tertiary encoding + codeword
+				s.push(code, (code < 0b011010) ? 5 : 6);
+				if (code > 0b110) // One half needs the 7 bits of data
+					s.push(val, 7);
 			}
-
-			s.push(0b10, 2); // Tertiary encoding, one or two uniform halves
-			// Push the top three bits of code first
-			// This is because the decoder needs to see the top three
-			// to decide if there is a fourth
-			if (code < 6)
-				s.push(code, 3);
-			else // equiv to push(code>>1,3); push(code&1,1);
-				s.push((code >> 1) | ((code & 1) << 3), 4);
-
-			if (code > 1) // One half needs the 7 bits of data
-				s.push(val, 7);
+			else {
+				s.push(0b01 | (static_cast<int>(q[i]) << 2), 18);
+			}
 		}
 	}
 
