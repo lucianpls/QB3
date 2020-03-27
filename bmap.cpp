@@ -9,40 +9,41 @@ BMap::BMap(int x, int y) : _x(x), _y(y), _lw((x + 7) / 8) {
 }
 
 int rlen(const uint8_t* ch, size_t mlen) {
-	int r = 0;
-	while (mlen-- && ch[0] == ch[r])
-		r++;
-	return r;
+	static const size_t MRUN = 0x300 + 0xffff;
+	mlen = std::min(mlen, MRUN);
+	const uint8_t *v = ch;
+	while (mlen-- && *ch == *v) v++;
+	return static_cast<int>(v - ch);
 }
 
 #define CODE 0xC5
 void RLE(std::vector<uint8_t> &v, std::vector<uint8_t>& result) {
-	// Then do an RLE across everything
-	// This is buggy, needs a lot more tweaks
-
+	// Do a byte RLE on v
 	std::vector<uint8_t> tmp;
 
 	size_t len = 0;
 	while (len < v.size()) {
-		int l = rlen(&v[len], v.size() - len);
+		int l = rlen(v.data() + len, v.size() - len);
 		uint8_t c = v[len];
 		if (l < 4) {
-			l = 1;
-			if (CODE == c) {
-				tmp.push_back(CODE);
-				tmp.push_back(0);
-			}
-			else {
-				tmp.push_back(c);
-			}
-		}
-		else {
-			tmp.push_back(CODE);
-			if (l > 255)
-				tmp.push_back(l >> 8);
-			tmp.push_back(l);
 			tmp.push_back(c);
+			if (CODE == c)
+				tmp.push_back(0);
+			len += 1;
+			continue;
 		}
+		// encoded sequence
+		tmp.push_back(CODE);
+		if (l >= 0x100) {
+			if (l >= 0x300) {
+				tmp.push_back(3);
+				l -= 0x300;
+				len -= 0x300;
+			}
+			tmp.push_back(l >> 8);
+		}
+		tmp.push_back(l);
+		tmp.push_back(c);
 		len += l;
 	}
 	result.swap(tmp);
@@ -56,15 +57,18 @@ void unRLE(std::vector<uint8_t>& v, std::vector<uint8_t>& result) {
 			tmp.push_back(c);
 			continue;
 		}
-		// magic sequence, use at so it checks for overflow
+		// sequence, use at() so it checks for out of bounds
 		c = v.at(++i);
 		if (0 == c) {
 			tmp.push_back(CODE);
 			continue;
 		}
 		size_t len = c;
-		if (len < 4)
+		if (len < 4) {
+			if (len == 3)
+				len += v.at(++i);
 			len = (len << 8) + v.at(++i);
+		}
 		c = v.at(++i);
 		tmp.insert(tmp.end(), len, c);
 	}
