@@ -148,10 +148,12 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="bmap.cpp" />
+    <ClCompile Include="denc.cpp" />
     <ClCompile Include="SiBi.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="bmap.h" />
+    <ClInclude Include="denc.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="README.md" />

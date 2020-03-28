@@ -2,8 +2,12 @@
 //
 
 #include <iostream>
-#include "bmap.h"
 #include <cmath>
+
+#include "bmap.h"
+#include "denc.h"
+
+using namespace std;
 
 int main()
 {
@@ -43,7 +47,7 @@ int main()
     Bitstream s;
     std::cout << std::endl << bm.dsize() * 8 << std::endl;
     bm.pack(s);
-    bm.dump(std::string("file.raw"));
+    //bm.dump(std::string("file.raw"));
     std::cout << s.v.size() * 8 << std::endl;
     auto v(s.v);
     RLE(s.v, s.v);
@@ -57,4 +61,18 @@ int main()
     BMap bm1(sx, sy);
     bm1.unpack(s);
     bm1.compare(bm);
+
+    // Now for the RGB image, read from a PNM file
+    // Image is 3776x2520x3, starts at offset 16
+    FILE* f;
+    if (fopen_s(&f, "input.pnm", "rb") || ! f) {
+        cerr << "Can't open input file";
+        exit(errno);
+    }
+    fseek(f, 17, SEEK_SET);
+    vector<uint8_t> image(3776*2520*3);
+    fread(image.data(), 3776, 2520 * 3, f);
+    fclose(f);
+    // 
+
 }
