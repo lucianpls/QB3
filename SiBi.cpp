@@ -75,4 +75,8 @@ int main()
     fclose(f);
     // 
 
+    Denc deltaenc;
+    deltaenc.delta(image);
+    deltaenc.deltacheck(image);
+    deltaenc.recode();
 }
