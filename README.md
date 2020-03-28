@@ -92,10 +92,11 @@ In that case the resulting encoding is shorter than storing the full value.
 
  - Tertiary encoding, for a two byte quad.  
 Separate the quad in two byes.  At least one of the bytes is all 0 or all 1. 
-There are 10 possible combinations, which are encoded using abbreviated binary.  If 0b00 signals a 0 byte, 0b11 is a ~0 byte, 0b01 is a byte > 127 and 0b10 is a byte <= 127, the combinations can written 
-using 4 bytes and the abbreviated encodings are:
+There are 10 possible combinations of two two bit codes, which are further encoded using abbreviated binary. 
+If 0b00 signals a 0s byte, 0b11 is a 1s byte, 0b01 is any byte value > 127 and 0b10 is any byte value <= 127, the valid combinations can written 
+using 4 bits and the corresponding abbreviated binary codewords are:
 
-|Value |Encoded|
+Value |Codeword|
 |----|---:|
 |0011| 000|
 |1100| 001|

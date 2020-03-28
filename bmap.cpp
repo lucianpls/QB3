@@ -80,16 +80,16 @@ size_t BMap::unpack(Bitstream& s) {
 		int code;
 		it = 0;
 		s.pull(code, 2);
-		if (0b00 == code || 0b11 == code) {
-			if (code)
-				it = ~it;
+		switch(code) {
+		case 0b11:
+			it = ~it;
+		case 0b00:
 			continue;
-		}
-		if (0b01 == code) { // Stored as such
+		case 0b01:
 			s.pull(it, 64);
 			continue;
 		}
-		// code was 10, switch to secondary/tertiary
+		// code 10, secondary encoding, nibbles
 		for (int i = 0; i < 4; i++) {
 			uint64_t q;
 			s.pull(q, 2); // 0 is a NOP
@@ -184,7 +184,7 @@ size_t BMap::pack(Bitstream& s) {
 
 			// This is a twice loop, could be written that way
 			uint8_t code = 0, val = 0;
-			b = static_cast<uint8_t>(q[i] >> 8); // low byte first
+			b = static_cast<uint8_t>(q[i] >> 8); // high byte first
 			if (0 == b or 0xff == b) {
 				code |= b & 0b11;
 			}
@@ -203,12 +203,12 @@ size_t BMap::pack(Bitstream& s) {
 				code |= (val == b) ? 0b10 : 0b01;
 			}
 
-			// Translate the meaning to tertiary code
+			// Translate the meaning to tertiary codeword
 			// Codes 6 to 15 are twisted from the normal abbreviated binary
 			// to allow detection of code length from the low 3 bits
-			// Roll the b10 switch encoding into the codeword
+			// append the b10 switch encoding into the codeword
 			static uint8_t xlate[16] = {
-				0xff,   // 0000 Not valid
+				0xff,   // 0000 Not used
 				0b011000 | 0b10,  // 0001 Twisted from 0b1100
 				 0b01000 | 0b10,  // 0010
 				 0b00000 | 0b10,  // 0011
@@ -223,17 +223,17 @@ size_t BMap::pack(Bitstream& s) {
 				 0b00100 | 0b10,  // 1100
 				 0b10000 | 0b10,  // 1101
 				0b011100 | 0b10,  // 1110 Twisted from 0b1110
-				0xff    // 1111 Not valid
+				0xff    // 1111 Not used
 			};
 			code = xlate[code];
 
 			if (code) {
-				// Tertiary encoding + codeword
+				// Tertiary encoding + abbreviated codeword
 				s.push(code, (code < 0b011010) ? 5 : 6);
-				if (code > 0b110) // One half needs the 7 bits of data
+				if (code > 0b110) // needs the 7 bits of data
 					s.push(val, 7);
 			}
-			else {
+			else { // magic codeword, means secondary encoding, stored
 				s.push(0b01 | (static_cast<int>(q[i]) << 2), 18);
 			}
 		}
