@@ -91,7 +91,7 @@ size_t BMap::unpack(Bitstream& s) {
 		}
 		// code 10, secondary encoding, nibbles
 		for (int i = 0; i < 4; i++) {
-			uint64_t q;
+			uint16_t q;
 			s.pull(q, 2); // 0 is a NOP
 			if (0b11 == q) {
 				q = 0xffff;
@@ -100,7 +100,6 @@ size_t BMap::unpack(Bitstream& s) {
 				s.pull(q, 16);
 			}
 			else if (0b10 == q) { // Tertiary, need to read the code for this quart
-				uint8_t code;
 				s.pull(code, 3); // three bits, more frequent
 				if (5 < code) { // code needs one more bit
 					s.pull(q, 1);
@@ -141,7 +140,7 @@ size_t BMap::unpack(Bitstream& s) {
 					}
 				}
 			}
-			it |= q << (i * 16);
+			it |= static_cast<uint64_t>(q) << (i * 16);
 		}
 	}
 	return _v.size();
