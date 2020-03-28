@@ -50,7 +50,7 @@ struct Bitstream {
 			acc |= static_cast<uint64_t>((v[pos / 8] >> (pos % 8)) & mask[use]) << pulled;
 			bits -= use;
 			pos += use;
-			pulled += use;
+			pulled += static_cast<int>(use);
 		}
 		if (0 != bits)
 			return false;
@@ -65,7 +65,7 @@ private:
 class BMap {
 public:
 	BMap(int x, int y);
-	virtual ~BMap() {};
+	~BMap() {};
 	bool bit(int x, int y) {
 		return 0 != (_v[unit(x, y)] & (1ULL << bitl(x, y)));
 	}
@@ -77,11 +77,6 @@ public:
 	}
 	size_t dsize() { return _v.size()*sizeof(uint64_t); }
 	void getsize(int& x, int& y) { x = _x; y = _y; }
-	void dump(const std::string& name) {
-		FILE* f = fopen(name.c_str(), "wb");
-		fwrite(_v.data(), _v.size(), sizeof(uint64_t), f);
-		fclose(f);
-	}
 
 	size_t pack(Bitstream& stream);
 	size_t unpack(Bitstream& streamm);
