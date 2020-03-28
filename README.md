@@ -1,4 +1,6 @@
-# Encoding
+# Experiments in 2D Raster Compression
+
+
 ## Interbit addressing  
   b0 = Xb0  
   b1 = Yb0  
