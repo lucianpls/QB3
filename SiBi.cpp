@@ -89,6 +89,7 @@ int main()
     fclose(f);
     // 
 
+    fopen_s(&f, "minvals.raw", "wb");
     //Denc deltaenc;
     //deltaenc.delta(image);
     //deltaenc.deltacheck(image);
@@ -101,13 +102,17 @@ int main()
     vector<size_t> bithist(8);
     // The sizes are multiples of 8, no need to check
     size_t line_sz = 3776;
-    vector<uint8_t> prev(3, 127);
-    vector<uint8_t> group(64);
-    for (int y = 0; y < 2520; y += 8) {
-        for (int x = 0; x < 3776; x += 8) {
+    vector<uint8_t> prev(3, 127); // RGB
+    // This should be 8, but for noisy images 4 is better
+    // 16 might work for slow varying inputs, 
+    // which would need the lookup tables extended
+    static const int bsize = 8;
+    vector<uint8_t> group(bsize * bsize);
+    for (int y = 0; y < 2520; y += bsize) {
+        for (int x = 0; x < 3776; x += bsize) {
             size_t loc = (y * line_sz + x) * 3;
             for (int c = 0; c < 3; c++) {
-                for (int i = 0; i < 64; i++) {
+                for (int i = 0; i < group.size(); i++) {
                     static const uint8_t xlut[64] = {
                         0, 1, 0, 1, 2, 3, 2, 3,
                         0, 1, 0, 1, 2, 3, 2, 3,
@@ -145,16 +150,19 @@ int main()
                 //dump8x8(group);
                 //dump8x8(deltaenc.v);
                 group.swap(deltaenc.v);
-//                hist[maxval]++;
-                for (auto it : group)
-                    hist[it]++;
+                fwrite(group.data(), 1, group.size(), f);
+                hist[maxval]++;
+                //for (auto it : group)
+                //    hist[it]++;
+
+                // Encode the maxval
                 // Number of bits after the fist 1
                 size_t bits = maxval ? ilogb(maxval) : 0;
                 bithist[bits]++;
                 // Push the low bits of maxval, prefixed by the number of bits
                 s.push((maxval & Bitstream::mask[bits]) * 8 + bits, bits + 3);
-                // encode the values
 
+                // Encode the 64values
                 // Best case, maxval is 0 or 1
                 if (0 == bits) {
                     uint64_t val = 0;
@@ -165,23 +173,21 @@ int main()
                     continue;
                 }
 
-                // Worst case, truncated binary doesn't apply
                 auto cutof = Bitstream::mask[bits + 1] - maxval;
-                if (0 == cutof) {
+                if (0 == cutof) { // Uniform length codewords
                     for (auto it = group.begin(); it != group.end(); it++)
                         s.push(*it, bits + 1);
                     continue;
                 }
 
-                // default case, truncated binary
                 for (auto it = group.begin(); it != group.end(); it++) {
                     uint64_t val = *it;
-                    if (val < cutof) {
+                    if (val < cutof) { // Truncated
                         s.push(val, bits);
                     }
                     else {
                         val += cutof;
-                        // Twist it, move the lowest bit to the highest
+                        // Store the rotated value
                         val = (val >> 1) + ((val & 1) << bits);
                         s.push(val, bits + 1);
                     }
@@ -189,6 +195,8 @@ int main()
             }
         }
     }
+
+    fclose(f);
 
     fopen_s(&f, "out.raw", "wb");
     fwrite(s.v.data(), 1, s.v.size(), f);

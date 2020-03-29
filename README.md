@@ -131,3 +131,25 @@ The code word is followed by the lower 7 bits of the non-uniform byte value, 0x5
 
 The result encoding size will use 2+3+1+7 = 13 bits, 
 instead of the 16 + 2 = 18 bits required to just store the value. If only a 3 bit code word is needed the encoding would take 12 bits, or only 5 bits if both halves of the quad are uniform.
+
+## Image encoding
+
+For rasters, the locality preserving ordering is mostly valuable if we follow it up 
+with delta encoding, it would generate relatively small values.  The problem with negative values is solved by 
+reordering the values with alternate signs 0, -1, 1, -2 ..., up to the min_val.
+For encoding the delta values, the formula becomes
+
+    if (v < 0)
+      m = -1 - 2 * v
+    else
+      m = 2 * v
+
+where m has the same number of bits as the initial value v.  This encoding puts the sign in
+bit 0, and the absolute value in the rest of the bits, thus the higher bits are zero 
+for small values. For negative values, 1 is subtracted first, because -0 is not
+needed, and it allows the initial range of values to be preserved.
+
+In the compression stage, a local 8x8 or 4x4 group of values are stored in truncated binary encoding, 
+as determined by the maximum m value in the respective group. To reconstruct the group values
+from the truncated encoding, the maximum value in each group has to be transmitted before the group, allowing the 
+receive to reconstruct each particular truncated encoding.  Elias delta code is used 
