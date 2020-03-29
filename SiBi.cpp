@@ -98,6 +98,7 @@ int main()
 
     s.clear();
     vector<size_t> hist(256);
+    vector<size_t> bithist(8);
     // The sizes are multiples of 8, no need to check
     size_t line_sz = 3776;
     vector<uint8_t> prev(3, 127);
@@ -144,9 +145,12 @@ int main()
                 //dump8x8(group);
                 //dump8x8(deltaenc.v);
                 group.swap(deltaenc.v);
-                hist[maxval]++;
+//                hist[maxval]++;
+                for (auto it : group)
+                    hist[it]++;
                 // Number of bits after the fist 1
                 size_t bits = maxval ? ilogb(maxval) : 0;
+                bithist[bits]++;
                 // Push the low bits of maxval, prefixed by the number of bits
                 s.push((maxval & Bitstream::mask[bits]) * 8 + bits, bits + 3);
                 // encode the values
@@ -162,14 +166,14 @@ int main()
                 }
 
                 // Worst case, truncated binary doesn't apply
-                if (Bitstream::mask[bits + 1] == maxval) {
+                auto cutof = Bitstream::mask[bits + 1] - maxval;
+                if (0 == cutof) {
                     for (auto it = group.begin(); it != group.end(); it++)
                         s.push(*it, bits + 1);
                     continue;
                 }
 
                 // default case, truncated binary
-                auto cutof = Bitstream::mask[bits + 1] - maxval;
                 for (auto it = group.begin(); it != group.end(); it++) {
                     uint64_t val = *it;
                     if (val < cutof) {
@@ -190,6 +194,9 @@ int main()
     fwrite(s.v.data(), 1, s.v.size(), f);
     for (int i = 0; i < hist.size(); i++)
         cout << i << "," << hist[i] << endl;
+
+    for (int i = 0; i < bithist.size(); i++)
+        cout << i << "," << bithist[i] << endl;
     cout << s.v.size() << endl;
     fclose(f);
 }
