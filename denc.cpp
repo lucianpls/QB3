@@ -2,7 +2,6 @@
 
 int Denc::delta(const std::vector<uint8_t> &input) {
 	auto pval = input.data();
-	for (auto& it : prev) it = 127; // Restore default 
 	for (size_t i = 0; i < input.size() / bands; i++) {
 		for (size_t c = 0; c < bands; c++) {
 			v.push_back(*pval - prev[c]);
