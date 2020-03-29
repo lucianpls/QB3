@@ -28,6 +28,11 @@ struct Bitstream {
 	size_t len; // available bits in last byte
 	size_t pos; // Next bit for input
 	Bitstream() : len(0), pos(0) {};
+	void clear() {
+		len = 0;
+		pos = 0;
+		v.clear();
+	}
 
 	void push(uint64_t val, size_t bits) {
 		while (bits) {
@@ -58,7 +63,6 @@ struct Bitstream {
 		return true;
 	}
 
-private:
 	static const uint8_t mask[9];
 };
 

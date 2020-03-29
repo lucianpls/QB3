@@ -12,6 +12,7 @@ public:
 	int deltacheck(const std::vector<uint8_t>& other);
 	// Changes the internal vector of deltas into a small value positive
 	int recode();
+	// 
 	int bands;
 	std::vector<uint8_t> prev;
 	std::vector<uint8_t> v;

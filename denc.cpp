@@ -28,7 +28,6 @@ int Denc::deltacheck(const std::vector<uint8_t>& input) {
 }
 
 int Denc::recode() {
-	// 0 centered encoding
 	for (auto& it : v)
 		it = (it & 0x80) ? (0xff - 2 * it) : (2 * it);
 	return 0;
