@@ -106,7 +106,7 @@ int main()
     // 2 generates too much overhead
     // 16 might work for slow varying inputs, 
     // which would need the lookup tables extended
-    static const int bsize = 8;
+    static const int bsize = 4;
     vector<uint8_t> group(bsize * bsize);
     for (int y = 0; y < 2520; y += bsize) {
         for (int x = 0; x < line_sz; x += bsize) {
@@ -171,7 +171,10 @@ int main()
                 // Number of bits after the fist 1
                 size_t bits = ilogb(maxval);
                 // Push the middle bits of maxval, prefixed by the number of bits
-                s.push((maxval & (Bitstream::mask[bits] - 1)) * 4 + bits, bits + 2);
+                if (bits)
+                    s.push((maxval & (Bitstream::mask[bits] - 1)) * 4 + bits, bits + 2);
+                else
+                    s.push(0, 3);
 
                 bithist[bits]++;
                 hist[maxval]++;
@@ -190,13 +193,13 @@ int main()
 
                 auto cutof = Bitstream::mask[bits + 1] - maxval;
                 if (0 == cutof) { // Uniform length codewords
-                    for (auto it = group.begin(); it != group.end(); it++)
-                        s.push(*it, bits + 1);
+                    bits++;
+                    for (auto val : group)
+                        s.push(val, bits);
                     continue;
                 }
 
-                for (auto it = group.begin(); it != group.end(); it++) {
-                    uint64_t val = *it;
+                for (uint64_t val : group) {
                     if (val < cutof) { // Truncated
                         s.push(val, bits);
                     }
