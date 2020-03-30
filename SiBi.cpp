@@ -10,17 +10,17 @@
 
 using namespace std;
 
-static void dump8x8(vector<uint8_t>& v) {
-    cout << hex;
-    for (int y = 0; y < 8; y++) {
-        for (int x = 0; x < 8; x++) {
-            cout << int(v[y * 8 + x]) << ",";
-        }
-        cout << endl;
-    }
-    cout << endl;
-    cout << dec;
-}
+//static void dump8x8(vector<uint8_t>& v) {
+//    cout << hex;
+//    for (int y = 0; y < 8; y++) {
+//        for (int x = 0; x < 8; x++) {
+//            cout << int(v[y * 8 + x]) << ",";
+//        }
+//        cout << endl;
+//    }
+//    cout << endl;
+//    cout << dec;
+//}
 
 int main()
 {
@@ -106,33 +106,117 @@ int main()
     // 2 generates too much overhead
     // 16 might work for slow varying inputs, 
     // which would need the lookup tables extended
-    static const int bsize = 4;
+    // Works for non-power of two blocks, using custom tables
+
+    static const uint8_t xp2[64] = {
+        0, 1, 0, 1, 2, 3, 2, 3,
+        0, 1, 0, 1, 2, 3, 2, 3,
+        4, 5, 4, 5, 6, 7, 6, 7,
+        4, 5, 4, 5, 6, 7, 6, 7,
+        0, 1, 0, 1, 2, 3, 2, 3,
+        0, 1, 0, 1, 2, 3, 2, 3,
+        4, 5, 4, 5, 6, 7, 6, 7,
+        4, 5, 4, 5, 6, 7, 6, 7
+    };
+    static const uint8_t yp2[64] = {
+        0, 0, 1, 1, 0, 0, 1, 1,
+        2, 2, 3, 3, 2, 2, 3, 3,
+        0, 0, 1, 1, 0, 0, 1, 1,
+        2, 2, 3, 3, 2, 2, 3, 3,
+        4, 4, 5, 5, 4, 4, 5, 5,
+        6, 6, 7, 7, 6, 6, 7, 7,
+        4, 4, 5, 5, 4, 4, 5, 5,
+        6, 6, 7, 7, 6, 6, 7, 7
+    };
+
+    static const uint8_t x3[9] = {
+        0, 1, 0, 1, 2, 2, 0, 1, 2
+    };
+    static const uint8_t y3[9] = {
+        0, 0, 1, 1, 0, 1, 2, 2, 2
+    };
+
+    static const uint8_t x5[25] = {
+        0, 1, 0, 1, 2, 3, 2, 3,
+        0, 1, 0, 1, 2, 3, 2, 3,
+        4, 4, 4, 4, 
+        0, 1, 2, 3, 4
+    };
+
+    static const uint8_t y5[25] = {
+        0, 0, 1, 1, 0, 0, 1, 1,
+        2, 2, 3, 3, 2, 2, 3, 3,
+        0, 1, 2, 3,
+        4, 4, 4, 4, 4
+    };
+
+    static const uint8_t x6[36] = {
+        0, 1, 0, 1, 2, 3, 2, 3,
+        0, 1, 0, 1, 2, 3, 2, 3,
+        4, 5, 4, 5, 4, 5, 4, 5,
+        0, 1, 0, 1, 2, 3, 2, 3,
+        4, 5, 4, 5
+    };
+
+    static const uint8_t y6[36] = {
+        0, 0, 1, 1, 0, 0, 1, 1,
+        2, 2, 3, 3, 2, 2, 3, 3,
+        0, 0, 1, 1, 2, 2, 3, 3,
+        4, 4, 5, 5, 4, 4, 5, 5,
+        4, 4, 5, 5
+    };
+
+    static const uint8_t x7[49] = {
+        0, 1, 0, 1, 2, 3, 2, 3,
+        0, 1, 0, 1, 2, 3, 2, 3,
+        4, 5, 4, 5, 6, 6,
+        4, 5, 4, 5, 6, 6,
+        0, 1, 0, 1, 2, 3, 2, 3,
+        0, 1, 2, 3,
+        4, 5, 4, 5, 6, 6,
+        4, 5, 6,
+    };
+
+    static const uint8_t y7[49] = {
+        0, 0, 1, 1, 0, 0, 1, 1,
+        2, 2, 3, 3, 2, 2, 3, 3,
+
+        0, 0, 1, 1, 0, 1,
+        2, 2, 3, 3, 2, 3,
+        4, 4, 5, 5, 4, 4, 5, 5,
+        6, 6, 6, 6,
+        4, 4, 5, 5, 4, 5,
+        6, 6, 6
+    };
+
+    static const int bsize = 3;
+    const uint8_t* xlut = xp2;
+    const uint8_t* ylut = yp2;
+    switch (bsize) {
+    case(3):
+        xlut = x3;
+        ylut = y3;
+        break;
+    case(5):
+        xlut = x5;
+        ylut = y5;
+        break;
+    case(6):
+        xlut = x6;
+        ylut = y6;
+        break;
+    case(7):
+        xlut = x7;
+        ylut = y7;
+        break;
+    }
+
     vector<uint8_t> group(bsize * bsize);
-    for (int y = 0; y < 2520; y += bsize) {
-        for (int x = 0; x < line_sz; x += bsize) {
+    for (int y = 0; (y + bsize) <= 2520; y += bsize) {
+        for (int x = 0; (x + bsize) <= line_sz; x += bsize) {
             size_t loc = (y * line_sz + x) * 3;
             for (int c = 0; c < 3; c++) {
                 for (int i = 0; i < group.size(); i++) {
-                    static const uint8_t xlut[64] = {
-                        0, 1, 0, 1, 2, 3, 2, 3,
-                        0, 1, 0, 1, 2, 3, 2, 3,
-                        4, 5, 4, 5, 6, 7, 6, 7,
-                        4, 5, 4, 5, 6, 7, 6, 7,
-                        0, 1, 0, 1, 2, 3, 2, 3,
-                        0, 1, 0, 1, 2, 3, 2, 3,
-                        4, 5, 4, 5, 6, 7, 6, 7,
-                        4, 5, 4, 5, 6, 7, 6, 7
-                    };
-                    static const uint8_t ylut[64] = {
-                        0, 0, 1, 1, 0, 0, 1, 1,
-                        2, 2, 3, 3, 2, 2, 3, 3,
-                        0, 0, 1, 1, 0, 0, 1, 1,
-                        2, 2, 3, 3, 2, 2, 3, 3,
-                        4, 4, 5, 5, 4, 4, 5, 5,
-                        6, 6, 7, 7, 6, 6, 7, 7,
-                        4, 4, 5, 5, 4, 4, 5, 5,
-                        6, 6, 7, 7, 6, 6, 7, 7
-                    };
                     group[i] = image[loc + c + (ylut[i] * line_sz + xlut[i]) * 3];
                 }
 
@@ -142,29 +226,12 @@ int main()
                 deltaenc.prev[0] = prev[c];
                 deltaenc.delta(group);
 
-                // The range could be made smaller by centering it on the median
-                // the median is 0 on the average
-                // and the shift value would have to be encoded, which negates the savings
-
-                //auto mm = minmax_element(
-                //    reinterpret_cast<int8_t *>(deltaenc.v.data()),
-                //    reinterpret_cast<int8_t *>(deltaenc.v.data() + deltaenc.v.size()));
-                //int mival = int(*mm.first), maval = int(*mm.second);
-                //int median = (maval + mival) / 2;
-                //mmedian += median;
-                
-                //for (auto& it : deltaenc.v)
-                //    it -= median;
-
-
-                //dump8x8(deltaenc.v);
                 prev[c] = deltaenc.prev[0];
                 deltaenc.recode();
-                //dump8x8(group);
                 
+#define SHO 1
+#if defined(SHO)
                 uint64_t maxval = 1 | *max_element(deltaenc.v.begin(), deltaenc.v.end());
-                //dump8x8(group);
-                //dump8x8(deltaenc.v);
                 group.swap(deltaenc.v);
 
                 // Encode the maxval
@@ -175,11 +242,21 @@ int main()
                     s.push((maxval & (Bitstream::mask[bits] - 1)) * 4 + bits, bits + 2);
                 else
                     s.push(0, 3);
+#else
+                uint64_t maxval = *max_element(deltaenc.v.begin(), deltaenc.v.end());
+                //dump8x8(group);
+                //dump8x8(deltaenc.v);
+                group.swap(deltaenc.v);
+
+                // Encode the maxval
+                // Number of bits after the fist 1
+                size_t bits = maxval ? ilogb(maxval) : 0;
+                // Push the low bits of maxval, prefixed by the number of bits
+                s.push((maxval & Bitstream::mask[bits]) * 8 + bits, bits + 3);
+#endif
 
                 bithist[bits]++;
                 hist[maxval]++;
-                //for (auto it : group)
-                //    hist[it]++;
 
                 // Encode the 64values
                 // Best case, maxval is 0 or 1
