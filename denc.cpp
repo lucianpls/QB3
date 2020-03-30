@@ -28,6 +28,7 @@ int Denc::deltacheck(const std::vector<uint8_t>& input) {
 
 int Denc::recode() {
 	for (auto& it : v)
-		it = (it & 0x80) ? (0xff - 2 * it) : (2 * it);
-	return 0;
+//		it = (it & 0x80) ? (0xff - 2 * it) : (2 * it);
+		it = (it & 0x80) ? -(2 * it + 1) : (2 * it);
+return 0;
 }
