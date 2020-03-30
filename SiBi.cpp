@@ -89,7 +89,6 @@ int main()
     fclose(f);
     // 
 
-    fopen_s(&f, "minvals.raw", "wb");
     //Denc deltaenc;
     //deltaenc.delta(image);
     //deltaenc.deltacheck(image);
@@ -103,13 +102,14 @@ int main()
     // The sizes are multiples of 8, no need to check
     size_t line_sz = 3776;
     vector<uint8_t> prev(3, 127); // RGB
-    // This should be 8, but for noisy images 4 is better
+    // This should be 8, for noisy images 4 is better
+    // 2 generates too much overhead
     // 16 might work for slow varying inputs, 
     // which would need the lookup tables extended
     static const int bsize = 8;
     vector<uint8_t> group(bsize * bsize);
     for (int y = 0; y < 2520; y += bsize) {
-        for (int x = 0; x < 3776; x += bsize) {
+        for (int x = 0; x < line_sz; x += bsize) {
             size_t loc = (y * line_sz + x) * 3;
             for (int c = 0; c < 3; c++) {
                 for (int i = 0; i < group.size(); i++) {
@@ -141,34 +141,49 @@ int main()
                 Denc deltaenc(1);
                 deltaenc.prev[0] = prev[c];
                 deltaenc.delta(group);
+
+                // The range could be made smaller by centering it on the median
+                // the median is 0 on the average
+                // and the shift value would have to be encoded, which negates the savings
+
+                //auto mm = minmax_element(
+                //    reinterpret_cast<int8_t *>(deltaenc.v.data()),
+                //    reinterpret_cast<int8_t *>(deltaenc.v.data() + deltaenc.v.size()));
+                //int mival = int(*mm.first), maval = int(*mm.second);
+                //int median = (maval + mival) / 2;
+                //mmedian += median;
+                
+                //for (auto& it : deltaenc.v)
+                //    it -= median;
+
+
                 //dump8x8(deltaenc.v);
                 prev[c] = deltaenc.prev[0];
                 deltaenc.recode();
                 //dump8x8(group);
-
-                uint64_t maxval = *max_element(deltaenc.v.begin(), deltaenc.v.end());
+                
+                uint64_t maxval = 1 | *max_element(deltaenc.v.begin(), deltaenc.v.end());
                 //dump8x8(group);
                 //dump8x8(deltaenc.v);
                 group.swap(deltaenc.v);
-                fwrite(group.data(), 1, group.size(), f);
-                hist[maxval]++;
-                //for (auto it : group)
-                //    hist[it]++;
 
                 // Encode the maxval
                 // Number of bits after the fist 1
-                size_t bits = maxval ? ilogb(maxval) : 0;
+                size_t bits = ilogb(maxval);
+                // Push the middle bits of maxval, prefixed by the number of bits
+                s.push((maxval & (Bitstream::mask[bits] - 1)) * 4 + bits, bits + 2);
+
                 bithist[bits]++;
-                // Push the low bits of maxval, prefixed by the number of bits
-                s.push((maxval & Bitstream::mask[bits]) * 8 + bits, bits + 3);
+                hist[maxval]++;
+                //for (auto it : group)
+                //    hist[it]++;
 
                 // Encode the 64values
                 // Best case, maxval is 0 or 1
                 if (0 == bits) {
                     uint64_t val = 0;
-                    if (maxval) // Gather the bits, in low endian order
-                        for (auto it = group.rbegin(); it != group.rend(); it++)
-                            val = val * 2 + *it;
+                    for (auto it = group.rbegin(); it != group.rend(); it++)
+                        val = val * 2 + *it;
                     s.push(val, group.size());
                     continue;
                 }
@@ -195,8 +210,6 @@ int main()
             }
         }
     }
-
-    fclose(f);
 
     fopen_s(&f, "out.raw", "wb");
     fwrite(s.v.data(), 1, s.v.size(), f);
