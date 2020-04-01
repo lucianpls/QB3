@@ -2,7 +2,17 @@
 #include <iostream>
 #include <algorithm>
 
-const uint8_t Bitstream::mask[9] = { 0, 1, 3, 7, 15, 31, 63, 127, 255 };
+const uint8_t Bitstream::mask[9] = {
+	0,
+	0b1,
+	0b11,
+	0b111,
+	0b1111,
+	0b11111,
+	0b111111,
+	0b1111111,
+	0b11111111
+};
 
 BMap::BMap(int x, int y) : _x(x), _y(y), _lw((x + 7) / 8) {
 	_v.assign(_lw * ((y + 7) / 8), ~0); // All data
