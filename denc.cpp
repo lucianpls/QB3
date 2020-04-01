@@ -1,8 +1,10 @@
 #include "denc.h"
 #include "bmap.h"
 #include <iostream>
+#include <limits>
 
 using namespace std;
+
 
 // Delta and by low sign encoding
 static int dsign(std::vector<uint8_t>& v, uint8_t prev) {
@@ -95,6 +97,9 @@ static const uint8_t y7[49] = {
     6, 6, 6
 };
 
+static const uint8_t* xx[9] = { xp2, xp2, xp2, x3, xp2, x5, x6, x7, xp2 };
+static const uint8_t* yy[9] = { yp2, yp2, yp2, y3, yp2, y5, y6, y7, yp2 };
+
 // Block size should be 8, for noisy 
 // images 4 is better
 // 2 generates too much overhead
@@ -105,7 +110,6 @@ static const uint8_t y7[49] = {
 std::vector<uint8_t> encode(std::vector<uint8_t> &image,
     size_t xsize, size_t ysize, size_t bsize)
 {
-    static int verbose = 0;
     Bitstream s;
     vector<size_t> hist(256);
     vector<size_t> bithist(8);
@@ -113,27 +117,8 @@ std::vector<uint8_t> encode(std::vector<uint8_t> &image,
     size_t bands = image.size() / xsize / ysize;
     vector<uint8_t> prev(bands, 127); // RGB
 
-    const uint8_t* xlut = xp2;
-    const uint8_t* ylut = yp2;
-    switch (bsize) {
-    case(3):
-        xlut = x3;
-        ylut = y3;
-        break;
-    case(5):
-        xlut = x5;
-        ylut = y5;
-        break;
-    case(6):
-        xlut = x6;
-        ylut = y6;
-        break;
-    case(7):
-        xlut = x7;
-        ylut = y7;
-        break;
-    }
-
+    const uint8_t* xlut = xx[bsize];
+    const uint8_t* ylut = yy[bsize];
     vector<uint8_t> group(bsize * bsize);
     for (int y = 0; (y + bsize) <= ysize; y += bsize) {
         for (int x = 0; (x + bsize) <= xsize; x += bsize) {
@@ -194,18 +179,6 @@ std::vector<uint8_t> encode(std::vector<uint8_t> &image,
             }
         }
     }
-
-    if (verbose) {
-        FILE* f;
-        fopen_s(&f, "out.raw", "wb");
-        fwrite(s.v.data(), 1, s.v.size(), f);
-        for (int i = 0; i < hist.size(); i++)
-            cout << i << "," << hist[i] << endl;
-
-        for (int i = 0; i < bithist.size(); i++)
-            cout << i << "," << bithist[i] << endl;
-        fclose(f);
-    }
     return s.v;
 }
 
@@ -216,35 +189,14 @@ std::vector<uint8_t> encode(std::vector<uint8_t> &image,
 std::vector<uint8_t> siencode(std::vector<uint8_t>& image,
     size_t xsize, size_t ysize, size_t bsize)
 {
-    static int verbose = 0;
     Bitstream s;
     vector<size_t> hist(256);
     vector<size_t> bithist(8);
     // The sizes are multiples of 8, no need to check
+    const uint8_t* xlut = xx[bsize];
+    const uint8_t* ylut = yy[bsize];
     size_t bands = image.size() / xsize / ysize;
     vector<uint8_t> prev(bands, 127); // RGB
-
-    const uint8_t* xlut = xp2;
-    const uint8_t* ylut = yp2;
-    switch (bsize) {
-    case(3):
-        xlut = x3;
-        ylut = y3;
-        break;
-    case(5):
-        xlut = x5;
-        ylut = y5;
-        break;
-    case(6):
-        xlut = x6;
-        ylut = y6;
-        break;
-    case(7):
-        xlut = x7;
-        ylut = y7;
-        break;
-    }
-
     vector<uint8_t> group(bsize * bsize);
     for (int y = 0; (y + bsize) <= ysize; y += bsize) {
         for (int x = 0; (x + bsize) <= xsize; x += bsize) {
@@ -256,16 +208,8 @@ std::vector<uint8_t> siencode(std::vector<uint8_t>& image,
 
                 // Delta with low sign encode
                 prev[c] = dsign(group, prev[c]);
-
-                // Round up to nearest odd (negative) value
-                // Saves writing that last bit on every block
-                // Expends one extra bit on two specific values
-                // if they are present, by moving the cutof value 
-                // down by one
-                // The net effect decreases output size
                 uint64_t maxval = 1 | *max_element(group.begin(), group.end());
 
-                // Encode the maxval
                 // Number of bits after the fist 1
                 size_t bits = ilogb(maxval);
                 bithist[bits]++;
@@ -274,73 +218,35 @@ std::vector<uint8_t> siencode(std::vector<uint8_t>& image,
                 if (0 == bits) { // Best case, all values are 0 or 1
                     s.push(0, 3);
                     uint64_t val = 0;
+                    // Scan backwards, will be read forward
                     for (auto it = group.rbegin(); it != group.rend(); it++)
                         val = val * 2 + *it;
                     s.push(val, group.size());
                     continue;
                 }
 
-                if (maxval < 16) {
-                    // Push the middle bits of maxval, prefixed by the number of bits
-                    s.push((maxval & (Bitstream::mask[bits] - 1)) * 4 + bits, bits + 2);
-
-                    // Truncated binary encoding
-                    auto cutof = Bitstream::mask[bits + 1] - maxval;
-                    if (0 == cutof) { // Uniform length codewords
-                        bits++;
-                        for (auto val : group)
-                            s.push(val, bits);
-                        continue;
-                    }
-
-                    for (uint64_t val : group) {
-                        if (val < cutof) { // Truncated
-                            s.push(val, bits);
-                            continue;
-                        }
-                        // Adjust, rotate and store the value
-                        val += cutof;
-                        val = (val >> 1) + ((val & 1) << bits);
-                        s.push(val, bits + 1);
-                    }
-
-                    continue;
-                }
-
-                // Use the variable length encoding over 64
-
+                // Use the variable length encoding
                 // Only need to push the number of bits, not the maxvalue
                 s.push(bits, 3);
                 for (uint64_t val : group) {
-                    if (val <= Bitstream::mask[bits - 1]) { // First quarter
-                        s.push(val, bits); // Starts with 0
+                    if (val <= Bitstream::mask[bits - 1]) {
+                        // Lowest quarter, one bit short codewords, most likely
+                        s.push(val |(1ull << (bits -1)), bits); // Starts with 1
                     }
                     else if (val <= Bitstream::mask[bits]) { // Second quarter
-                        val = val & Bitstream::mask[bits - 1] | (1ull << bits);
-                        val = (val >> 1) | ((val & 1) << bits);
-                        s.push(val , bits + 1);
+                        val = (val >> 1) | ((val & 1) << bits); // starts with 01, then rotated
+                        s.push(val, bits + 1);
                     }
-                    else { // Last half, there is at least one value written this way
-                        val = (val & Bitstream::mask[bits]) | (0b11ull << bits);
-                        // Twisted two bits
+                    else {
+                        // Last half, one bit longer codewords, least likely, starts with 00
+                        val &= Bitstream::mask[bits];
+                        // starts with 00, Rotated two bits, 
                         val = (val >> 2) | ((val & 0b11) << bits);
                         s.push(val, bits + 2);
                     }
                 }
             }
         }
-    }
-
-    if (verbose) {
-        FILE* f;
-        fopen_s(&f, "out.raw", "wb");
-        fwrite(s.v.data(), 1, s.v.size(), f);
-        for (int i = 0; i < hist.size(); i++)
-            cout << i << "," << hist[i] << endl;
-
-        for (int i = 0; i < bithist.size(); i++)
-            cout << i << "," << bithist[i] << endl;
-        fclose(f);
     }
     return s.v;
 }
