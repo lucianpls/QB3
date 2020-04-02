@@ -2,16 +2,31 @@
 #include "bmap.h"
 #include <iostream>
 #include <limits>
+#include <cassert>
 
 using namespace std;
 
+const uint8_t mask[9] = {
+    0,
+    0b1,
+    0b11,
+    0b111,
+    0b1111,
+    0b11111,
+    0b111111,
+    0b1111111,
+    0b11111111
+};
 
-// Delta and by low sign encoding
-static int dsign(std::vector<uint8_t>& v, uint8_t prev) {
+template<typename T = uint8_t> 
+static T dsign(std::vector<T>& v, T prev) {
+    assert(is_integral<T>::value);
+    assert(is_unsigned<T>::value);
+    static T maxv = numeric_limits<T>::max() >> 1;
     for (auto& it : v) {
         swap(it, prev);
         it = prev - it;
-        it = (it & 0x80) ? -(2 * it + 1) : (2 * it);
+        it = (it > maxv) ? -(2 * it + 1) : (2 * it);
     }
     return prev;
 }
@@ -100,8 +115,8 @@ static const uint8_t y7[49] = {
 static const uint8_t* xx[9] = { xp2, xp2, xp2, x3, xp2, x5, x6, x7, xp2 };
 static const uint8_t* yy[9] = { yp2, yp2, yp2, y3, yp2, y5, y6, y7, yp2 };
 
-// Block size should be 8, for noisy 
-// images 4 is better
+// Block size should be 8
+// for noisy images 4 is better
 // 2 generates too much overhead
 // 16 might work for slow varying inputs, 
 // which would need the lookup tables extended
@@ -155,10 +170,10 @@ std::vector<uint8_t> encode(std::vector<uint8_t> &image,
                 }
 
                 // Push the middle bits of maxval, prefixed by the number of bits
-                s.push((maxval & (Bitstream::mask[bits] - 1)) * 4 + bits, bits + 2);
+                s.push((maxval & (mask[bits] - 1)) * 4 + bits, bits + 2);
 
                 // Truncated binary encoding
-                auto cutof = Bitstream::mask[bits + 1] - maxval;
+                auto cutof = mask[bits + 1] - maxval;
                 if (0 == cutof) { // Uniform length codewords
                     bits++;
                     for (auto val : group)
@@ -229,18 +244,19 @@ std::vector<uint8_t> siencode(std::vector<uint8_t>& image,
                 // Only need to push the number of bits, not the maxvalue
                 s.push(bits, 3);
                 for (uint64_t val : group) {
-                    if (val <= Bitstream::mask[bits - 1]) {
+                    if (val <= mask[bits - 1]) {
                         // Lowest quarter, one bit short codewords, most likely
-                        s.push(val |(1ull << (bits -1)), bits); // Starts with 1
+                        val |= 1ull << (bits - 1);
+                        s.push(val, bits); // Starts with 1
                     }
-                    else if (val <= Bitstream::mask[bits]) { // Second quarter
-                        val = (val >> 1) | ((val & 1) << bits); // starts with 01, then rotated
+                    else if (val <= mask[bits]) { // Second quarter
+                        // starts with 01, then rotated
+                        val = (val >> 1) | ((val & 1) << bits);
                         s.push(val, bits + 1);
                     }
-                    else {
-                        // Last half, one bit longer codewords, least likely, starts with 00
-                        val &= Bitstream::mask[bits];
-                        // starts with 00, Rotated two bits, 
+                    else { // Last half, least likely
+                        val &= mask[bits];
+                        // starts with 00, rotated two bits
                         val = (val >> 2) | ((val & 0b11) << bits);
                         s.push(val, bits + 2);
                     }
