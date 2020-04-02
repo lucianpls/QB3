@@ -20,8 +20,7 @@ const uint8_t mask[9] = {
 
 template<typename T = uint8_t> 
 static T dsign(std::vector<T>& v, T prev) {
-    assert(is_integral<T>::value);
-    assert(is_unsigned<T>::value);
+    assert(is_integral<T>::value && is_unsigned<T>::value);
     static T maxv = numeric_limits<T>::max() >> 1;
     for (auto& it : v) {
         swap(it, prev);
@@ -126,8 +125,6 @@ std::vector<uint8_t> encode(std::vector<uint8_t> &image,
     size_t xsize, size_t ysize, size_t bsize)
 {
     Bitstream s;
-    vector<size_t> hist(256);
-    vector<size_t> bithist(8);
     // The sizes are multiples of 8, no need to check
     size_t bands = image.size() / xsize / ysize;
     vector<uint8_t> prev(bands, 127); // RGB
@@ -157,9 +154,7 @@ std::vector<uint8_t> encode(std::vector<uint8_t> &image,
                 // Encode the maxval
                 // Number of bits after the fist 1
                 size_t bits = ilogb(maxval);
-                bithist[bits]++;
-                hist[maxval]++;
-
+ 
                 if (0 == bits) { // Best case, all values are 0 or 1
                     s.push(0, 3);
                     uint64_t val = 0;
@@ -205,8 +200,6 @@ std::vector<uint8_t> siencode(std::vector<uint8_t>& image,
     size_t xsize, size_t ysize, size_t bsize)
 {
     Bitstream s;
-    vector<size_t> hist(256);
-    vector<size_t> bithist(8);
     // The sizes are multiples of 8, no need to check
     const uint8_t* xlut = xx[bsize];
     const uint8_t* ylut = yy[bsize];
@@ -227,9 +220,6 @@ std::vector<uint8_t> siencode(std::vector<uint8_t>& image,
 
                 // Number of bits after the fist 1
                 size_t bits = ilogb(maxval);
-                bithist[bits]++;
-                hist[maxval]++;
-
                 if (0 == bits) { // Best case, all values are 0 or 1
                     s.push(0, 3);
                     uint64_t val = 0;
