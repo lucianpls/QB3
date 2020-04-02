@@ -11,6 +11,7 @@
 
 using namespace std;
 using namespace chrono;
+using namespace SiBi;
 
 //static void dump8x8(vector<uint8_t>& v) {
 //    cout << hex;

@@ -149,7 +149,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="bmap.cpp" />
-    <ClCompile Include="denc.cpp" />
     <ClCompile Include="SiBi.cpp" />
   </ItemGroup>
   <ItemGroup>
