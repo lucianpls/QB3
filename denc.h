@@ -18,16 +18,26 @@ namespace SiBi {
     };
 #undef MASK
 
+#define HALFMAX(T) (std::numeric_limits<T>::max() >> 1)
+
     template<typename T = uint8_t>
     static T dsign(std::vector<T>& v, T prev) {
         assert(std::is_integral<T>::value);
         assert(std::is_unsigned<T>::value);
-        static T maxv = std::numeric_limits<T>::max() >> 1;
         for (auto& it : v) {
             std::swap(it, prev);
             it = prev - it;
-            it = (it > maxv) ? -(2 * it + 1) : (2 * it);
+            it = (it > HALFMAX(T)) ? -(2 * it + 1) : (2 * it);
         }
+        return prev;
+    }
+
+    template<typename T = uint8_t>
+    static T undsign(std::vector<T>& v, T prev) {
+        assert(std::is_integral<T>::value);
+        assert(std::is_unsigned<T>::value);
+        for (auto& it : v)
+            prev = it = prev + ((it & 1) ? (-(it >> 1) -1): (it >> 1));
         return prev;
     }
 
@@ -128,23 +138,22 @@ namespace SiBi {
     {
         assert(std::is_integral<T>::value);
         assert(std::is_unsigned<T>::value);
-
         std::vector<T> result;
         Bitstream s(result);
         // The sizes are multiples of 8, no need to check
         size_t bands = image.size() / xsize / ysize;
-        std::vector<T> prev(bands, 127); // RGB
+        std::vector<T> prev(bands, HALFMAX(T));
 
         const uint8_t* xlut = xx[bsize];
         const uint8_t* ylut = yy[bsize];
         std::vector<T> group(bsize * bsize);
         for (int y = 0; (y + bsize) <= ysize; y += bsize) {
             for (int x = 0; (x + bsize) <= xsize; x += bsize) {
-                size_t loc = (y * xsize + x) * 3;
-                for (int c = 0; c < 3; c++) {
+                size_t loc = (y * xsize + x) * bands;
+                for (int c = 0; c < bands; c++) {
 
                     for (int i = 0; i < group.size(); i++)
-                        group[i] = image[loc + c + (ylut[i] * xsize + xlut[i]) * 3];
+                        group[i] = image[loc + c + (ylut[i] * xsize + xlut[i]) * bands];
 
                     // Delta with low sign encode
                     prev[c] = dsign(group, prev[c]);
@@ -159,7 +168,7 @@ namespace SiBi {
 
                     // Encode the maxval
                     // Number of bits after the fist 1
-                    size_t bits = ilogb(maxval);
+                    int bits = ilogb(maxval);
 
                     if (0 == bits) { // Best case, all values are 0 or 1
                         s.push(0, 3);
@@ -174,9 +183,8 @@ namespace SiBi {
                     s.push((maxval & (mask[bits] - 1)) * 4 + bits, bits + 2);
                     auto cutof = mask[bits + 1] - maxval;
                     if (0 == cutof) { // Uniform length codewords
-                        bits++;
                         for (auto val : group)
-                            s.push(val, bits);
+                            s.push(val, bits + 1);
                         continue;
                     }
 
@@ -196,6 +204,63 @@ namespace SiBi {
         return s.v;
     }
 
+    template<typename T = uint8_t>
+    std::vector<T> untrun(std::vector<T>& src, 
+        size_t xsize, size_t ysize, size_t bands, int bsize)
+    {
+        assert(std::is_integral<T>::value);
+        assert(std::is_unsigned<T>::value);
+        std::vector<T> image(xsize * ysize * bands);
+        Bitstream s(src);
+        std::vector<T> prev(bands, HALFMAX(T));
+        std::vector<T> group(bsize * bsize);
+        const uint8_t* xlut = xx[bsize];
+        const uint8_t* ylut = yy[bsize];
+
+        for (int y = 0; (y + bsize) <= ysize; y += bsize) {
+            for (int x = 0; (x + bsize) <= xsize; x += bsize) {
+                size_t loc = (y * xsize + x) * bands;
+                for (int c = 0; c < bands; c++) {
+                    int bits;
+                    s.pull(bits, 3);
+                    if (0 == bits) {
+                        uint64_t val;
+                        s.pull(val, group.size());
+                        for (auto& it : group) {
+                            it = val & 1;
+                            val >>= 1;
+                        }
+                    }
+                    else {
+                        uint64_t maxval;
+                        s.pull(maxval, bits - 1);
+                        maxval = (1ull << bits) | (maxval << 1) | 1;
+                        auto cutof = mask[bits + 1] - maxval;
+                        if (0 == cutof) {
+                            for (auto& it : group)
+                                s.pull(it, bits + 1);
+                        }
+                        else { // Default case, truncated
+                            for (auto& it : group) {
+                                s.pull(it, bits);
+                                if (it >= cutof) {
+                                    T bit;
+                                    s.pull(bit, 1);
+                                    it = (it << 1) + bit - cutof;
+                                }
+                            }
+                        }
+                    }
+
+                    prev[c] = undsign(group, prev[c]);
+                    for (int i = 0; i < group.size(); i++)
+                        image[loc + c + (ylut[i] * xsize + xlut[i]) * bands] = group[i];
+                }
+            }
+        }
+        return image;
+    }
+
 
     // Encoding with predefined Huffman tables
     // Does not need the maxvalue to be encoded, only 
@@ -212,15 +277,15 @@ namespace SiBi {
         const uint8_t* xlut = xx[bsize];
         const uint8_t* ylut = yy[bsize];
         size_t bands = image.size() / xsize / ysize;
-        std::vector<T> prev(bands, 127); // RGB
+        std::vector<T> prev(bands, HALFMAX(T));
         std::vector<T> group(bsize * bsize);
         for (int y = 0; (y + bsize) <= ysize; y += bsize) {
             for (int x = 0; (x + bsize) <= xsize; x += bsize) {
-                size_t loc = (y * xsize + x) * 3; // Top-left pixel
-                for (int c = 0; c < 3; c++) {
+                size_t loc = (y * xsize + x) * bands; // Top-left pixel
+                for (int c = 0; c < bands; c++) {
 
                     for (int i = 0; i < group.size(); i++)
-                        group[i] = image[loc + c + (ylut[i] * xsize + xlut[i]) * 3];
+                        group[i] = image[loc + c + (ylut[i] * xsize + xlut[i]) * bands];
 
                     // Delta with low sign encode
                     prev[c] = dsign(group, prev[c]);
@@ -231,7 +296,7 @@ namespace SiBi {
                     if (0 == bits) { // Best case, all values are 0 or 1
                         s.push(0, 3);
                         uint64_t val = 0;
-                        // Scan backwards, will be read forward
+                        // Write backwards, will be read forward
                         for (auto it = group.rbegin(); it != group.rend(); it++)
                             val = val * 2 + *it;
                         s.push(val, group.size());

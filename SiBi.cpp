@@ -104,6 +104,17 @@ int main()
     cout << "Took " << time_span << " seconds" << endl;
 
     t1 = high_resolution_clock::now();
+    auto reimage = untrun(v, 3776, 2520, 3, bsize);
+    t2 = high_resolution_clock::now();
+    time_span = duration_cast<duration<double>>(t2 - t1).count();
+    cout << "UnTrun took " << time_span << " seconds" << endl;
+
+    for (int i = 0; i < image.size(); i++) {
+        if (image[i] != reimage[i])
+            cout << "Difference at " << i << endl;
+    }
+
+    t1 = high_resolution_clock::now();
     v = sincode(image, 3776, 2520, bsize);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
