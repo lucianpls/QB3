@@ -123,13 +123,14 @@ namespace SiBi {
     // Works for non-power of two blocks, using custom tables
 
     template<typename T = uint8_t>
-    std::vector<T> encode(std::vector<T>& image,
+    std::vector<T> truncode(std::vector<T>& image,
         size_t xsize, size_t ysize, int bsize)
     {
         assert(std::is_integral<T>::value);
         assert(std::is_unsigned<T>::value);
 
-        Bitstream s;
+        std::vector<T> result;
+        Bitstream s(result);
         // The sizes are multiples of 8, no need to check
         size_t bands = image.size() / xsize / ysize;
         std::vector<T> prev(bands, 127); // RGB
@@ -200,12 +201,13 @@ namespace SiBi {
     // Does not need the maxvalue to be encoded, only 
     // the reference number of bits
     template <typename T = uint8_t>
-    std::vector<T> siencode(std::vector<T>& image,
+    std::vector<T> sincode(std::vector<T>& image,
         size_t xsize, size_t ysize, int bsize)
     {
         assert(std::is_integral<T>::value);
         assert(std::is_unsigned<T>::value);
-        Bitstream s;
+        std::vector<T> result;
+        Bitstream s(result);
         // The sizes are multiples of 8, no need to check
         const uint8_t* xlut = xx[bsize];
         const uint8_t* ylut = yy[bsize];

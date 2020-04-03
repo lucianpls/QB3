@@ -24,10 +24,10 @@
 
 // Output stream
 struct Bitstream {
-	std::vector<uint8_t> v;
+	std::vector<uint8_t> &v;
 	size_t len; // available bits in last byte
 	size_t pos; // Next bit for input
-	Bitstream() : len(0), pos(0) {};
+	Bitstream(std::vector<uint8_t>& data) : v(data), len(0), pos(0) {};
 	void clear() {
 		len = 0;
 		pos = 0;

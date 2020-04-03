@@ -97,14 +97,14 @@ int main()
 
     // Image is rotated
     t1 = high_resolution_clock::now();
-    v = encode(image, 3776, 2520, bsize);
+    v = truncode(image, 3776, 2520, bsize);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
     cout << "Size is " << v.size() << endl;
     cout << "Took " << time_span << " seconds" << endl;
 
     t1 = high_resolution_clock::now();
-    v = siencode(image, 3776, 2520, bsize);
+    v = sincode(image, 3776, 2520, bsize);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
     cout << "Size is " << v.size() << endl;
