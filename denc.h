@@ -4,17 +4,19 @@
 #include <limits>
 
 namespace SiBi {
-    const uint64_t mask[33] = {
-        0x0, 0x1, 0x3, 0x7,
-        0xf, 0x1f, 0x3f, 0x7f,
-        0xff, 0x1ff, 0x3ff, 0x7ff,
-        0xfff, 0x1fff, 0x3fff, 0x7fff,
-        0xffff, 0x1ffff, 0x3ffff, 0x7ffff,
-        0xfffff, 0x1fffff, 0x3fffff, 0x7fffff,
-        0xffffff, 0x1ffffff, 0x3ffffff, 0x7ffffff,
-        0xfffffff, 0x1fffffff, 0x3fffffff, 0x7fffffff,
-        0xffffffff
+#define MASK(v) ((1ull << v)-1)
+    const uint64_t mask[65] = {
+         MASK(0),  MASK(1),  MASK(2),  MASK(3),  MASK(4),  MASK(5),  MASK(6),  MASK(7),
+         MASK(8),  MASK(9), MASK(10), MASK(11), MASK(12), MASK(13), MASK(14), MASK(15),
+        MASK(16), MASK(17), MASK(18), MASK(19), MASK(20), MASK(21), MASK(22), MASK(23),
+        MASK(24), MASK(25), MASK(26), MASK(27), MASK(28), MASK(29), MASK(30), MASK(31),
+        MASK(32), MASK(33), MASK(34), MASK(35), MASK(36), MASK(37), MASK(38), MASK(39),
+        MASK(40), MASK(41), MASK(42), MASK(43), MASK(44), MASK(45), MASK(46), MASK(47),
+        MASK(48), MASK(49), MASK(50), MASK(51), MASK(52), MASK(53), MASK(54), MASK(55),
+        MASK(56), MASK(57), MASK(58), MASK(59), MASK(60), MASK(61), MASK(62), MASK(63),
+        ~0
     };
+#undef MASK
 
     template<typename T = uint8_t>
     static T dsign(std::vector<T>& v, T prev) {
@@ -122,7 +124,7 @@ namespace SiBi {
 
     template<typename T = uint8_t>
     std::vector<T> encode(std::vector<T>& image,
-        size_t xsize, size_t ysize, size_t bsize)
+        size_t xsize, size_t ysize, int bsize)
     {
         assert(std::is_integral<T>::value);
         assert(std::is_unsigned<T>::value);
@@ -169,8 +171,6 @@ namespace SiBi {
 
                     // Push the middle bits of maxval, prefixed by the number of bits
                     s.push((maxval & (mask[bits] - 1)) * 4 + bits, bits + 2);
-
-                    // Truncated binary encoding
                     auto cutof = mask[bits + 1] - maxval;
                     if (0 == cutof) { // Uniform length codewords
                         bits++;
@@ -201,11 +201,10 @@ namespace SiBi {
     // the reference number of bits
     template <typename T = uint8_t>
     std::vector<T> siencode(std::vector<T>& image,
-        size_t xsize, size_t ysize, size_t bsize)
+        size_t xsize, size_t ysize, int bsize)
     {
         assert(std::is_integral<T>::value);
         assert(std::is_unsigned<T>::value);
-
         Bitstream s;
         // The sizes are multiples of 8, no need to check
         const uint8_t* xlut = xx[bsize];
@@ -215,7 +214,7 @@ namespace SiBi {
         std::vector<T> group(bsize * bsize);
         for (int y = 0; (y + bsize) <= ysize; y += bsize) {
             for (int x = 0; (x + bsize) <= xsize; x += bsize) {
-                size_t loc = (y * xsize + x) * 3;
+                size_t loc = (y * xsize + x) * 3; // Top-left pixel
                 for (int c = 0; c < 3; c++) {
 
                     for (int i = 0; i < group.size(); i++)

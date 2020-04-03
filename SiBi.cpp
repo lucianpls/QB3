@@ -90,7 +90,7 @@ int main()
     fread(image.data(), 2520 * 3, 3776, f);
     fclose(f);
 
-    size_t bsize = 4;
+    int bsize = 4;
     high_resolution_clock::time_point t1, t2;
     vector<uint8_t> v;
     double time_span;
