@@ -93,26 +93,27 @@ int main()
     int bsize = 4;
     high_resolution_clock::time_point t1, t2;
     vector<uint8_t> v;
+    vector<uint8_t> reimage;
     double time_span;
 
     // Image is rotated
-    t1 = high_resolution_clock::now();
-    v = truncode(image, 3776, 2520, bsize);
-    t2 = high_resolution_clock::now();
-    time_span = duration_cast<duration<double>>(t2 - t1).count();
-    cout << "Size is " << v.size() << endl;
-    cout << "Took " << time_span << " seconds" << endl;
+    //t1 = high_resolution_clock::now();
+    //v = truncode(image, 3776, 2520, bsize);
+    //t2 = high_resolution_clock::now();
+    //time_span = duration_cast<duration<double>>(t2 - t1).count();
+    //cout << "Size is " << v.size() << endl;
+    //cout << "Took " << time_span << " seconds" << endl;
 
-    t1 = high_resolution_clock::now();
-    auto reimage = untrun(v, 3776, 2520, 3, bsize);
-    t2 = high_resolution_clock::now();
-    time_span = duration_cast<duration<double>>(t2 - t1).count();
-    cout << "UnTrun took " << time_span << " seconds" << endl;
+    //t1 = high_resolution_clock::now();
+    //reimage = untrun(v, 3776, 2520, 3, bsize);
+    //t2 = high_resolution_clock::now();
+    //time_span = duration_cast<duration<double>>(t2 - t1).count();
+    //cout << "UnTrun took " << time_span << " seconds" << endl;
 
-    for (int i = 0; i < image.size(); i++) {
-        if (image[i] != reimage[i])
-            cout << "Difference at " << i << endl;
-    }
+    //for (int i = 0; i < image.size(); i++) {
+    //    if (image[i] != reimage[i])
+    //        cout << "Difference at " << i << endl;
+    //}
 
     t1 = high_resolution_clock::now();
     v = sincode(image, 3776, 2520, bsize);
@@ -120,4 +121,16 @@ int main()
     time_span = duration_cast<duration<double>>(t2 - t1).count();
     cout << "Size is " << v.size() << endl;
     cout << "Took " << time_span << " seconds" << endl;
+
+    t1 = high_resolution_clock::now();
+    reimage = unsin(v, 3776, 2520, 3, bsize);
+    t2 = high_resolution_clock::now();
+    time_span = duration_cast<duration<double>>(t2 - t1).count();
+    cout << "UnSin took " << time_span << " seconds" << endl;
+
+    for (int i = 0; i < image.size(); i++) {
+        if (image[i] != reimage[i])
+            cout << "Difference at " << i << endl;
+    }
+
 }

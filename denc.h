@@ -293,8 +293,8 @@ namespace SiBi {
 
                     // Number of bits after the fist 1
                     size_t bits = ilogb(maxval);
+                    s.push(bits, 3);
                     if (0 == bits) { // Best case, all values are 0 or 1
-                        s.push(0, 3);
                         uint64_t val = 0;
                         // Write backwards, will be read forward
                         for (auto it = group.rbegin(); it != group.rend(); it++)
@@ -303,9 +303,19 @@ namespace SiBi {
                         continue;
                     }
 
+                    // Doesn't always have 2 bits
+                    if (1 == bits) {
+                        for (auto it : group) {
+                            if (it < 2)
+                                s.push(1 << it, 1 + it);
+                            else
+                                s.push((it & 1) << 2, 3);
+                        }
+                        continue;
+                    }
+
                     // Use the variable length encoding
                     // Only need to push the number of bits, not the maxvalue
-                    s.push(bits, 3);
                     for (uint64_t val : group) {
                         if (val <= mask[bits - 1]) {
                             // Lowest quarter, one bit short codewords, most likely
@@ -328,6 +338,83 @@ namespace SiBi {
             }
         }
         return s.v;
+    }
+
+    template<typename T = uint8_t>
+    std::vector<T> unsin(std::vector<T>& src,
+        size_t xsize, size_t ysize, size_t bands, int bsize)
+    {
+        assert(std::is_integral<T>::value);
+        assert(std::is_unsigned<T>::value);
+        std::vector<T> image(xsize * ysize * bands);
+        Bitstream s(src);
+        std::vector<T> prev(bands, HALFMAX(T));
+        std::vector<T> group(bsize * bsize);
+        const uint8_t* xlut = xx[bsize];
+        const uint8_t* ylut = yy[bsize];
+
+        for (int y = 0; (y + bsize) <= ysize; y += bsize) {
+            for (int x = 0; (x + bsize) <= xsize; x += bsize) {
+                size_t loc = (y * xsize + x) * bands;
+                for (int c = 0; c < bands; c++) {
+                    uint64_t val;
+                    int bits;
+                    s.pull(bits, 3);
+					switch (bits) {
+					case 0: {
+						s.pull(val, group.size());
+						for (auto& it : group) {
+							it = val & 1;
+							val >>= 1;
+						}
+						break;
+					}
+					case 1: { // Don't have the two detection bits
+                        for (auto& it : group) {
+                            s.pull(val, 1);
+                            if (val)
+                                it = 0;
+                            else {
+                                s.pull(val, 1);
+                                if (val) {
+                                    it = 1;
+                                }
+                                else {
+                                    s.pull(val, 1);
+                                    it = 0b10 | val;
+                                }
+                            }
+                        }
+						break;
+					}
+					default: {
+						for (auto& it : group) {
+							uint64_t val;
+							s.pull(val, bits);
+							if (val > mask[bits - 1]) { // Starts with 1
+								it = val & mask[bits - 1];
+							}
+							else if (val > mask[bits - 2]) { // Starts with 00
+								it = val << 1;
+								s.pull(val, 1);
+								it += val;
+							}
+							else {
+								it = val << 2;
+								s.pull(val, 2);
+								it += val | (1ull << bits);
+							}
+						}
+					}
+					} // switch
+
+                    prev[c] = undsign(group, prev[c]);
+                    for (int i = 0; i < group.size(); i++)
+                        image[loc + c + (ylut[i] * xsize + xlut[i]) * bands] = group[i];
+                }
+            }
+        }
+        return image;
     }
 
 } // Namespace SiBi
