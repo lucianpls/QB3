@@ -47,7 +47,8 @@ struct Bitstream {
         }
     }
 
-    template<typename T = uint64_t> bool pull(T& val, size_t bits) {
+    template<typename T = uint64_t>
+    bool pull(T& val, size_t bits) {
         uint64_t acc = 0;
         int pulled = 0;
         while (bits && ((pos / 8) < v.size())) {

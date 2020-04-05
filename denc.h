@@ -162,11 +162,16 @@ std::vector<T> truncode(std::vector<T>& image,
                 uint64_t maxval = 1 | *max_element(group.begin(), group.end());
                 int bits = ilogb(maxval);
                 if (0 == bits) { // Best case, all values are 0 or 1
-                    s.push(0, 3);
                     uint64_t val = 0;
                     for (auto it = group.rbegin(); it != group.rend(); it++)
                         val = val * 2 + *it;
-                    s.push(val, group.size());
+                    if (val) {
+                        s.push(0b1000, 4);
+                        s.push(val, group.size());
+                    }
+                    else {
+                        s.push(0b0000, 4);
+                    }
                     continue;
                 }
 
@@ -178,13 +183,11 @@ std::vector<T> truncode(std::vector<T>& image,
                         s.push(val, bits + 1);
                     continue;
                 }
-
                 for (uint64_t val : group) {
                     if (val < cutof) { // Truncated
                         s.push(val, bits);
                         continue;
                     }
-                    // Adjust, rotate and store the value
                     val += cutof;
                     val = (val >> 1) + ((val & 1) << bits);
                     s.push(val, bits + 1);
@@ -216,7 +219,9 @@ std::vector<T> untrun(std::vector<T>& src,
                 s.pull(bits, 3);
                 if (0 == bits) {
                     uint64_t val;
-                    s.pull(val, group.size());
+                    s.pull(val, 1);
+                    if (val)
+                        s.pull(val, group.size());
                     for (auto& it : group) {
                         it = val & 1;
                         val >>= 1;
@@ -279,16 +284,22 @@ std::vector<T> sincode(std::vector<T>& image,
 
                 // Number of bits after the fist 1
                 size_t bits = ilogb(maxval);
-                s.push(bits, 3);
                 if (0 == bits) { // Best case, all values are 0 or 1
                     uint64_t val = 0;
                     // Write backwards, will be read forward
                     for (auto it = group.rbegin(); it != group.rend(); it++)
                         val = val * 2 + *it;
-                    s.push(val, group.size());
+                    if (val) {
+                        s.push(0b1000, 4);
+                        s.push(val, group.size());
+                    }
+                    else {
+                        s.push(0, 4);
+                    }
                     continue;
                 }
 
+                s.push(bits, 3);
                 // Doesn't always have 2 bits for autodetection
                 if (1 == bits) {
                     for (auto it : group) {
@@ -349,7 +360,9 @@ std::vector<T> unsin(std::vector<T>& src,
                 s.pull(bits, 3);
                 switch (bits) {
                 case 0:
-                    s.pull(val, group.size());
+                    s.pull(val, 1);
+                    if (val)
+                        s.pull(val, group.size());
                     for (auto& it : group) {
                         it = val & 1;
                         val >>= 1;
@@ -357,17 +370,14 @@ std::vector<T> unsin(std::vector<T>& src,
                     break;
                 case 1: // Don't have the two detection bits
                     for (auto& it : group) {
+                        it = 0;
                         s.pull(val, 1);
-                        if (val)
-                            it = 0;
-                        else {
+                        if (val == 0) {
+                            it = 1;
                             s.pull(val, 1);
-                            if (val) {
-                                it = 1;
-                            }
-                            else {
-                                s.pull(val, 1);
-                                it = 0b10 | val;
+                            if (val == 0) {
+                                s.pull(it, 1);
+                                it |= 0b10;
                             }
                         }
                     }
