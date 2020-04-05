@@ -81,12 +81,12 @@ int main()
     // Now for the RGB image, read from a PNM file
     // Image is 2550x3776x3, starts at offset 16
     FILE* f;
-    if (fopen_s(&f, "input.pnm", "rb") || ! f) {
+    if (fopen_s(&f, "input.pnm", "rb") || !f) {
         cerr << "Can't open input file";
         exit(errno);
     }
     fseek(f, 17, SEEK_SET);
-    vector<uint8_t> image(3776*2520*3);
+    vector<uint8_t> image(3776 * 2520 * 3);
     fread(image.data(), 2520 * 3, 3776, f);
     fclose(f);
 
@@ -97,18 +97,18 @@ int main()
     double time_span;
 
     // Image is rotated
-    //t1 = high_resolution_clock::now();
-    //v = truncode(image, 3776, 2520, bsize);
-    //t2 = high_resolution_clock::now();
-    //time_span = duration_cast<duration<double>>(t2 - t1).count();
-    //cout << "Size is " << v.size() << endl;
-    //cout << "Took " << time_span << " seconds" << endl;
+    t1 = high_resolution_clock::now();
+    v = truncode(image, 3776, 2520, bsize);
+    t2 = high_resolution_clock::now();
+    time_span = duration_cast<duration<double>>(t2 - t1).count();
+    cout << "Size is " << v.size() << endl;
+    cout << "Took " << time_span << " seconds" << endl;
 
-    //t1 = high_resolution_clock::now();
-    //reimage = untrun(v, 3776, 2520, 3, bsize);
-    //t2 = high_resolution_clock::now();
-    //time_span = duration_cast<duration<double>>(t2 - t1).count();
-    //cout << "UnTrun took " << time_span << " seconds" << endl;
+    t1 = high_resolution_clock::now();
+    reimage = untrun(v, 3776, 2520, 3, bsize);
+    t2 = high_resolution_clock::now();
+    time_span = duration_cast<duration<double>>(t2 - t1).count();
+    cout << "UnTrun took " << time_span << " seconds" << endl;
 
     //for (int i = 0; i < image.size(); i++) {
     //    if (image[i] != reimage[i])
@@ -128,9 +128,9 @@ int main()
     time_span = duration_cast<duration<double>>(t2 - t1).count();
     cout << "UnSin took " << time_span << " seconds" << endl;
 
-    for (int i = 0; i < image.size(); i++) {
-        if (image[i] != reimage[i])
-            cout << "Difference at " << i << endl;
-    }
+    //for (int i = 0; i < image.size(); i++) {
+    //    if (image[i] != reimage[i])
+    //        cout << "Difference at " << i << endl;
+    //}
 
 }

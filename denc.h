@@ -37,7 +37,7 @@ namespace SiBi {
         assert(std::is_integral<T>::value);
         assert(std::is_unsigned<T>::value);
         for (auto& it : v)
-            prev = it = prev + ((it & 1) ? (-(it >> 1) -1): (it >> 1));
+            prev = it = prev + ((it & 1) ? (-(it >> 1) - 1) : (it >> 1));
         return prev;
     }
 
@@ -205,7 +205,7 @@ namespace SiBi {
     }
 
     template<typename T = uint8_t>
-    std::vector<T> untrun(std::vector<T>& src, 
+    std::vector<T> untrun(std::vector<T>& src,
         size_t xsize, size_t ysize, size_t bands, int bsize)
     {
         assert(std::is_integral<T>::value);
@@ -273,7 +273,6 @@ namespace SiBi {
         assert(std::is_unsigned<T>::value);
         std::vector<T> result;
         Bitstream s(result);
-        // The sizes are multiples of 8, no need to check
         const uint8_t* xlut = xx[bsize];
         const uint8_t* ylut = yy[bsize];
         size_t bands = image.size() / xsize / ysize;
@@ -360,16 +359,16 @@ namespace SiBi {
                     uint64_t val;
                     int bits;
                     s.pull(bits, 3);
-					switch (bits) {
-					case 0: {
-						s.pull(val, group.size());
-						for (auto& it : group) {
-							it = val & 1;
-							val >>= 1;
-						}
-						break;
-					}
-					case 1: { // Don't have the two detection bits
+                    switch (bits) {
+                    case 0: {
+                        s.pull(val, group.size());
+                        for (auto& it : group) {
+                            it = val & 1;
+                            val >>= 1;
+                        }
+                        break;
+                    }
+                    case 1: { // Don't have the two detection bits
                         for (auto& it : group) {
                             s.pull(val, 1);
                             if (val)
@@ -385,28 +384,28 @@ namespace SiBi {
                                 }
                             }
                         }
-						break;
-					}
-					default: {
-						for (auto& it : group) {
-							uint64_t val;
-							s.pull(val, bits);
-							if (val > mask[bits - 1]) { // Starts with 1
-								it = val & mask[bits - 1];
-							}
-							else if (val > mask[bits - 2]) { // Starts with 00
-								it = val << 1;
-								s.pull(val, 1);
-								it += val;
-							}
-							else {
-								it = val << 2;
-								s.pull(val, 2);
-								it += val | (1ull << bits);
-							}
-						}
-					}
-					} // switch
+                        break;
+                    }
+                    default: {
+                        for (auto& it : group) {
+                            uint64_t val;
+                            s.pull(val, bits);
+                            if (val > mask[bits - 1]) { // Starts with 1
+                                it = val & mask[bits - 1];
+                            }
+                            else if (val > mask[bits - 2]) { // Starts with 00
+                                it = val << 1;
+                                s.pull(val, 1);
+                                it += val;
+                            }
+                            else {
+                                it = val << 2;
+                                s.pull(val, 2);
+                                it += val | (1ull << bits);
+                            }
+                        }
+                    }
+                    } // switch
 
                     prev[c] = undsign(group, prev[c]);
                     for (int i = 0; i < group.size(); i++)
