@@ -86,11 +86,15 @@ int main()
         exit(errno);
     }
     fseek(f, 17, SEEK_SET);
-    vector<uint8_t> image(3776 * 2520 * 3);
-    fread(image.data(), 2520 * 3, 3776, f);
+    int xsize = 3776;
+    int ysize = 2520;
+    int bands = 3;
+    vector<uint8_t> image(xsize * ysize * bands);
+    fread(image.data(), ysize * bands, xsize, f);
     fclose(f);
 
     int bsize = 4;
+
     high_resolution_clock::time_point t1, t2;
     vector<uint8_t> v;
     vector<uint8_t> reimage;

@@ -14,13 +14,21 @@ const uint64_t mask[65] = {
     MASK(40), MASK(41), MASK(42), MASK(43), MASK(44), MASK(45), MASK(46), MASK(47),
     MASK(48), MASK(49), MASK(50), MASK(51), MASK(52), MASK(53), MASK(54), MASK(55),
     MASK(56), MASK(57), MASK(58), MASK(59), MASK(60), MASK(61), MASK(62), MASK(63),
-    ~0ull
-};
+    ~0ull };
 #undef MASK
+
+// rank of top set bit - 1
+static int ilogb(uint64_t val) {
+    for (int i = 0; i < 64; i++)
+        if (val <= mask[i+1])
+            return i;
+    return ~0; // not reached
+}
 
 #define HALFMAX(T) (std::numeric_limits<T>::max() >> 1)
 
 // Delta and sign reorder
+// All these templates work only for unsigned, integral, 2s complement types
 template<typename T = uint8_t>
 static T dsign(std::vector<T>& v, T prev) {
     assert(std::is_integral<T>::value);
@@ -36,8 +44,6 @@ static T dsign(std::vector<T>& v, T prev) {
 // Reverse sign reorder and delta
 template<typename T = uint8_t>
 static T undsign(std::vector<T>& v, T prev) {
-    assert(std::is_integral<T>::value);
-    assert(std::is_unsigned<T>::value);
     for (auto& it : v)
         prev = it = prev + ((it & 1) ? (-(it >> 1) - 1) : (it >> 1));
     return prev;
@@ -128,6 +134,7 @@ static const uint8_t y7[49] = {
 static const uint8_t* xx[9] = { xp2, xp2, xp2, x3, xp2, x5, x6, x7, xp2 };
 static const uint8_t* yy[9] = { yp2, yp2, yp2, y3, yp2, y5, y6, y7, yp2 };
 
+
 // Block size should be 8
 // for noisy images 4 is better
 // 2 generates too much overhead
@@ -138,8 +145,6 @@ template<typename T = uint8_t>
 std::vector<T> truncode(std::vector<T>& image,
     size_t xsize, size_t ysize, int bsize)
 {
-    assert(std::is_integral<T>::value);
-    assert(std::is_unsigned<T>::value);
     std::vector<T> result;
     Bitstream s(result);
     // The sizes are multiples of 8, no need to check
@@ -159,30 +164,27 @@ std::vector<T> truncode(std::vector<T>& image,
 
                 // Round up to nearest odd (negative) value
                 // Saves writing that last bit on every block
-                uint64_t maxval = 1 | *max_element(group.begin(), group.end());
-                int bits = ilogb(maxval);
-                if (0 == bits) { // Best case, all values are 0 or 1
+                uint64_t maxval = *max_element(group.begin(), group.end());
+                if (0 == maxval) {
+                    s.push(0, 4);
+                    continue;
+                }
+                else if (1 == maxval) {
                     uint64_t val = 0;
-                    for (auto it = group.rbegin(); it != group.rend(); it++)
+                    for (auto it = group.crbegin(); it != group.crend(); it++)
                         val = val * 2 + *it;
-                    if (val) {
-                        s.push(0b1000, 4);
-                        s.push(val, group.size());
-                    }
-                    else {
-                        s.push(0b0000, 4);
-                    }
+                    s.push(0b1000, 4);
+                    s.push(val, group.size());
                     continue;
                 }
 
+                // Saves writing one bit by rounding up
+                maxval |= 1;
+                // Number of bits after the most significant one
+                auto bits = ilogb(maxval);
                 // Push the middle bits of maxval, prefixed by the number of bits
                 s.push((maxval & (mask[bits] - 1)) * 4 + bits, bits + 2);
                 auto cutof = mask[bits + 1] - maxval;
-                if (0 == cutof) { // Uniform length codewords
-                    for (auto val : group)
-                        s.push(val, bits + 1);
-                    continue;
-                }
                 for (uint64_t val : group) {
                     if (val < cutof) { // Truncated
                         s.push(val, bits);
@@ -202,8 +204,6 @@ template<typename T = uint8_t>
 std::vector<T> untrun(std::vector<T>& src,
     size_t xsize, size_t ysize, size_t bands, int bsize)
 {
-    assert(std::is_integral<T>::value);
-    assert(std::is_unsigned<T>::value);
     std::vector<T> image(xsize * ysize * bands);
     Bitstream s(src);
     std::vector<T> prev(bands, HALFMAX(T));
@@ -232,18 +232,12 @@ std::vector<T> untrun(std::vector<T>& src,
                     s.pull(maxval, bits - 1);
                     maxval = (1ull << bits) | (maxval << 1) | 1;
                     uint64_t cutof = mask[bits + 1] - maxval;
-                    if (0 == cutof) {
-                        for (auto& it : group)
-                            s.pull(it, bits + 1);
-                    }
-                    else { // Default case, truncated
-                        for (auto& it : group) {
-                            s.pull(it, bits);
-                            if (it >= cutof) {
-                                T bit;
-                                s.pull(bit, 1);
-                                it = (it << 1) + bit - cutof;
-                            }
+                    for (auto& it : group) {
+                        s.pull(it, bits);
+                        if (it >= cutof) {
+                            T bit;
+                            s.pull(bit, 1);
+                            it = (it << 1) + bit - cutof;
                         }
                     }
                 }
@@ -263,8 +257,6 @@ template <typename T = uint8_t>
 std::vector<T> sincode(std::vector<T>& image,
     size_t xsize, size_t ysize, int bsize)
 {
-    assert(std::is_integral<T>::value);
-    assert(std::is_unsigned<T>::value);
     std::vector<T> result;
     Bitstream s(result);
     const uint8_t* xlut = xx[bsize];
@@ -280,28 +272,27 @@ std::vector<T> sincode(std::vector<T>& image,
                     group[i] = image[loc + c + (ylut[i] * xsize + xlut[i]) * bands];
                 // Delta with low sign encode
                 prev[c] = dsign(group, prev[c]);
-                uint64_t maxval = 1 | *max_element(group.begin(), group.end());
-
-                // Number of bits after the fist 1
-                size_t bits = ilogb(maxval);
-                if (0 == bits) { // Best case, all values are 0 or 1
+                uint64_t maxval = *max_element(group.begin(), group.end());
+                if (0 == maxval) {
+                    s.push(0, 4);
+                    continue;
+                }
+                else if (1 == maxval) { // 0 & 1 block
                     uint64_t val = 0;
                     // Write backwards, will be read forward
-                    for (auto it = group.rbegin(); it != group.rend(); it++)
+                    for (auto it = group.crbegin(); it != group.crend(); it++)
                         val = val * 2 + *it;
                     if (val) {
                         s.push(0b1000, 4);
                         s.push(val, group.size());
                     }
-                    else {
-                        s.push(0, 4);
-                    }
                     continue;
                 }
-
+                maxval |= 1;
+                // Number of bits after the fist 1
+                size_t bits = ilogb(maxval);
                 s.push(bits, 3);
-                // Doesn't always have 2 bits for autodetection
-                if (1 == bits) {
+                if (1 == bits) { // Doesn't have 2 detection bits
                     for (auto it : group) {
                         if (it < 2)
                             s.push(1 << it, 1 + it);
@@ -310,18 +301,17 @@ std::vector<T> sincode(std::vector<T>& image,
                     }
                     continue;
                 }
-
                 // Three length encoding
-                // The bottom bits-1 are read in one group, it has to start with the
-                // detection code
+                // The bottom bits-1 are read in one group
+                // which starts with the detection bits
                 for (uint64_t val : group) {
-                    if (val <= mask[bits - 1]) {
-                        // Lowest quarter, one bit short codewords, most likely
+                    if (val <= mask[bits - 1]) { 
+                        // one bit short codewords, most likely
                         val |= 1ull << (bits - 1);
                         s.push(val, bits); // Starts with 1
                     }
                     else if (val <= mask[bits]) { // Second quarter
-                        // starts with 01, then rotated
+                        // starts with 01, rotated once
                         val = (val >> 1) | ((val & 1) << bits);
                         s.push(val, bits + 1);
                     }
@@ -342,8 +332,6 @@ template<typename T = uint8_t>
 std::vector<T> unsin(std::vector<T>& src,
     size_t xsize, size_t ysize, size_t bands, int bsize)
 {
-    assert(std::is_integral<T>::value);
-    assert(std::is_unsigned<T>::value);
     std::vector<T> image(xsize * ysize * bands);
     Bitstream s(src);
     std::vector<T> prev(bands, HALFMAX(T));
@@ -368,7 +356,7 @@ std::vector<T> unsin(std::vector<T>& src,
                         val >>= 1;
                     }
                     break;
-                case 1: // Don't have the two detection bits
+                case 1: // Can't use default, we don't always have the two detection bits
                     for (auto& it : group) {
                         it = 0;
                         s.pull(val, 1);
@@ -389,15 +377,13 @@ std::vector<T> unsin(std::vector<T>& src,
                         if (val > mask[bits - 1]) { // Starts with 1
                             it = val & mask[bits - 1];
                         }
-                        else if (val > mask[bits - 2]) { // Starts with 00
-                            it = val << 1;
-                            s.pull(val, 1);
-                            it += val;
+                        else if (val > mask[bits - 2]) { // Starts with 01
+                            s.pull(it, 1);
+                            it += val << 1;
                         }
                         else {
-                            it = val << 2;
-                            s.pull(val, 2);
-                            it += val | (1ull << bits);
+                            s.pull(it, 2);
+                            it += (val << 2) | (1ull << bits);
                         }
                     }
                 } // switch
@@ -409,5 +395,4 @@ std::vector<T> unsin(std::vector<T>& src,
     }
     return image;
 }
-
 } // Namespace SiBi
