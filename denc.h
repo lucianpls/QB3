@@ -134,7 +134,6 @@ static const uint8_t y7[49] = {
 static const uint8_t* xx[9] = { xp2, xp2, xp2, x3, xp2, x5, x6, x7, xp2 };
 static const uint8_t* yy[9] = { yp2, yp2, yp2, y3, yp2, y5, y6, y7, yp2 };
 
-
 // Block size should be 8
 // for noisy images 4 is better
 // 2 generates too much overhead
@@ -147,11 +146,9 @@ std::vector<T> truncode(std::vector<T>& image,
 {
     std::vector<T> result;
     Bitstream s(result);
-    // The sizes are multiples of 8, no need to check
     size_t bands = image.size() / xsize / ysize;
     constexpr int ubits = sizeof(T) == 1 ? 3 : ((sizeof(T) == 2) ? 4 : ((sizeof(T) == 4) ? 5: 6));
     std::vector<T> prev(bands, HALFMAX(T));
-
     const uint8_t* xlut = xx[bsize];
     const uint8_t* ylut = yy[bsize];
     std::vector<T> group(bsize * bsize);
@@ -162,9 +159,6 @@ std::vector<T> truncode(std::vector<T>& image,
                 for (int i = 0; i < group.size(); i++)
                     group[i] = image[loc + c + (ylut[i] * xsize + xlut[i]) * bands];
                 prev[c] = dsign(group, prev[c]);
-
-                // Round up to nearest odd (negative) value
-                // Saves writing that last bit on every block
                 uint64_t maxval = *max_element(group.begin(), group.end());
                 if (0 == maxval) {
                     s.push(0, ubits + 1);
@@ -178,10 +172,8 @@ std::vector<T> truncode(std::vector<T>& image,
                     s.push(val, group.size());
                     continue;
                 }
-
-                // Saves writing one bit by rounding up
+                // Round up, saves writing one bit by rounding up
                 maxval |= 1;
-                // Number of bits after the most significant one
                 auto bits = ilogb(maxval);
                 // Push the middle bits of maxval, prefixed by the number of bits
  //               s.push((maxval & (mask[bits] - 1)) * 4 + bits, bits + 2);
