@@ -149,6 +149,7 @@ std::vector<T> truncode(std::vector<T>& image,
     Bitstream s(result);
     // The sizes are multiples of 8, no need to check
     size_t bands = image.size() / xsize / ysize;
+    constexpr int ubits = sizeof(T) == 1 ? 3 : ((sizeof(T) == 2) ? 4 : ((sizeof(T) == 4) ? 5: 6));
     std::vector<T> prev(bands, HALFMAX(T));
 
     const uint8_t* xlut = xx[bsize];
@@ -166,14 +167,14 @@ std::vector<T> truncode(std::vector<T>& image,
                 // Saves writing that last bit on every block
                 uint64_t maxval = *max_element(group.begin(), group.end());
                 if (0 == maxval) {
-                    s.push(0, 4);
+                    s.push(0, ubits + 1);
                     continue;
                 }
                 else if (1 == maxval) {
                     uint64_t val = 0;
                     for (auto it = group.crbegin(); it != group.crend(); it++)
                         val = val * 2 + *it;
-                    s.push(0b1000, 4);
+                    s.push(1ull << ubits, ubits + 1);
                     s.push(val, group.size());
                     continue;
                 }
@@ -183,7 +184,8 @@ std::vector<T> truncode(std::vector<T>& image,
                 // Number of bits after the most significant one
                 auto bits = ilogb(maxval);
                 // Push the middle bits of maxval, prefixed by the number of bits
-                s.push((maxval & (mask[bits] - 1)) * 4 + bits, bits + 2);
+ //               s.push((maxval & (mask[bits] - 1)) * 4 + bits, bits + 2);
+                s.push(((maxval & (mask[bits] - 1)) << (ubits - 1)) + bits, bits + ubits - 1);
                 auto cutof = mask[bits + 1] - maxval;
                 for (uint64_t val : group) {
                     if (val < cutof) { // Truncated
@@ -210,13 +212,14 @@ std::vector<T> untrun(std::vector<T>& src,
     std::vector<T> group(bsize * bsize);
     const uint8_t* xlut = xx[bsize];
     const uint8_t* ylut = yy[bsize];
+    constexpr int ubits = sizeof(T) == 1 ? 3 : ((sizeof(T) == 2) ? 4 : ((sizeof(T) == 4) ? 5 : 6));
 
     for (int y = 0; (y + bsize) <= ysize; y += bsize) {
         for (int x = 0; (x + bsize) <= xsize; x += bsize) {
             size_t loc = (y * xsize + x) * bands;
             for (int c = 0; c < bands; c++) {
                 int bits;
-                s.pull(bits, 3);
+                s.pull(bits, ubits);
                 if (0 == bits) {
                     uint64_t val;
                     s.pull(val, 1);
@@ -261,7 +264,9 @@ std::vector<T> sincode(std::vector<T>& image,
     Bitstream s(result);
     const uint8_t* xlut = xx[bsize];
     const uint8_t* ylut = yy[bsize];
+    constexpr int ubits = sizeof(T) == 1 ? 3 : ((sizeof(T) == 2) ? 4 : ((sizeof(T) == 4) ? 5 : 6));
     size_t bands = image.size() / xsize / ysize;
+
     std::vector<T> prev(bands, HALFMAX(T));
     std::vector<T> group(bsize * bsize);
     for (int y = 0; (y + bsize) <= ysize; y += bsize) {
@@ -274,7 +279,7 @@ std::vector<T> sincode(std::vector<T>& image,
                 prev[c] = dsign(group, prev[c]);
                 uint64_t maxval = *max_element(group.begin(), group.end());
                 if (0 == maxval) {
-                    s.push(0, 4);
+                    s.push(0, ubits + 1);
                     continue;
                 }
                 else if (1 == maxval) { // 0 & 1 block
@@ -283,7 +288,7 @@ std::vector<T> sincode(std::vector<T>& image,
                     for (auto it = group.crbegin(); it != group.crend(); it++)
                         val = val * 2 + *it;
                     if (val) {
-                        s.push(0b1000, 4);
+                        s.push(1ull << ubits, ubits + 1);
                         s.push(val, group.size());
                     }
                     continue;
@@ -291,7 +296,7 @@ std::vector<T> sincode(std::vector<T>& image,
                 maxval |= 1;
                 // Number of bits after the fist 1
                 size_t bits = ilogb(maxval);
-                s.push(bits, 3);
+                s.push(bits, ubits);
                 if (1 == bits) { // Doesn't have 2 detection bits
                     for (auto it : group) {
                         if (it < 2)
@@ -338,6 +343,7 @@ std::vector<T> unsin(std::vector<T>& src,
     std::vector<T> group(bsize * bsize);
     const uint8_t* xlut = xx[bsize];
     const uint8_t* ylut = yy[bsize];
+    constexpr int ubits = sizeof(T) == 1 ? 3 : ((sizeof(T) == 2) ? 4 : ((sizeof(T) == 4) ? 5 : 6));
 
     for (int y = 0; (y + bsize) <= ysize; y += bsize) {
         for (int x = 0; (x + bsize) <= xsize; x += bsize) {
@@ -345,7 +351,7 @@ std::vector<T> unsin(std::vector<T>& src,
             for (int c = 0; c < bands; c++) {
                 uint64_t val;
                 int bits;
-                s.pull(bits, 3);
+                s.pull(bits, ubits);
                 switch (bits) {
                 case 0:
                     s.pull(val, 1);
