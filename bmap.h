@@ -49,19 +49,17 @@ struct Bitstream {
     }
 
     template<typename T = uint64_t>
-    bool pull(T& val, size_t bits) {
+    bool pull(T& val, size_t bits = 1) {
         assert(std::is_integral<T>::value);
         uint64_t acc = 0;
         int pulled = 0;
         while (bits && ((pos / 8) < v.size())) {
             size_t use = std::min(8 - pos % 8, bits);
             acc |= static_cast<uint64_t>((v[pos / 8] >> (pos % 8)) & mask[use]) << pulled;
-            bits -= use;
             pos += use;
+            bits -= use;
             pulled += static_cast<int>(use);
         }
-        if (0 != bits)
-            return false;
         val = static_cast<T>(acc);
         return true;
     }
