@@ -249,10 +249,10 @@ std::vector<T> untrun(std::vector<T>& src,
 // Does not need the maxvalue to be encoded
 // only the reference number of bits
 template <typename T = uint8_t>
-std::vector<T> sincode(std::vector<T>& image,
+std::vector<uint8_t> sincode(std::vector<T>& image,
     size_t xsize, size_t ysize, int bsize)
 {
-    std::vector<T> result;
+    std::vector<uint8_t> result;
     Bitstream s(result);
     const uint8_t* xlut = xx[bsize];
     const uint8_t* ylut = yy[bsize];
@@ -326,7 +326,7 @@ std::vector<T> sincode(std::vector<T>& image,
 }
 
 template<typename T = uint8_t>
-std::vector<T> unsin(std::vector<T>& src,
+std::vector<T> unsin(std::vector<uint8_t>& src,
     size_t xsize, size_t ysize, size_t bands, int bsize)
 {
     std::vector<T> image(xsize * ysize * bands);
@@ -354,7 +354,7 @@ std::vector<T> unsin(std::vector<T>& src,
                         val >>= 1;
                     }
                     break;
-                case 1: // Can't use default, we don't always have the two detection bits
+                case 1: // Special encoding
                     for (auto& it : group) {
                         it = 0;
                         s.pull(val, 1);
