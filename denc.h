@@ -141,10 +141,10 @@ static const uint8_t* yy[9] = { yp2, yp2, yp2, y3, yp2, y5, y6, y7, yp2 };
 // which would need the lookup tables extended
 // Works for non-power of two blocks, using custom tables
 template<typename T = uint8_t>
-std::vector<T> truncode(std::vector<T>& image,
+std::vector<uint8_t> truncode(std::vector<T>& image,
     size_t xsize, size_t ysize, int bsize)
 {
-    std::vector<T> result;
+    std::vector<uint8_t> result;
     Bitstream s(result);
     size_t bands = image.size() / xsize / ysize;
     constexpr int ubits = sizeof(T) == 1 ? 3 : ((sizeof(T) == 2) ? 4 : ((sizeof(T) == 4) ? 5: 6));
@@ -195,7 +195,7 @@ std::vector<T> truncode(std::vector<T>& image,
 }
 
 template<typename T = uint8_t>
-std::vector<T> untrun(std::vector<T>& src,
+std::vector<T> untrun(std::vector<uint8_t>& src,
     size_t xsize, size_t ysize, size_t bands, int bsize)
 {
     std::vector<T> image(xsize * ysize * bands);
@@ -232,7 +232,7 @@ std::vector<T> untrun(std::vector<T>& src,
                         if (it >= cutof) {
                             T bit;
                             s.pull(bit, 1);
-                            it = (it << 1) + bit - cutof;
+                            it = static_cast<T>((it << 1) + bit - cutof);
                         }
                     }
                 }

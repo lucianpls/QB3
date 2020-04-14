@@ -144,14 +144,33 @@ int main()
 
     vector<uint16_t> img16 = toshort(image);
     t1 = high_resolution_clock::now();
-    auto v16 = sincode(img16, 3776, 2520, bsize);
+    auto v16 = truncode(img16, 3776, 2520, bsize);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
     cout << "11bit Size is " << v16.size() << endl;
     cout << "Took " << time_span << " seconds" << endl;
 
     t1 = high_resolution_clock::now();
-    auto re16 = unsin<uint16_t>(v16, 3776, 2520, 3, bsize);
+    auto re16 = untrun<uint16_t>(v16, 3776, 2520, 3, bsize);
+    t2 = high_resolution_clock::now();
+    time_span = duration_cast<duration<double>>(t2 - t1).count();
+    cout << "Untrun took " << time_span << " seconds" << endl;
+
+    for (int i = 0; i < img16.size(); i++)
+        if (img16[i] != re16[i])
+            cout << "Difference at " << i
+            << " " << img16[i] << " " << re16[i]
+            << endl;
+
+    t1 = high_resolution_clock::now();
+    v16 = sincode(img16, 3776, 2520, bsize);
+    t2 = high_resolution_clock::now();
+    time_span = duration_cast<duration<double>>(t2 - t1).count();
+    cout << "11bit Size is " << v16.size() << endl;
+    cout << "Took " << time_span << " seconds" << endl;
+
+    t1 = high_resolution_clock::now();
+    re16 = unsin<uint16_t>(v16, 3776, 2520, 3, bsize);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
     cout << "UnSin took " << time_span << " seconds" << endl;
