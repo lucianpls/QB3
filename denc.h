@@ -4,8 +4,8 @@
 #include <limits>
 
 namespace SiBi {
-#define MASK(v) ((1ull << v)-1)
-const uint64_t mask[65] = {
+#define MASK(v) ((0x8000000000000000ull >> (63 - v)) - 1)
+    const uint64_t mask[64] = {
     MASK(0),  MASK(1),  MASK(2),  MASK(3),  MASK(4),  MASK(5),  MASK(6),  MASK(7),
     MASK(8),  MASK(9),  MASK(10), MASK(11), MASK(12), MASK(13), MASK(14), MASK(15),
     MASK(16), MASK(17), MASK(18), MASK(19), MASK(20), MASK(21), MASK(22), MASK(23),
@@ -13,8 +13,8 @@ const uint64_t mask[65] = {
     MASK(32), MASK(33), MASK(34), MASK(35), MASK(36), MASK(37), MASK(38), MASK(39),
     MASK(40), MASK(41), MASK(42), MASK(43), MASK(44), MASK(45), MASK(46), MASK(47),
     MASK(48), MASK(49), MASK(50), MASK(51), MASK(52), MASK(53), MASK(54), MASK(55),
-    MASK(56), MASK(57), MASK(58), MASK(59), MASK(60), MASK(61), MASK(62), MASK(63),
-    ~0ull };
+    MASK(56), MASK(57), MASK(58), MASK(59), MASK(60), MASK(61), MASK(62), MASK(63)
+    };
 #undef MASK
 
 // rank of top set bit - 1
@@ -36,7 +36,7 @@ static T dsign(std::vector<T>& v, T prev) {
     for (auto& it : v) {
         std::swap(it, prev);
         it = prev - it;
-        it = (it > HALFMAX(T)) ? -(2 * it + 1) : (2 * it);
+        it = (it > HALFMAX(T)) ? (-1 -(it << 1)) : (it << 1);
     }
     return prev;
 }
@@ -45,8 +45,8 @@ static T dsign(std::vector<T>& v, T prev) {
 template<typename T = uint8_t>
 static T undsign(std::vector<T>& v, T prev) {
     for (auto& it : v)
-        prev = it = prev + ((it & 1) ? (-(it >> 1) - 1) : (it >> 1));
-    return prev;
+        it = prev += (it & 1) ? (-1 -(it >> 1)) : (it >> 1);
+        return prev;
 }
 
 // Traversal order tables, first for powers of two
@@ -292,9 +292,9 @@ std::vector<uint8_t> sincode(std::vector<T>& image,
                 if (1 == bits) { // Doesn't have 2 detection bits
                     for (auto it : group) {
                         if (it < 2)
-                            s.push(1 << it, 1 + it);
+                            s.push(1ull << it, 1ull + it);
                         else
-                            s.push((it & 1) << 2, 3);
+                            s.push(static_cast<uint64_t>(it & 1) << 2, 3);
                     }
                     continue;
                 }
@@ -373,15 +373,15 @@ std::vector<T> unsin(std::vector<uint8_t>& src,
                         uint64_t val;
                         s.pull(val, bits);
                         if (val > mask[bits - 1]) { // Starts with 1
-                            it = val & mask[bits - 1];
+                            it = static_cast<T>(val & mask[bits - 1]);
                         }
                         else if (val > mask[bits - 2]) { // Starts with 01
                             s.pull(it, 1);
-                            it += val << 1;
+                            it += static_cast<T>(val << 1);
                         }
                         else {
                             s.pull(it, 2);
-                            it += (val << 2) | (1ull << bits);
+                            it += static_cast<T>((val << 2) | (1ull << bits));
                         }
                     }
                 } // switch

@@ -32,6 +32,13 @@ vector<uint16_t> toshort(vector<uint8_t> &v) {
     return result;
 }
 
+vector<uint32_t> tolong(vector<uint8_t>& v) {
+    vector<uint32_t> result;
+    for (auto it : v)
+        result.push_back(5 * it);
+    return result;
+}
+
 int main()
 {
     //int sx = 200, sy = 299;
@@ -179,5 +186,44 @@ int main()
         if (img16[i] != re16[i])
             cout << "Difference at " << i
             << " " << img16[i] << " " << re16[i]
+            << endl;
+
+    vector<uint32_t> img32 = tolong(image);
+    t1 = high_resolution_clock::now();
+    auto v32 = truncode(img32, 3776, 2520, bsize);
+    t2 = high_resolution_clock::now();
+    time_span = duration_cast<duration<double>>(t2 - t1).count();
+    cout << "11bit Size is " << v32.size() << endl;
+    cout << "Took " << time_span << " seconds" << endl;
+
+    t1 = high_resolution_clock::now();
+    auto re32 = untrun<uint32_t>(v32, 3776, 2520, 3, bsize);
+    t2 = high_resolution_clock::now();
+    time_span = duration_cast<duration<double>>(t2 - t1).count();
+    cout << "Untrun took " << time_span << " seconds" << endl;
+
+    for (int i = 0; i < img32.size(); i++)
+        if (img32[i] != re32[i])
+            cout << "Difference at " << i
+            << " " << img32[i] << " " << re32[i]
+            << endl;
+
+    t1 = high_resolution_clock::now();
+    v32 = sincode(img32, 3776, 2520, bsize);
+    t2 = high_resolution_clock::now();
+    time_span = duration_cast<duration<double>>(t2 - t1).count();
+    cout << "11bit Size is " << v32.size() << endl;
+    cout << "Took " << time_span << " seconds" << endl;
+
+    t1 = high_resolution_clock::now();
+    re32 = unsin<uint32_t>(v32, 3776, 2520, 3, bsize);
+    t2 = high_resolution_clock::now();
+    time_span = duration_cast<duration<double>>(t2 - t1).count();
+    cout << "UnSin took " << time_span << " seconds" << endl;
+
+    for (int i = 0; i < img32.size(); i++)
+        if (img32[i] != re32[i])
+            cout << "Difference at " << i
+            << " " << img32[i] << " " << re32[i]
             << endl;
 }
