@@ -33,13 +33,14 @@ struct Bitstream {
         pos = 0;
         v.clear();
     }
-
-    void push(uint64_t val, size_t bits) {
+    template<typename T>
+    void push(T val, size_t bits) {
+        assert(std::is_integral<T>::value);
         while (bits) {
             if (0 == len)
                 v.push_back(static_cast<uint8_t>(val));
             else
-                v.back() |= val << len;
+                v.back() |= static_cast<uint8_t>(val << len);
             size_t used = std::min(8 - len, bits);
             bits -= used;
             len = (len + used) & 7;
@@ -49,6 +50,7 @@ struct Bitstream {
 
     template<typename T = uint64_t>
     bool pull(T& val, size_t bits) {
+        assert(std::is_integral<T>::value);
         uint64_t acc = 0;
         int pulled = 0;
         while (bits && ((pos / 8) < v.size())) {

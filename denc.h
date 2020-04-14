@@ -36,7 +36,7 @@ static T dsign(std::vector<T>& v, T prev) {
     for (auto& it : v) {
         std::swap(it, prev);
         it = prev - it;
-        it = (it > HALFMAX(T)) ? (-1 -(it << 1)) : (it << 1);
+        it = (it > HALFMAX(T)) ? ~(it << 1): (it << 1);
     }
     return prev;
 }
@@ -45,8 +45,8 @@ static T dsign(std::vector<T>& v, T prev) {
 template<typename T = uint8_t>
 static T undsign(std::vector<T>& v, T prev) {
     for (auto& it : v)
-        it = prev += (it & 1) ? (-1 -(it >> 1)) : (it >> 1);
-        return prev;
+        it = prev += (it & 1) ? ~(it >> 1) : (it >> 1);
+    return prev;
 }
 
 // Traversal order tables, first for powers of two
@@ -142,18 +142,18 @@ static const uint8_t* yy[9] = { yp2, yp2, yp2, y3, yp2, y5, y6, y7, yp2 };
 // Works for non-power of two blocks, using custom tables
 template<typename T = uint8_t>
 std::vector<uint8_t> truncode(std::vector<T>& image,
-    size_t xsize, size_t ysize, int bsize)
+    size_t xsize, size_t ysize, size_t bsize)
 {
     std::vector<uint8_t> result;
     Bitstream s(result);
     size_t bands = image.size() / xsize / ysize;
     constexpr int ubits = sizeof(T) == 1 ? 3 : ((sizeof(T) == 2) ? 4 : ((sizeof(T) == 4) ? 5: 6));
-    std::vector<T> prev(bands, HALFMAX(T));
+    std::vector<T> prev(bands, 0);
     const uint8_t* xlut = xx[bsize];
     const uint8_t* ylut = yy[bsize];
     std::vector<T> group(bsize * bsize);
-    for (int y = 0; (y + bsize) <= ysize; y += bsize) {
-        for (int x = 0; (x + bsize) <= xsize; x += bsize) {
+    for (size_t y = 0; (y + bsize) <= ysize; y += bsize) {
+        for (size_t x = 0; (x + bsize) <= xsize; x += bsize) {
             size_t loc = (y * xsize + x) * bands;
             for (int c = 0; c < bands; c++) {
                 for (int i = 0; i < group.size(); i++)
@@ -167,12 +167,12 @@ std::vector<uint8_t> truncode(std::vector<T>& image,
                 else if (1 == maxval) {
                     uint64_t val = 0;
                     for (auto it = group.crbegin(); it != group.crend(); it++)
-                        val = val * 2 + *it;
+                        val = (val << 1) + *it;
                     s.push(1ull << ubits, ubits + 1);
                     s.push(val, group.size());
                     continue;
                 }
-                // Round up, saves writing one bit by rounding up
+                // Round up, saves writing last bit
                 maxval |= 1;
                 auto bits = ilogb(maxval);
                 // Push the middle bits of maxval, prefixed by the number of bits
@@ -200,7 +200,7 @@ std::vector<T> untrun(std::vector<uint8_t>& src,
 {
     std::vector<T> image(xsize * ysize * bands);
     Bitstream s(src);
-    std::vector<T> prev(bands, HALFMAX(T));
+    std::vector<T> prev(bands, 0);
     std::vector<T> group(bsize * bsize);
     const uint8_t* xlut = xx[bsize];
     const uint8_t* ylut = yy[bsize];
@@ -211,9 +211,9 @@ std::vector<T> untrun(std::vector<uint8_t>& src,
             size_t loc = (y * xsize + x) * bands;
             for (int c = 0; c < bands; c++) {
                 int bits;
+                uint64_t val;
                 s.pull(bits, ubits);
                 if (0 == bits) {
-                    uint64_t val;
                     s.pull(val, 1);
                     if (val)
                         s.pull(val, group.size());
@@ -223,10 +223,9 @@ std::vector<T> untrun(std::vector<uint8_t>& src,
                     }
                 }
                 else {
-                    uint64_t maxval;
-                    s.pull(maxval, bits - 1);
-                    maxval = (1ull << bits) | (maxval << 1) | 1;
-                    uint64_t cutof = mask[bits + 1] - maxval;
+                    s.pull(val, bits - 1);
+                    val = (1ull << bits) | (val << 1) | 1;
+                    uint64_t cutof = mask[bits + 1] - val;
                     for (auto& it : group) {
                         s.pull(it, bits);
                         if (it >= cutof) {
@@ -259,7 +258,7 @@ std::vector<uint8_t> sincode(std::vector<T>& image,
     constexpr int ubits = sizeof(T) == 1 ? 3 : ((sizeof(T) == 2) ? 4 : ((sizeof(T) == 4) ? 5 : 6));
     size_t bands = image.size() / xsize / ysize;
 
-    std::vector<T> prev(bands, HALFMAX(T));
+    std::vector<T> prev(bands, 0);
     std::vector<T> group(bsize * bsize);
     for (int y = 0; (y + bsize) <= ysize; y += bsize) {
         for (int x = 0; (x + bsize) <= xsize; x += bsize) {
@@ -274,9 +273,9 @@ std::vector<uint8_t> sincode(std::vector<T>& image,
                     s.push(0, ubits + 1);
                     continue;
                 }
-                else if (1 == maxval) { // 0 & 1 block
+                else if (1 == maxval) { // 1 bit group
                     uint64_t val = 0;
-                    // Write backwards, will be read forward
+                    // Accumulate backwards, will be read forward
                     for (auto it = group.crbegin(); it != group.crend(); it++)
                         val = val * 2 + *it;
                     if (val) {
@@ -289,13 +288,12 @@ std::vector<uint8_t> sincode(std::vector<T>& image,
                 // Number of bits after the fist 1
                 size_t bits = ilogb(maxval);
                 s.push(bits, ubits);
-                if (1 == bits) { // Doesn't have 2 detection bits
-                    for (auto it : group) {
+                if (1 == bits) { // May not have 2 detection bits
+                    for (auto it : group)
                         if (it < 2)
-                            s.push(1ull << it, 1ull + it);
+                            s.push(it + 1, it + 1);
                         else
-                            s.push(static_cast<uint64_t>(it & 1) << 2, 3);
-                    }
+                            s.push((it & 1) << 2, 3);
                     continue;
                 }
                 // Three length encoding
@@ -303,7 +301,7 @@ std::vector<uint8_t> sincode(std::vector<T>& image,
                 // which starts with the detection bits
                 for (uint64_t val : group) {
                     if (val <= mask[bits - 1]) { 
-                        // one bit short codewords, most likely
+                        // short codewords, most likely
                         val |= 1ull << (bits - 1);
                         s.push(val, bits); // Starts with 1
                     }
@@ -312,7 +310,7 @@ std::vector<uint8_t> sincode(std::vector<T>& image,
                         val = (val >> 1) | ((val & 1) << bits);
                         s.push(val, bits + 1);
                     }
-                    else { // Last half, least likely
+                    else { // long half, least likely
                         val &= mask[bits];
                         // starts with 00, rotated two bits
                         val = (val >> 2) | ((val & 0b11) << bits);
@@ -327,18 +325,18 @@ std::vector<uint8_t> sincode(std::vector<T>& image,
 
 template<typename T = uint8_t>
 std::vector<T> unsin(std::vector<uint8_t>& src,
-    size_t xsize, size_t ysize, size_t bands, int bsize)
+    size_t xsize, size_t ysize, size_t bands, size_t bsize)
 {
     std::vector<T> image(xsize * ysize * bands);
     Bitstream s(src);
-    std::vector<T> prev(bands, HALFMAX(T));
+    std::vector<T> prev(bands, 0);
     std::vector<T> group(bsize * bsize);
     const uint8_t* xlut = xx[bsize];
     const uint8_t* ylut = yy[bsize];
     constexpr int ubits = sizeof(T) == 1 ? 3 : ((sizeof(T) == 2) ? 4 : ((sizeof(T) == 4) ? 5 : 6));
 
-    for (int y = 0; (y + bsize) <= ysize; y += bsize) {
-        for (int x = 0; (x + bsize) <= xsize; x += bsize) {
+    for (size_t y = 0; (y + bsize) <= ysize; y += bsize) {
+        for (size_t x = 0; (x + bsize) <= xsize; x += bsize) {
             size_t loc = (y * xsize + x) * bands;
             for (int c = 0; c < bands; c++) {
                 uint64_t val;
@@ -370,7 +368,6 @@ std::vector<T> unsin(std::vector<uint8_t>& src,
                     break;
                 default:
                     for (auto& it : group) {
-                        uint64_t val;
                         s.pull(val, bits);
                         if (val > mask[bits - 1]) { // Starts with 1
                             it = static_cast<T>(val & mask[bits - 1]);
@@ -386,7 +383,7 @@ std::vector<T> unsin(std::vector<uint8_t>& src,
                     }
                 } // switch
                 prev[c] = undsign(group, prev[c]);
-                for (int i = 0; i < group.size(); i++)
+                for (size_t i = 0; i < group.size(); i++)
                     image[loc + c + (ylut[i] * xsize + xlut[i]) * bands] = group[i];
             }
         }
