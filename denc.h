@@ -162,7 +162,7 @@ std::vector<uint8_t> truncode(std::vector<T>& image,
                 prev[c] = dsign(group, prev[c]);
                 uint64_t maxval = *max_element(group.begin(), group.end());
                 if (0 == maxval) {
-                    s.push(0, ubits + 1);
+                    s.push(0u, ubits + 1);
                     continue;
                 }
                 else if (1 == maxval) {
@@ -210,7 +210,7 @@ std::vector<T> untrun(std::vector<uint8_t>& src,
         for (size_t x = 0; (x + bsize) <= xsize; x += bsize) {
             size_t loc = (y * xsize + x) * bands;
             for (size_t c = 0; c < bands; c++) {
-                int bits;
+                size_t bits;
                 uint64_t val;
                 s.pull(bits, ubits);
                 if (0 == bits) {
@@ -255,10 +255,10 @@ std::vector<uint8_t> sincode(std::vector<T>& image,
     Bitstream s(result);
     const uint8_t* xlut = xx[bsize];
     const uint8_t* ylut = yy[bsize];
-    constexpr int ubits = sizeof(T) == 1 ? 3 : ((sizeof(T) == 2) ? 4 : ((sizeof(T) == 4) ? 5 : 6));
+    constexpr uint8_t ubits = sizeof(T) == 1 ? 3 : ((sizeof(T) == 2) ? 4 : ((sizeof(T) == 4) ? 5 : 6));
     size_t bands = image.size() / xsize / ysize;
 
-    std::vector<T> prev(bands, 0);
+    std::vector<T> prev(bands, 0u);
     std::vector<T> group(bsize * bsize);
     for (size_t y = 0; (y + bsize) <= ysize; y += bsize) {
         for (size_t x = 0; (x + bsize) <= xsize; x += bsize) {
@@ -269,32 +269,28 @@ std::vector<uint8_t> sincode(std::vector<T>& image,
                 // Delta with low sign encode
                 prev[c] = dsign(group, prev[c]);
                 uint64_t maxval = *max_element(group.begin(), group.end());
-                if (0 == maxval) {
-                    s.push(0, ubits + 1);
-                    continue;
-                }
-                if (1 == maxval) { // 1 bit group
-                    uint64_t val = 0;
-                    // Accumulate backwards, will be read forward
-                    for (auto it = group.crbegin(); it != group.crend(); it++)
-                        val = (val << 1) + *it;
-                    if (val) {
-                        s.push(1ull << ubits, ubits + 1);
+                if (maxval < 2) {
+                    s.push(maxval << ubits, ubits + 1);
+                    if (1 == maxval) {
+                        uint64_t val = 0;
+                        for (auto it = group.crbegin(); it != group.crend(); it++)
+                            val = (val << 1) + *it;
                         s.push(val, group.size());
                     }
+                    continue;
+                }
+                if (maxval < 4) { // Doesn't have 2 detection bits
+                    s.push(1u, ubits);
+                    for (auto it : group)
+                        if (it < 2)
+                            s.push(it * 3u, it + 1u);
+                        else
+                            s.push(((it & 1) << 2) | 1u, 3u);
                     continue;
                 }
                 // Number of bits after the fist 1
                 size_t bits = ilogb(maxval);
                 s.push(bits, ubits);
-                if (1 == bits) { // May not have 2 detection bits
-                    for (auto it : group)
-                        if (it < 2)
-                            s.push(it * 3, it + 1);
-                        else
-                            s.push(((it & 1) << 2) | 1, 3);
-                    continue;
-                }
                 // Three length encoding
                 // The bottom bits-1 are read as a group
                 // which starts with the two detection bits
@@ -332,14 +328,15 @@ std::vector<T> unsin(std::vector<uint8_t>& src,
     std::vector<T> group(bsize * bsize);
     const uint8_t* xlut = xx[bsize];
     const uint8_t* ylut = yy[bsize];
-    constexpr int ubits = sizeof(T) == 1 ? 3 : ((sizeof(T) == 2) ? 4 : ((sizeof(T) == 4) ? 5 : 6));
+    constexpr int ubits = sizeof(T) == 1 ? 3 : 
+        ((sizeof(T) == 2) ? 4 : ((sizeof(T) == 4) ? 5 : 6));
 
     for (size_t y = 0; (y + bsize) <= ysize; y += bsize) {
         for (size_t x = 0; (x + bsize) <= xsize; x += bsize) {
             size_t loc = (y * xsize + x) * bands;
             for (int c = 0; c < bands; c++) {
                 uint64_t val;
-                int bits;
+                uint8_t bits;
                 s.pull(bits, ubits);
                 switch (bits) {
                 case 0:

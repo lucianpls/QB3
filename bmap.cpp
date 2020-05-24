@@ -15,7 +15,7 @@ const uint8_t Bitstream::mask[9] = {
 };
 
 BMap::BMap(int x, int y) : _x(x), _y(y), _lw((x + 7) / 8) {
-    _v.assign(_lw * ((y + 7) / 8), ~0); // All data
+    v.assign(_lw * ((y + 7) / 8), ~0); // All data
 }
 
 int rlen(const uint8_t* ch, size_t mlen) {
@@ -86,7 +86,7 @@ void unRLE(std::vector<uint8_t>& v, std::vector<uint8_t>& result) {
 }
 
 size_t BMap::unpack(Bitstream& s) {
-    for (auto& it : _v) {
+    for (auto& it : v) {
         int code;
         it = 0;
         s.pull(code, 2);
@@ -153,11 +153,11 @@ size_t BMap::unpack(Bitstream& s) {
             it |= static_cast<uint64_t>(q) << (i * 16);
         }
     }
-    return _v.size();
+    return v.size();
 }
 
 size_t BMap::pack(Bitstream& s) {
-    for (auto it : _v) {
+    for (auto it : v) {
         // Primary encoding
         if (0 == it or ~(0ULL) == it) {
             s.push(it & 0b11, 2);
