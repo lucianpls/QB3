@@ -4,19 +4,12 @@
 #include <limits>
 
 namespace SiBi {
-#define MASK(v) ((0x8000000000000000ull >> (63 - v)) - 1)
-    const uint64_t mask[64] = {
-    MASK(0),  MASK(1),  MASK(2),  MASK(3),  MASK(4),  MASK(5),  MASK(6),  MASK(7),
-    MASK(8),  MASK(9),  MASK(10), MASK(11), MASK(12), MASK(13), MASK(14), MASK(15),
-    MASK(16), MASK(17), MASK(18), MASK(19), MASK(20), MASK(21), MASK(22), MASK(23),
-    MASK(24), MASK(25), MASK(26), MASK(27), MASK(28), MASK(29), MASK(30), MASK(31),
-    MASK(32), MASK(33), MASK(34), MASK(35), MASK(36), MASK(37), MASK(38), MASK(39),
-    MASK(40), MASK(41), MASK(42), MASK(43), MASK(44), MASK(45), MASK(46), MASK(47),
-    MASK(48), MASK(49), MASK(50), MASK(51), MASK(52), MASK(53), MASK(54), MASK(55),
-    MASK(56), MASK(57), MASK(58), MASK(59), MASK(60), MASK(61), MASK(62), 
-    0x8000000000000000ull
-    };
-#undef MASK
+// Masks, from 0 to 64 bits
+#define M(v) (~0ull >> (64 - (v)))
+#define R(n) M(n), M(n + 1), M(n + 2), M(n + 3), M(n + 4), M(n + 5), M(n + 6), M(n + 7)
+    const uint64_t mask[] = {0, R(1), R(9), R(17), R(25), R(33), R(41), R(49), R(57)};
+#undef R
+#undef M
 
 // rank of top set bit - 1
 static size_t ilogb(uint64_t val) {
@@ -32,11 +25,9 @@ static size_t ilogb(uint64_t val) {
 // All these templates work only for unsigned, integral, 2s complement types
 template<typename T = uint8_t>
 static T dsign(std::vector<T>& v, T prev) {
-    assert(std::is_integral<T>::value);
-    assert(std::is_unsigned<T>::value);
+    assert(std::is_integral<T>::value && std::is_unsigned<T>::value);
     for (auto& it : v) {
-        std::swap(it, prev);
-        it = prev - it;
+        prev += it -= prev;
         it = (it > HALFMAX(T)) ? ~(it << 1): (it << 1);
     }
     return prev;
@@ -255,7 +246,7 @@ std::vector<uint8_t> sincode(std::vector<T>& image,
     Bitstream s(result);
     const uint8_t* xlut = xx[bsize];
     const uint8_t* ylut = yy[bsize];
-    constexpr uint8_t ubits = sizeof(T) == 1 ? 3 : ((sizeof(T) == 2) ? 4 : ((sizeof(T) == 4) ? 5 : 6));
+    constexpr uint8_t ubits = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     size_t bands = image.size() / xsize / ysize;
 
     std::vector<T> prev(bands, 0u);
@@ -328,39 +319,16 @@ std::vector<T> unsin(std::vector<uint8_t>& src,
     std::vector<T> group(bsize * bsize);
     const uint8_t* xlut = xx[bsize];
     const uint8_t* ylut = yy[bsize];
-    constexpr int ubits = sizeof(T) == 1 ? 3 : 
-        ((sizeof(T) == 2) ? 4 : ((sizeof(T) == 4) ? 5 : 6));
+    constexpr int ubits = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
 
     for (size_t y = 0; (y + bsize) <= ysize; y += bsize) {
         for (size_t x = 0; (x + bsize) <= xsize; x += bsize) {
             size_t loc = (y * xsize + x) * bands;
             for (int c = 0; c < bands; c++) {
                 uint64_t val;
-                uint8_t bits;
+                uint64_t bits;
                 s.pull(bits, ubits);
-                switch (bits) {
-                case 0:
-                    s.pull(val);
-                    if (val)
-                        s.pull(val, group.size());
-                    for (auto& it : group) {
-                        it = val & 1;
-                        val >>= 1;
-                    }
-                    break;
-                case 1: // Special encoding
-                    for (auto& it : group) {
-                        s.pull(it);
-                        if (0 != it) {
-                            s.pull(it);
-                            if (0 == it) {
-                                s.pull(it);
-                                it |= 0b10;
-                            }
-                        }
-                    }
-                    break;
-                default:
+                if (1 < bits) {
                     for (auto& it : group) {
                         s.pull(val, bits);
                         if (val > mask[bits - 1]) { // Starts with 1
@@ -375,7 +343,27 @@ std::vector<T> unsin(std::vector<uint8_t>& src,
                             it += static_cast<T>((val << 2) | (1ull << bits));
                         }
                     }
-                } // switch
+                } else if (0 == bits) {
+                    s.pull(val);
+                    if (val)
+                        s.pull(val, group.size());
+                    for (auto& it : group) {
+                        it = val & 1;
+                        val >>= 1;
+                    }
+                }
+                else {
+                    for (auto& it : group) {
+                        s.pull(it);
+                        if (0 != it) {
+                            s.pull(it);
+                            if (0 == it) {
+                                s.pull(it);
+                                it |= 0b10;
+                            }
+                        }
+                    }
+                }
                 prev[c] = undsign(group, prev[c]);
                 for (size_t i = 0; i < group.size(); i++)
                     image[loc + c + (ylut[i] * xsize + xlut[i]) * bands] = group[i];
