@@ -148,14 +148,10 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
     size_t bands = image.size() / xsize / ysize;
     std::vector<T> prev(bands, 0u);      // Previous value per band
     std::vector<T> group(bsize * bsize); // Current 2D group to encode, as vector
-    std::vector<T> maingroup(bsize * bsize);
 
     for (size_t y = 0; (y + bsize) <= ysize; y += bsize) {
         for (size_t x = 0; (x + bsize) <= xsize; x += bsize) {
             size_t loc = (y * xsize + x) * bands; // Top-left pixel address
-            if (mb >= 0)
-                for (size_t i = 0; i < maingroup.size(); i++)
-                    maingroup[i] = image[loc + mb + (ylut[i] * xsize + xlut[i]) * bands];
             for (size_t c = 0; c < bands; c++) { // blocks are band interleaved
                 // Collect the block for this band
                 for (size_t i = 0; i < group.size(); i++)
@@ -163,7 +159,7 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
                 // Subtract the main group values
                 if (mb >= 0 && mb != c)
                     for (size_t i = 0; i < group.size(); i++)
-                        group[i] -= maingroup[i];
+                        group[i] -= image[loc + mb + (ylut[i] * xsize + xlut[i]) * bands];
                 // Delta with low sign encode
                 prev[c] = dsign(group, prev[c]);
                 uint64_t maxval = *max_element(group.begin(), group.end());
@@ -278,10 +274,9 @@ std::vector<T> unsin(std::vector<uint8_t>& src,
             }
             if (mb >= 0) {
                 for (int c = 0; c < bands; c++) {
-                    if (mb == c)
-                        continue;
-                    for (size_t i = 0; i < group.size(); i++)
-                        image[loc + c + (ylut[i] * xsize + xlut[i]) * bands] +=
+                    if (mb != c)
+                        for (size_t i = 0; i < group.size(); i++)
+                            image[loc + c + (ylut[i] * xsize + xlut[i]) * bands] +=
                             image[loc + mb + (ylut[i] * xsize + xlut[i]) * bands];
                 }
             }
