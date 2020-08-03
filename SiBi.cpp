@@ -35,8 +35,9 @@ void check(vector<uint8_t> &image, size_t bsize, int m) {
     auto v = truncode(img, xsize, ysize, bsize);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
-    cout << endl 
+    cout << endl
         << sizeof(T) * 8 << " Size is " << v.size() << endl
+        << "Compressed to " << float(v.size()) * 100 / image.size() / sizeof(T) << endl
         << "Took " << time_span << " seconds" << endl;
 
     t1 = high_resolution_clock::now();
@@ -54,8 +55,9 @@ void check(vector<uint8_t> &image, size_t bsize, int m) {
     v = sincode(img, xsize, ysize, bsize);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
-    cout << "Sincode " << sizeof(T) * 8 << " size is " << v.size() << endl;
-    cout << "Took " << time_span << " seconds" << endl;
+    cout << "Sincode " << sizeof(T) * 8 << " size is " << v.size() << endl
+        << "Compressed to " << float(v.size()) * 100 / image.size() / sizeof(T) << endl
+        << "Took " << time_span << " seconds" << endl;
 
     t1 = high_resolution_clock::now();
     re = unsin<T>(v, xsize, ysize, bands, bsize);

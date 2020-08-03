@@ -6,6 +6,7 @@
 namespace SiBi {
 // Masks, from 0 to 64 bits
 #define M(v) (~0ull >> (64 - (v)))
+// A row of 8 masks, starting with mask(n)
 #define R(n) M(n), M(n + 1), M(n + 2), M(n + 3), M(n + 4), M(n + 5), M(n + 6), M(n + 7)
     const uint64_t mask[] = {0, R(1), R(9), R(17), R(25), R(33), R(41), R(49), R(57)};
 #undef R
