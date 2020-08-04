@@ -143,9 +143,10 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
     Bitstream s(result);
     const uint8_t* xlut = xx[bsize];
     const uint8_t* ylut = yy[bsize];
+    size_t bands = image.size() / xsize / ysize;
     // Nominal bit length
     constexpr uint8_t ubits = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-    size_t bands = image.size() / xsize / ysize;
+    std::vector<size_t> runbits(bands, ubits); // Running code length, start with nominal value
     std::vector<T> prev(bands, 0u);      // Previous value per band
     std::vector<T> group(bsize * bsize); // Current 2D group to encode, as vector
 
@@ -165,7 +166,13 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
                 uint64_t maxval = *max_element(group.begin(), group.end());
                 if (maxval < 2) {
                     // Special encoding, 000 0 for all zeros, or 000 1 followed by bit vector for 0 and 1
-                    s.push(maxval << ubits, ubits + 1);
+                    if (runbits[c] == 0) {
+                        s.push(maxval << 1, 2); // one zero bit prefix, same as before and the all zero flag
+                    }
+                    else {
+                        s.push((maxval << (ubits + 1)) + 1, ubits + 2); // one 1 bit, then the 0 ubit len, then the zero flag
+                        runbits[c] = 0;
+                    }
                     if (1 == maxval) {
                         uint64_t val = 0;
                         for (auto it = group.crbegin(); it != group.crend(); it++)
@@ -175,7 +182,13 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
                     continue;
                 }
                 if (maxval < 4) { // Doesn't always have 2 detection bits
-                    s.push(1u, ubits);
+                    if (runbits[c] == 1) {
+                        s.push(0u, 1); // Same, just one bit
+                    }
+                    else {
+                        s.push(3u, ubits + 1); // change flag, + 1 as ubit len
+                        runbits[c] = 1;
+                    }
                     for (auto it : group)
                         if (it < 2)
                             s.push(it * 3u, it + 1u);
@@ -185,7 +198,13 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
                 }
                 // Number of bits after the fist 1
                 size_t bits = ilogb(maxval);
-                s.push(bits, ubits);
+                if (bits == runbits[c]) {
+                    s.push(0u, 1); // Same, just a zero bit
+                }
+                else {
+                    s.push(bits * 2 + 1, ubits + 1); // change bit + len on ubits
+                    runbits[c] = bits;
+                }
                 // Three length encoding
                 // The bottom bits-1 are read as a group
                 // which starts with the two detection bits
@@ -224,6 +243,7 @@ std::vector<T> unsin(std::vector<uint8_t>& src,
     const uint8_t* xlut = xx[bsize];
     const uint8_t* ylut = yy[bsize];
     constexpr int ubits = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+    std::vector<size_t> runbits(bands, ubits);
 
     for (size_t y = 0; (y + bsize) <= ysize; y += bsize) {
         for (size_t x = 0; (x + bsize) <= xsize; x += bsize) {
@@ -231,7 +251,12 @@ std::vector<T> unsin(std::vector<uint8_t>& src,
             for (int c = 0; c < bands; c++) {
                 uint64_t val;
                 uint64_t bits;
-                s.pull(bits, ubits);
+                s.pull(bits, 1);
+                if (bits)
+                    s.pull(bits, ubits);
+                else
+                    bits = runbits[c]; // Same as before
+                runbits[c] = bits;
                 if (1 < bits) {
                     for (auto& it : group) {
                         s.pull(val, bits);

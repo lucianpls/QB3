@@ -52,7 +52,7 @@ void check(vector<uint8_t> &image, size_t bsize, int m) {
     //        << img[i] << " " << re[i] << endl;
 
     t1 = high_resolution_clock::now();
-    auto v = sincode(img, xsize, ysize, bsize, 2);
+    auto v = sincode(img, xsize, ysize, bsize, 0);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
     cout << "Sincode " << sizeof(T) * 8 << " size is " << v.size() << endl
@@ -60,7 +60,7 @@ void check(vector<uint8_t> &image, size_t bsize, int m) {
         << "Took " << time_span << " seconds" << endl;
 
     t1 = high_resolution_clock::now();
-    auto re = unsin<T>(v, xsize, ysize, bands, bsize, 2);
+    auto re = unsin<T>(v, xsize, ysize, bands, bsize, 0);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
     cout << "UnSin took " << time_span << " seconds" << endl;
