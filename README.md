@@ -1,5 +1,6 @@
 # Experiments in 2D Raster Compression
 
+This prototype has advanced to the point where it is ready to be incorporated in a raster format. It produces very good compression, comparable with PNG, while being extremely fast.
 
 ## Interbit addressing  
   b0 = Xb0  
