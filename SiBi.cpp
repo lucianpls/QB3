@@ -31,28 +31,28 @@ void check(vector<uint8_t> &image, size_t bsize, int m) {
     double time_span;
 
     auto img = to(image, static_cast<T>(m));
-    t1 = high_resolution_clock::now();
-    auto v = truncode(img, xsize, ysize, bsize);
-    t2 = high_resolution_clock::now();
-    time_span = duration_cast<duration<double>>(t2 - t1).count();
-    cout << endl
-        << sizeof(T) * 8 << " Size is " << v.size() << endl
-        << "Compressed to " << float(v.size()) * 100 / image.size() / sizeof(T) << endl
-        << "Took " << time_span << " seconds" << endl;
+    //t1 = high_resolution_clock::now();
+    //auto v = truncode(img, xsize, ysize, bsize);
+    //t2 = high_resolution_clock::now();
+    //time_span = duration_cast<duration<double>>(t2 - t1).count();
+    //cout << endl
+    //    << sizeof(T) * 8 << " Size is " << v.size() << endl
+    //    << "Compressed to " << float(v.size()) * 100 / image.size() / sizeof(T) << endl
+    //    << "Took " << time_span << " seconds" << endl;
+
+    //t1 = high_resolution_clock::now();
+    //auto re = untrun<T>(v, xsize, ysize, bands, bsize);
+    //t2 = high_resolution_clock::now();
+    //time_span = duration_cast<duration<double>>(t2 - t1).count();
+    //cout << "Untrun took " << time_span << " seconds" << endl;
+
+    //for (size_t i = 0; i < img.size(); i++)
+    //    if (img[i] != re[i])
+    //        cout << "Difference at " << i << " " 
+    //        << img[i] << " " << re[i] << endl;
 
     t1 = high_resolution_clock::now();
-    auto re = untrun<T>(v, xsize, ysize, bands, bsize);
-    t2 = high_resolution_clock::now();
-    time_span = duration_cast<duration<double>>(t2 - t1).count();
-    cout << "Untrun took " << time_span << " seconds" << endl;
-
-    for (size_t i = 0; i < img.size(); i++)
-        if (img[i] != re[i])
-            cout << "Difference at " << i << " " 
-            << img[i] << " " << re[i] << endl;
-
-    t1 = high_resolution_clock::now();
-    v = sincode(img, xsize, ysize, bsize);
+    auto v = sincode(img, xsize, ysize, bsize, 0);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
     cout << "Sincode " << sizeof(T) * 8 << " size is " << v.size() << endl
@@ -60,7 +60,7 @@ void check(vector<uint8_t> &image, size_t bsize, int m) {
         << "Took " << time_span << " seconds" << endl;
 
     t1 = high_resolution_clock::now();
-    re = unsin<T>(v, xsize, ysize, bands, bsize);
+    auto re = unsin<T>(v, xsize, ysize, bands, bsize, 0);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
     cout << "UnSin took " << time_span << " seconds" << endl;
