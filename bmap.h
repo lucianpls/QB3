@@ -15,6 +15,7 @@ struct Bitstream {
         v.clear();
     }
     template<typename T>
+    // Do not call with val upper bits set, results will be corrupt
     void push(T val, size_t bits) {
         assert(std::is_integral<T>::value && std::is_unsigned<T>::value);
         while (bits) {
@@ -61,6 +62,7 @@ public:
     size_t dsize() { return v.size() * sizeof(uint64_t); }
     void getsize(int& x, int& y) { x = _x; y = _y; }
     size_t pack(Bitstream& stream);
+    size_t altpack(Bitstream& stream);
     size_t unpack(Bitstream& streamm);
     bool compare(BMap& other) {
         if (v.size() != other.v.size())
