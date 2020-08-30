@@ -130,7 +130,7 @@ The last part is the lower 7 bits of the non-uniform byte value, 0x5f in this ca
     0b1011111
 
 The result encoding size will use 2 +3 +1 +7 = 13 bits, instead of the 16 + 2 = 18 bits required to just store the value.
-For 3 bit code words with a non-uniform byte, the encoding takea 12 bits, or only 5 bits if both halves of the quad are uniform.
+For 3 bit code words with a non-uniform byte, the encoding takes 12 bits, or only 5 bits if both halves of the quad are uniform.
 
 - Alternate tertiary encoding  
 Could use a 2-3 abbreviated encoding:
