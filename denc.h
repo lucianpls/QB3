@@ -166,9 +166,8 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
                 uint64_t maxval = *max_element(group.begin(), group.end());
                 if (maxval < 2) {
                     // Special encoding, 000 0 for all zeros, or 000 1 followed by bit vector for 0 and 1
-                    if (runbits[c] == 0) {
+                    if (runbits[c] == 0)
                         s.push(maxval << 1, 2); // one zero bit prefix, same as before and the all zero flag
-                    }
                     else {
                         s.push((maxval << (ubits + 1)) + 1, ubits + 2); // one 1 bit, then the 0 ubit len, then the zero flag
                         runbits[c] = 0;
@@ -182,9 +181,8 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
                     continue;
                 }
                 if (maxval < 4) { // Doesn't always have 2 detection bits
-                    if (runbits[c] == 1) {
+                    if (runbits[c] == 1)
                         s.push(0u, 1); // Same, just one bit
-                    }
                     else {
                         s.push(3u, ubits + 1); // change flag, + 1 as ubit len
                         runbits[c] = 1;
@@ -198,9 +196,8 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
                 }
                 // Number of bits after the fist 1
                 size_t bits = ilogb(maxval);
-                if (bits == runbits[c]) {
+                if (bits == runbits[c])
                     s.push(0u, 1); // Same, just a zero bit
-                }
                 else {
                     s.push(bits * 2 + 1, ubits + 1); // change bit + len on ubits
                     runbits[c] = bits;
@@ -260,9 +257,8 @@ std::vector<T> unsin(std::vector<uint8_t>& src,
                 if (1 < bits) {
                     for (auto& it : group) {
                         s.pull(val, bits);
-                        if (val > mask[bits - 1]) { // Starts with 1
+                        if (val > mask[bits - 1]) // Starts with 1
                             it = static_cast<T>(val & mask[bits - 1]);
-                        }
                         else if (val > mask[bits - 2]) { // Starts with 01
                             s.pull(it);
                             it += static_cast<T>(val << 1);
@@ -297,14 +293,12 @@ std::vector<T> unsin(std::vector<uint8_t>& src,
                 for (size_t i = 0; i < group.size(); i++)
                     image[loc + c + (ylut[i] * xsize + xlut[i]) * bands] = group[i];
             }
-            if (mb >= 0) {
-                for (int c = 0; c < bands; c++) {
+            if (mb >= 0)
+                for (int c = 0; c < bands; c++)
                     if (mb != c)
                         for (size_t i = 0; i < group.size(); i++)
                             image[loc + c + (ylut[i] * xsize + xlut[i]) * bands] +=
                             image[loc + mb + (ylut[i] * xsize + xlut[i]) * bands];
-                }
-            }
         }
     }
     return image;

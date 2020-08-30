@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <cassert>
 
-// Output stream
+// bitstream in low endian format, up to 64 bits at a time
 struct Bitstream {
     std::vector<uint8_t>& v;
     size_t bitp; // Next bit for input
@@ -67,10 +67,9 @@ public:
     bool compare(BMap& other) {
         if (v.size() != other.v.size())
             return false;
-        for (int i = 0; i < v.size(); i++) {
+        for (int i = 0; i < v.size(); i++)
             if (v[i] != other.v[i])
                 return false;
-        }
         return true;
     };
 private:

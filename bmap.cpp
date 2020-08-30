@@ -99,28 +99,26 @@ size_t BMap::unpack(Bitstream& s) {
             s.pull(it, 64);
             continue;
         }
-        // code 10, secondary encoding, nibbles
-        for (int i = 0; i < 4; i++) {
+        // code 10, secondary encoding, 4 quads
+        for (int i = 0; i < 64; i += 16) {
             uint16_t q;
             s.pull(q, 2); // 0 is a NOP
-            if (0b11 == q) {
+            if (0b11 == q)
                 q = 0xffff;
-            }
-            else if (0b01 == q) { // Secondary, as such
+            else if (0b01 == q) // Secondary, as such
                 s.pull(q, 16);
-            }
             else if (0b10 == q) { // Tertiary, need to read the code for this quart
-                s.pull(code, 3); // three bits, more frequent
-                if (5 < code) { // code needs one more bit
-                    s.pull(q, 1);
-                    code = static_cast<uint8_t>((code << 1) | q);
-                }
-
-                if (2 > code) { // two halves, no value
+                s.pull(code, 3); // three bits
+                if (2 > code)
                     q = code ? 0xff00 : 0x00ff;
-                }
                 else {
-                    s.pull(q, 7); // Read the value and prepare the short int
+                    if (5 < code) { // Need one more code bit
+                        s.pull(q, 1);
+                        code = static_cast<uint8_t>(q | (code << 1));
+                    }
+
+                    // Need 7 bits
+                    s.pull(q, 7);
                     switch (code) {
                     case 0b010: // 0b0010
                         break;
@@ -142,15 +140,12 @@ size_t BMap::unpack(Bitstream& s) {
                     case 0b1110: // 0b1110
                         q = q | 0xff00;
                         break;
-                    case 0b1111: // 0b1011
+                    default: // 0b1011, code is 0b1111
                         q = (q << 8) | 0xff;
-                        break;
-                    default: // error
-                        return 0;
                     }
                 }
             }
-            it |= static_cast<uint64_t>(q) << (i * 16);
+            it |= static_cast<uint64_t>(q) << i;
         }
     }
     return v.size();
@@ -159,91 +154,90 @@ size_t BMap::unpack(Bitstream& s) {
 // 3-4 packing
 size_t BMap::pack(Bitstream& s) {
     for (auto it : v) {
-        // Primary encoding
         if (0 == it or ~(0ULL) == it) {
             s.push(it & 0b11u, 2);
             continue;
         }
 
-        // Test for secondary/tertiary
-        // If at least two halves are 0 or 0xff
-        int halves = 0;
-        uint16_t q[4], b;
-        for (int i = 0; i < 4; i++) {
-            auto h = q[i] = static_cast<uint16_t>(it >> (i * 16));
-            b = h & 0xff;
-            if (0 == b or 0xff == b)
-                halves++;
-            b = h >> 8;
+        // Test for switch to secondary
+        uint8_t b;
+        size_t halves = 0;
+        for (size_t i = 0; i < 64; i += 8) {
+            b = (it >> i) & 0xff;
             if (0 == b or 0xff == b)
                 halves++;
         }
 
-        if (halves < 2) { // Less than 2 halves, encode as raw 64bit
+        if (halves < 2) { // Less than 2 halves, primary 64bit store
             s.push(0b01u, 2);
             s.push(it, 64);
             continue;
         }
 
-        s.push(0b10u, 2); // switch to secondary, by quart
-        for (int i = 0; i < 4; i++) {
-            if (0 == q[i] or 0xffff == q[i]) { // uniform secondary
-                s.push(q[i] & 0b11u, 2);
+        s.push(0b10u, 2); // switch to secondary, encoded by quart
+
+        for (size_t j = 0; j < 4; j++, it >>= 16) {
+            auto q = static_cast<uint16_t>(it);
+            if (0 == q or 0xffff == q) {
+                s.push(q & 0b11u, 2);
                 continue;
             }
 
-            // val captures 7bits of the mixed byte
-            uint8_t code = 0, val = 0;
-            b = q[i] >> 8; // high byte first
+            // Test the two bytes, build the prefix code
+            // 7 low bytes from the mixed byte get captured in val
+            uint8_t code = 0;
+            uint64_t val = 0;
+            b = static_cast<uint8_t>(q >> 8); // High byte first
             if (0 == b or 0xff == b)
                 code |= b & 0b11;
             else {
                 val = b & 0x7f;
-                code |= (val == b) ? 0b10 : 0b01;
+                code |= (val == b) ? 0b10: 0b01;
             }
-
-            // if val is overwritten, the 16bit value is stored
             code <<= 2;
-            b = q[i] & 0xff;
+            b = static_cast<uint8_t>(q);
             if (0 == b or 0xff == b)
                 code |= b & 0b11;
             else {
                 val = b & 0x7f;
-                code |= (val == b) ? 0b10 : 0b01;
+                code |= (val == b) ? 0b10: 0b01;
             }
 
-            // Translate the meaning to tertiary codeword
-            // Codes 6 to 15 are twisted from the normal abbreviated binary
-            // to allow detection of code length from the low 3 bits
-            // append the b10 switch encoding into the codeword
+            // Translate the prefix to tertiary codeword
+            // Codes 6 to 15 are rotated to allow detection 
+            // of code length from the lower 3 bits
+            // b10 switch to tertiary encoding is added
             static uint8_t xlate[16] = {
                 0xff,  // 0000 Not used
-                0b011000 | 0b10,  // 0001 Twisted from 0b1100
+                0b011000 | 0b10,  // 0001 rotated from 0b1100
                  0b01000 | 0b10,  // 0010
                  0b00000 | 0b10,  // 0011
-                0b111000 | 0b10,  // 0100 Twisted from 0b0111
+                0b111000 | 0b10,  // 0100 rotated from 0b0111
                 0, // 0101 secondary 01, magic value
                 0, // 0110 secondary 01, magic value
                 0b10100 | 0b10,  // 0111
                 0b01100 | 0b10,  // 1000
                 0, // 1001 secondary 01, magic value
                 0, // 1010 secondary 01, magic value
-                0b111100 | 0b10,  // 1011 Twisted from 0b1111
+                0b111100 | 0b10,  // 1011 rotated from 0b1111
                  0b00100 | 0b10,  // 1100
                  0b10000 | 0b10,  // 1101
-                0b011100 | 0b10,  // 1110 Twisted from 0b1110
+                0b011100 | 0b10,  // 1110 rotated from 0b1110
                 0xff  // 1111 Not used
             };
             code = xlate[code];
-
-            if (code) { // Tertiary encoding + abbreviated codeword
-                s.push(code, (code < 0b011010) ? 5 : 6);
-                if (code > 0b110) // needs the 7 bits of data
-                    s.push(val, 7);
+            assert(code != 0xff);
+            if (0 == code) { // Secondary, stored
+                s.push((static_cast<uint64_t>(q) << 2) | 0b01u, 18);
+                continue;
             }
-            else { // magic codeword, means secondary encoding, stored
-                s.push(0b01u | (static_cast<uint32_t>(q[i]) << 2), 18);
+            // Tertiary
+            if (code < 0b111) { // No value
+                s.push(code, 5);
+                continue;
             }
+            b = code < 0b011010 ? 5 : 6;
+            s.push((val << b) | code, 7ull + b);
         }
     }
 
@@ -258,85 +252,78 @@ size_t BMap::altpack(Bitstream& s) {
             continue;
         }
 
-        // Test for secondary/tertiary
-        // If at least two bytes are 0 or 0xff
-        int halves = 0;
-        uint16_t q[4], b;
-        for (int i = 0; i < 4; i++) {
-            auto h = q[i] = static_cast<uint16_t>(it >> (i * 16));
-            b = h & 0xff;
-            if (0 == b or 0xff == b)
-                halves++;
-            b = h >> 8;
+        // Test for switch to secondary
+        uint8_t b;
+        size_t halves = 0;
+        for (size_t i = 0; i < 64; i += 8) {
+            b = (it >> i) & 0xff;
             if (0 == b or 0xff == b)
                 halves++;
         }
 
-        if (halves < 2) { // Less than 2 halves, encode as raw 64bit
+        if (halves < 2) { // Less than 2 halves, primary 64bit store
             s.push(0b01u, 2);
             s.push(it, 64);
             continue;
         }
 
-        s.push(0b10u, 2); // switch to secondary, by quart
-        for (int i = 0; i < 4; i++) {
-            if (0 == q[i] or 0xffff == q[i]) { // uniform secondary
-                s.push(q[i] & 0b11u, 2);
+        s.push(0b10u, 2); // switch to secondary, encoded by quart
+        for (size_t j = 0; j < 4; j++, it >>= 16) {
+            auto q = static_cast<uint16_t>(it);
+            if (0 == q or 0xffff == q) {
+                s.push(q & 0b11u, 2);
                 continue;
             }
 
-            // val captures 7bits of the mixed byte
-            uint8_t code = 0, val = 0;
-            b = q[i] >> 8; // high byte first
+            // Test the two bytes, build the prefix code
+            // The mixed half gets captured in val
+            uint8_t code = 0;
+            uint64_t val = 0;
+            b = static_cast<uint8_t>(q >> 8); // High byte first
             if (0 == b or 0xff == b)
                 code |= b & 0b11;
             else {
                 val = b;
-                code |= 0b01; // 01 == x
+                code |= 0b01;
             }
-
-            // if val is overwritten, the 16bit value is stored
             code <<= 2;
-            b = q[i] & 0xff;
+            b = static_cast<uint8_t>(q);
             if (0 == b or 0xff == b)
                 code |= b & 0b11;
             else {
                 val = b;
-                code |= 0b01; // 01 == x
+                code |= 0b01;
             }
 
-            // Translate the meaning to tertiary codeword, including the 0b10 switch code
-            // Codes 6 to 15 are twisted from the normal abbreviated binary
-            // to allow detection of code length from the low 3 bits
-            // append the b10 switch encoding into the codeword
+            // Translate prefix, table includes the 0b10 switch to tertiary
             static uint8_t xlate[16] = {
-                0xff,   // 0000 Not used
-                0b011000 | 0b10,  // 0001 Twisted from 0b1100
-                 0b01000 | 0b10,  // 0010
-                 0b00000 | 0b10,  // 0011
-                0b111000 | 0b10,  // 0100 Twisted from 0b0111
-                0, // 0101 secondary 01, magic value
-                0, // 0110 secondary 01, magic value
-                0b10100 | 0b10,  // 0111
-                0b01100 | 0b10,  // 1000
-                0, // 1001 secondary 01, magic value
-                0, // 1010 secondary 01, magic value
-                0b111100 | 0b10,  // 1011 Twisted from 0b1111
-                 0b00100 | 0b10,  // 1100
-                 0b10000 | 0b10,  // 1101
-                0b011100 | 0b10,  // 1110 Twisted from 0b1110
-                0xff    // 1111 Not used
+                0xff,   // 00, Not used
+                0b01000 | 0b10,  // 0x rotated from 0b100
+                0xff,  // 0?, not used
+                0b0000 | 0b10,  // 01
+                0b11000 | 0b10,  // x0, rotated from 110
+                0, // xx secondary 01, magic value
+                0xff, // x?, not used
+                0b11100 | 0b10,  // x1, rotated from 111
+                0xff,  // ?0, not used
+                0xff, // ?x, not used
+                0xff, // ??, not used
+                0xff,  // ?1, not used
+                0b0100 | 0b10,  // 10
+                0b01000 | 0b10,  // 1x, rotated from 101
+                0xff,  // 1?, not used
+                0xff    // 11, not used
             };
             code = xlate[code];
-
-            if (code) { // Tertiary encoding + abbreviated codeword
-                s.push(code, (code < 0b011010) ? 5 : 6);
-                if (code > 0b110) // needs the 7 bits of data
-                    s.push(val, 7);
+            assert(code != 0xff);
+            if (0 == code) { // Secondary, stored
+                s.push((static_cast<uint64_t>(q) << 2) | 0b01u, 18);
+                continue;
             }
-            else { // magic codeword, means secondary encoding, stored
-                s.push(0b01u | (static_cast<uint32_t>(q[i]) << 2), 18);
-            }
+            if (7 > code) // Tertiary, no value
+                s.push(code, 4);
+            else // Tertiary
+                s.push((val << 5) | code, 13);
         }
     }
 

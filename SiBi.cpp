@@ -108,22 +108,31 @@ int main()
 
     vector<uint8_t> values;
     Bitstream s(values);
-    std::cout << std::endl << bm.dsize() * 8 << std::endl;
+    cout << std::endl << bm.dsize() * 8 << std::endl;
     bm.pack(s);
+    // bm.altpack(s);
     //bm.dump(std::string("file.raw"));
-    std::cout << s.v.size() * 8 << std::endl;
-    auto v(s.v);
-    RLE(s.v, s.v);
-    std::cout << s.v.size() * 8 << std::endl;
-    unRLE(s.v, s.v);
-    std::cout << s.v.size() * 8 << std::endl;
-    for (int i = 0; i < v.size(); i++)
-        if (v[i] != s.v[i])
+    cout << s.v.size() * 8 << std::endl;
+
+    vector<uint8_t> v;
+    RLE(values, v);
+    std::cout << v.size() * 8 << std::endl;
+    vector<uint8_t> outv;
+    Bitstream outs(outv);
+    unRLE(v, outs.v);
+    std::cout << outs.v.size() * 8 << std::endl;
+    for (int i = 0; i < outv.size(); i++)
+        if (values[i] != outv[i]) {
+            cerr << "RLE error" << endl;
             break;
+        }
 
     BMap bm1(sx, sy);
-    bm1.unpack(s);
-    bm1.compare(bm);
+    // Reset s for reading
+    s.bitp = 0;
+    bm1.unpack(outs);
+    if (!bm1.compare(bm))
+        cerr << "Bitmap packing error" << endl;
 
     // Now for the RGB image, read from a PNM file
     // Image is 2550x3776x3, starts at offset 16
