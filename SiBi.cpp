@@ -108,19 +108,17 @@ int main()
 
     vector<uint8_t> values;
     Bitstream s(values);
-    cout << std::endl << bm.dsize() * 8 << std::endl;
+    cout << endl << bm.dsize() * 8 << endl;
     bm.pack(s);
-    // bm.altpack(s);
-    //bm.dump(std::string("file.raw"));
-    cout << s.v.size() * 8 << std::endl;
+    cout << s.v.size() * 8 << endl;
 
     vector<uint8_t> v;
     RLE(values, v);
-    std::cout << v.size() * 8 << std::endl;
+    cout << v.size() * 8 << endl;
     vector<uint8_t> outv;
     Bitstream outs(outv);
     unRLE(v, outs.v);
-    std::cout << outs.v.size() * 8 << std::endl;
+    cout << outs.v.size() * 8 << std::endl;
     for (int i = 0; i < outv.size(); i++)
         if (values[i] != outv[i]) {
             cerr << "RLE error" << endl;

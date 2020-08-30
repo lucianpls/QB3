@@ -62,7 +62,6 @@ public:
     size_t dsize() { return v.size() * sizeof(uint64_t); }
     void getsize(int& x, int& y) { x = _x; y = _y; }
     size_t pack(Bitstream& stream);
-    size_t altpack(Bitstream& stream);
     size_t unpack(Bitstream& streamm);
     bool compare(BMap& other) {
         if (v.size() != other.v.size())
