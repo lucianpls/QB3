@@ -208,8 +208,8 @@ because we only know that the top bit is 1.
 
 The encoding type needs to be self-identifying, for every value. To do this, the types are prefixed by:
  - 1 Short type
- - 00 Nominal type
- - 01 Long type
+ - 01 Nominal type
+ - 00 Long type
 
 This means that each type gets encoded with a different number of bits:
  - Short: n-2+1 = n-1 bits
