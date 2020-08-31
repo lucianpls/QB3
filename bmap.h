@@ -37,14 +37,14 @@ struct Bitstream {
         assert(std::is_integral<T>::value && std::is_unsigned<T>::value);
         val = 0;
         size_t accsz = 0; // bits in accumulator
-        while (bits && ((bitp / 8) < v.size())) {
+        while (bits && (bitp < v.size() * 8)) {
             size_t used = std::min(8 - bitp % 8, bits);
             val |= static_cast<T>((v[bitp / 8] >> (bitp % 8)) & mask[used]) << accsz;
-            bitp += used;
             bits -= used;
+            bitp += used;
             accsz += used;
         }
-        return true;
+        return bitp <= v.size() * 8;
     }
 
     // Single bit fetch
