@@ -146,7 +146,7 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
     size_t bands = image.size() / xsize / ysize;
     // Nominal bit length
     constexpr uint8_t ubits = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-    std::vector<size_t> runbits(bands, ubits); // Running code length, start with nominal value
+    std::vector<size_t> runbits(bands, sizeof(T)*8 - 1); // Running code length, start with nominal value
     std::vector<T> prev(bands, 0u);      // Previous value per band
     std::vector<T> group(bsize * bsize); // Current 2D group to encode, as vector
 
@@ -161,7 +161,7 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
                 if (mb >= 0 && mb != c)
                     for (size_t i = 0; i < group.size(); i++)
                         group[i] -= image[loc + mb + (ylut[i] * xsize + xlut[i]) * bands];
-                // Delta with low sign encode
+                // Delta with low sign group encode
                 prev[c] = dsign(group, prev[c]);
                 uint64_t maxval = *max_element(group.begin(), group.end());
                 if (maxval < 2) {
@@ -180,6 +180,7 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
                     }
                     continue;
                 }
+
                 if (maxval < 4) { // Doesn't always have 2 detection bits
                     if (runbits[c] == 1)
                         s.push(0u, 1); // Same, just one bit
@@ -189,38 +190,43 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
                     }
                     for (auto it : group)
                         if (it < 2)
-                            s.push(it * 3u, it + 1u);
+                            s.push(it * 3u, 1ull + it);
                         else
-                            s.push(((it & 1) << 2) | 1u, 3u);
+                            s.push(((it & 1) << 2) | 1u, 3);
                     continue;
                 }
+
                 // Number of bits after the fist 1
                 size_t bits = ilogb(maxval);
                 if (bits == runbits[c])
-                    s.push(0u, 1); // Same, just a zero bit
+                    s.push(0u, 1); // Same as before, just a zero bit
                 else {
-                    s.push(bits * 2 + 1, ubits + 1); // change bit + len on ubits
+                    s.push(bits * 2 | 1, ubits + 1); // change bit + len on ubits
                     runbits[c] = bits;
                 }
+
                 // Three length encoding
-                // The bottom bits-1 are read as a group
+                // The bottom bits are read as a group
                 // which starts with the two detection bits
                 for (uint64_t val : group) {
-                    if (val <= mask[bits - 1]) { 
-                        // short codewords, most likely
+                    if (val <= mask[bits - 1]) { // short codewords
                         val |= 1ull << (bits - 1);
                         s.push(val, bits); // Starts with 1
                     }
-                    else if (val <= mask[bits]) { // Second quarter
-                        // starts with 01, rotated one bit
+                    else if (val <= mask[bits]) { // Second quarter, nominal
                         val = (val >> 1) | ((val & 1) << bits);
-                        s.push(val, bits + 1);
+                        s.push(val, bits + 1); // starts with 01, rotated right one bit
                     }
-                    else { // long half, least likely
+                    else { // last half, least likely, long codewords
                         val &= mask[bits];
-                        // starts with 00, rotated two bits
-                        val = (val >> 2) | ((val & 0b11) << bits);
-                        s.push(val, bits + 2);
+                        if (bits < 63) {
+                            val = (val >> 2) | ((val & 0b11) << bits);
+                            s.push(val, bits + 2); // starts with 00, rotated two bits
+                        }
+                        else { // bits == 63, hardly ever happens
+                            s.push(val >> 2, bits);
+                            s.push(val & 0b11, 2);
+                        }
                     }
                 }
             }
@@ -230,8 +236,8 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
 }
 
 template<typename T = uint8_t>
-std::vector<T> unsin(std::vector<uint8_t>& src,
-    size_t xsize, size_t ysize, size_t bands, size_t bsize, int mb = 1)
+std::vector<T> unsin(std::vector<uint8_t>& src, size_t xsize, size_t ysize, 
+    size_t bands, size_t bsize, int mb = 1)
 {
     std::vector<T> image(xsize * ysize * bands);
     Bitstream s(src);
@@ -240,52 +246,52 @@ std::vector<T> unsin(std::vector<uint8_t>& src,
     const uint8_t* xlut = xx[bsize];
     const uint8_t* ylut = yy[bsize];
     constexpr int ubits = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-    std::vector<size_t> runbits(bands, ubits);
+    std::vector<size_t> runbits(bands, sizeof(T)*8 - 1);
 
     for (size_t y = 0; (y + bsize) <= ysize; y += bsize) {
         for (size_t x = 0; (x + bsize) <= xsize; x += bsize) {
             size_t loc = (y * xsize + x) * bands;
             for (int c = 0; c < bands; c++) {
-                uint64_t val;
-                uint64_t bits;
-                s.pull(bits, 1);
-                if (bits)
-                    s.pull(bits, ubits);
-                else
-                    bits = runbits[c]; // Same as before
-                runbits[c] = bits;
-                if (1 < bits) {
-                    for (auto& it : group) {
-                        s.pull(val, bits);
-                        if (val > mask[bits - 1]) // Starts with 1
-                            it = static_cast<T>(val & mask[bits - 1]);
-                        else if (val > mask[bits - 2]) { // Starts with 01
-                            s.pull(it);
-                            it += static_cast<T>(val << 1);
-                        }
-                        else {
-                            s.pull(it, 2);
-                            it += static_cast<T>((val << 2) | (1ull << bits));
-                        }
-                    }
-                } else if (0 == bits) {
-                    s.pull(val);
-                    if (val)
+                uint64_t bits = runbits[c];
+                if (0 != s.get()) { // The bits change flag
+                    s.pull(runbits[c], ubits);
+                    bits = runbits[c];
+                }
+                uint64_t val = 0;
+                if (0 == bits) { // 0 or 1
+                    if (0 == s.get()) // All 0s
+                        fill(group.begin(), group.end(), 0);
+                    else { // 0 and 1s
                         s.pull(val, group.size());
-                    for (auto& it : group) {
-                        it = val & 1;
-                        val >>= 1;
+                        for (auto& it : group) {
+                            it = val & 1;
+                            val >>= 1;
+                        }
                     }
                 }
-                else {
+                else if (1 == bits) { // 2 bits nominal, could be a single bit
                     for (auto& it : group) {
-                        s.pull(it);
-                        if (0 != it) {
+                        if (0 != s.get()) {
                             s.pull(it);
                             if (0 == it) {
                                 s.pull(it);
                                 it |= 0b10;
                             }
+                        }
+                        else
+                            it = 0;
+                    }
+                }
+                else { // triple length
+                    for (auto& it : group) {
+                        s.pull(it, bits);
+                        if (it > mask[bits - 1]) // Starts with 1
+                            it &= mask[bits - 1];
+                        else if (it > mask[bits - 2])
+                            it = static_cast<T>(s.get() + (it << 1));
+                        else {
+                            s.pull(val, 2);
+                            it = static_cast<T>((1ull << bits) + (it << 2) + val);
                         }
                     }
                 }

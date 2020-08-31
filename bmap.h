@@ -10,12 +10,14 @@ struct Bitstream {
     std::vector<uint8_t>& v;
     size_t bitp; // Next bit for input
     Bitstream(std::vector<uint8_t>& data) : v(data), bitp(0) {};
+
     void clear() {
         bitp = 0;
         v.clear();
     }
-    template<typename T>
+
     // Do not call with val upper bits set, results will be corrupt
+    template<typename T>
     void push(T val, size_t bits) {
         assert(std::is_integral<T>::value && std::is_unsigned<T>::value);
         while (bits) {
@@ -29,11 +31,12 @@ struct Bitstream {
             val >>= used;
         }
     }
+
     template<typename T = uint64_t>
     bool pull(T& val, size_t bits = 1) {
         assert(std::is_integral<T>::value && std::is_unsigned<T>::value);
         val = 0;
-        size_t accsz = 0;
+        size_t accsz = 0; // bits in accumulator
         while (bits && ((bitp / 8) < v.size())) {
             size_t used = std::min(8 - bitp % 8, bits);
             val |= static_cast<T>((v[bitp / 8] >> (bitp % 8)) & mask[used]) << accsz;
@@ -43,6 +46,15 @@ struct Bitstream {
         }
         return true;
     }
+
+    // Single bit fetch
+    uint64_t get() {
+        if (bitp >= 8 * v.size()) return 0; // Don't go past the end
+        uint64_t val = static_cast<uint64_t>((v[bitp / 8] >> (bitp % 8)) & 1);
+        bitp++;
+        return val;
+    }
+
     static const uint8_t mask[9];
 };
 
