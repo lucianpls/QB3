@@ -191,4 +191,31 @@ as determined by the maximum m value in the respective group. To reconstruct the
 from the truncated encoding, the maximum value in each group has to be transmitted before the group, allowing the 
 receive to reconstruct each particular truncated encoding.
 
+# Encoding
 
+Each group of values gets encoded individually. Filtering and pre-encoding are done to make small values much
+more likely than large values. This assumption can be used to shorten the number of bits required to encode values.
+
+Let's assume that for encoding a block, n bits per value are required. Instead of using n bits for every value,
+we split the values in three groups, each encoded with a different length.
+ - First type, the small values, is the first quarter of possible codes.  These values are between 0 and 2^(n-2), in 
+other words start with two zeros in the most significant bits, thus need only n-2 bits.
+ - Second type, the nominal values, are the second quarter of possible codes, between 2^(n-2) and 2^(n-1). These
+values start with 01 in the two most significant bits. These also need n-2 bits.
+ - Last type, the large values, are values between 2^(n-1) and 2^n. These represent half of the possible values, 
+but are much more rare. These values start with 1 in the most significant bit. These values will need n-1 bits for storage,
+because we only know that the top bit is 1.
+
+The encoding type needs to be self-identifying, for every value. To do this, the types are prefixed by:
+ - 1 Short type
+ - 00 Nominal type
+ - 01 Long type
+
+This means that each type gets encoded with a different number of bits:
+ - Short: n-2+1 = n-1 bits
+ - Nominal: n-2+2 = n bits
+ - Long: n-1+2 = n+1 bits
+ 
+The long type takes one more bit than the nominal size, while the short type takes one bit less. If the number of the 
+short type values in a group is larger than the number of long type values, the overall storage size will be less than 
+if the values in the group will be stored with the nominal size. This encoding results in additional compression.
