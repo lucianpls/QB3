@@ -86,7 +86,7 @@ It is done at in 64 bit (8x8) groups. The 64bit value to be encoded is *val*. Th
   - 0b10 + secondary encoding mode, if at least two of the bytes are all 0s or all 1s
   - 0b01 + *val*, in little endian, otherwise
 
-The secondary encoding is used when two or more of the 8 bytes are uniform. In this case the encoding is shorter than storing the full 64bit value, in the worse case it will take 62 bits.
+The secondary encoding is used when two or more of the 8 bytes are uniform. In this case the encoding is shorter than storing the full 64bit value, in the worst case it will take 62 bits.
 - Secondary encoding of a 64bit group
 Split the 64bit group in four 16bit quads, each representing a 4x4 area. Each quad is encoded individually, with a two bit prefix.  
   - 0b00 if *quad* has all 0 bits
