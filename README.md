@@ -75,28 +75,28 @@ and simpler to calculate
 
 ## Bitmap entropy encoding
 
-When the datapoints are bits, the 8x8 2D group fits in a 64bit integer, which is available in most CPUs. The output is assumed to be a bit stream.  
-Since the points are close, every byte represents a 4x2 group of pixels. They tend to be either all 0s or all 1s. 
-This encoding uses this feature to store groups of 8x8 into a smaller number of bytes, if possible.
+When the datapoints are bits, the 8x8 2D group fits in a 64bit integer, a size which is available in most CPUs. The output is assumed to be a bit stream.  
+Every byte of the 64bit int represents a 4x2 group of pixels. Since they are close to each other, they tend to be either all 0s or all 1s.  
+The encoding uses this feature to store groups of 8x8 into a smaller number of bytes, if possible.
 
 - Primary encoding
-It is done at in 64 bit (8x8) groups. The 64bit value to be encoded is *val*. The prefix has two bits.  
+It is done for each 64 bit (8x8) group. The 64bit value to be encoded is *val*. The encoding prefix has two bits.  
   - 0b00 if *val* has all 0 bits
   - 0b11 if *val* has all 1 bits
-  - 0b10 + secondary encoding mode, if at least two of the bytes are all 0s or all 1s
+  - 0b10 + secondary encoding, if at least two of the 8 bytes contain all 0 or all 1 bits
   - 0b01 + *val*, in little endian, otherwise
 
-The secondary encoding is used when two or more of the 8 bytes are uniform. In this case the encoding is shorter than storing the full 64bit value, in the worst case it will take 62 bits.
 - Secondary encoding of a 64bit group
-Split the 64bit group in four 16bit quads, each representing a 4x4 area. Each quad is encoded individually, with a two bit prefix.  
+The secondary encoding is used when two or more of the 8 bytes are uniform. In this case the encoding is shorter than storing the full 64bit value, in the worst case it will take 62 bits.
+Split the 64bit group in four 16bit quads, each will represent a 4x4 area. Each quad is encoded, with a two bit encoding prefix.  
   - 0b00 if *quad* has all 0 bits
   - 0b11 if *quad* has all 1 bits
-  - 0b10 + tertiary encoding if either byte is uniform
+  - 0b10 + tertiary encoding if either byte is all 0 or all 1 bits
   - 0b01 + *quad* , in little endian, otherwise
 
  - Tertiary encoding  
-Separate the quad in two byes.  At least one of the bytes is all 0s or all 1s. All encodings are shorter than the 16 bits necessary otherwise.
-We encode the state of each byte using two bits. 0b00 is a byte with all 0s, 0b11 is a byte with all 1s, 0b01 is any byte value > 127 and 0b10 is any byte value <= 127. Given that at least one of the two bytes is all 0s or all 1s, there are only 10 valid prefix combinations. These are further encoded into codewords using abbreviated binary.
+Separate the quad in two byes. At least one of the bytes is all 0 or all 1 bits. All encodings are shorter than the 16 bits necessary otherwise.
+We encode the state of each byte using two prefix bits. 0b00 is a byte with all 0s, 0b11 is a byte with all 1s, 0b01 is any byte value > 127 and 0b10 is any byte value <= 127. Given that at least one of the two bytes is all 0s or all 1s, there are only 10 valid prefix combinations. These are further encoded into codewords using abbreviated binary.
 
 |Prefix |Codeword|Rotated|
 |----|---:|---:|
@@ -112,9 +112,8 @@ We encode the state of each byte using two bits. 0b00 is a byte with all 0s, 0b1
 |1011|1111|1111|
 
 The codewords are chosen so that byte combinations where more bits have the same value are shorter.
-Encoding containing a non-uniform byte (2-5 and 12-15) are followed by the lower 7 bits of the non-uniform byte, since the top bit is alreay known for the prefix.
-The decoder needs sees the top three bits of the codeword before deciding that it needs a fourth, so the four bit codes are not stored as they are presented above. 
-Instead, the top three bits are stored first, followed by the fourth. In other words, they are stored rotated right by one bit.
+Encoding containing a non-uniform byte (prefix values of 2-5 and 12-15) are followed by the lower 7 bits of the non-uniform byte, since the top bit is alreay known for the prefix.
+The decoder needs sees the top three bits of the codeword before knowing if a fourth bit is needed, so the four bit codes are not stored as they are presented above. Since we use little endian encoding, the top three bits are stored first, followed by the fourth. In other words, they are stored in the bitstream rotated right by one bit, so the top three bits can be read first as a group.
 
 For example, a quad value of 0x5aff at the secondary encoding level will be encoded as:  
 
@@ -129,7 +128,7 @@ The last part is the lower 7 bits of the non-uniform byte value, 0x5f in this ca
 
     0b1011111
 
-The result encoding size will use 2 +3 +1 +7 = 13 bits, instead of the 16 + 2 = 18 bits required to just store the value.
+The encoded value size will use 2 +3 +1 +7 = 13 bits, instead of the 16 + 2 = 18 bits required to just store the quad value.
 For 3 bit code words with a non-uniform byte, the encoding takes 12 bits, or only 5 bits if both halves of the quad are uniform.
 
 - Alternate tertiary encoding  
@@ -146,7 +145,7 @@ In the prefix, if 0 is an all 0s byte, 1 is an all 1s byte and x represents a mi
 |x1|111|111|
 
 The 01 and 10 prefixes represent a 4x4 blocks where the top 4x2 region is all 0s and the bottom 4x2 region is all 1s, or the opposite.
-The three bit codewords are stored rotated right one bit, to enble decoding. Those three bit codewords are followed by the 8 bits of the mixed byte.
+The three bit codewords are stored rotated right one bit, to enable decoding. Those three bit codewords are followed by the 8 bits of the mixed byte.
 The worst case size of the encoded quad is the same as the one in the initial encoding.
 
 The same quad value of 0x5aff at the secondary encoding level will be encoded as:  
@@ -167,7 +166,8 @@ It might be easier to implement.
 
 ## Further entropy encoding
 
-When encoding large areas with all 0s or all 1s, the resulting bitstream may contains long sequences of 0s or 1s, even after the encoding described above achieves a 2:64 compression ratio. These repeated sequences can be further reduced by using a run length encoder (RLE) on the bitsream itself.
+When encoding large areas with all 0s or all 1s, the resulting bitstream may contains long sequences of 0s or 1s, even after the encoding described 
+above achieves the maximum 64:2 compression ratio. These repeated sequences can be further reduced by using a run length encoder (RLE) on the bitsream itself.
 
 ## Image encoding
 
