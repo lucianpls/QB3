@@ -112,10 +112,8 @@ size_t BMap::unpack(Bitstream& s) {
                 if (2 > code)
                     q = code ? 0xff00 : 0x00ff;
                 else {
-                    if (5 < code) { // Need one more code bit
-                        s.pull(q, 1);
-                        code = static_cast<uint8_t>(q | (code << 1));
-                    }
+                    if (5 < code) // Need one more code bit
+                        code = static_cast<uint8_t>(s.get() | (code << 1));
                     s.pull(q, 7); // Need 7 bits
                     switch (code) { // Combo with one mixed byte
                     case 0b010:                         break; // 0b0010

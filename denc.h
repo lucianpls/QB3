@@ -2,6 +2,7 @@
 #include <vector>
 #include <cinttypes>
 #include <limits>
+#include <functional>
 
 namespace SiBi {
 // Masks, from 0 to 64 bits
@@ -20,26 +21,127 @@ static size_t ilogb(uint64_t val) {
     return ~0; // not reached
 }
 
-#define HALFMAX(T) (std::numeric_limits<T>::max() >> 1)
-
-// Delta and sign reorder
-// All these templates work only for unsigned, integral, 2s complement types
-template<typename T = uint8_t>
-static T dsign(std::vector<T>& v, T prev) {
-    assert(std::is_integral<T>::value && std::is_unsigned<T>::value);
-    for (auto& it : v) {
-        prev += it -= prev;
-        it = (it > HALFMAX(T)) ? ~(it << 1): (it << 1);
+// Greater common denominator
+template<typename T>
+T gcd(const std::vector<T>& vals) {
+    if (vals.empty())
+        return 0;
+    auto v(vals); // Work on a copy
+    auto vb(v.begin()), ve(v.end());
+    for (;;) {
+        sort(vb, ve);
+        while (!*vb)
+            if (++vb == ve)
+                return 0;
+        auto m(*vb);
+        if (vb + 1 == ve)
+            return m;
+        for (auto vi(vb + 1); vi < ve; vi++)
+            *vi %= m;
     }
-    return prev;
+    // Not reached
+    return 0;
 }
 
-// Reverse sign reorder and delta
-template<typename T = uint8_t>
-static T undsign(std::vector<T>& v, T prev) {
+// Convert from mag-sign to absolute
+template<typename T>
+inline T revs(T val) {
+    return (val >> 1) + (val & 1);
+}
+
+// return greatest common factor
+// T is always unsigned
+template<typename T>
+T gcode(const std::vector<T>& vals) {
+
+    // heap of absolute values
+    std::vector<T> v;
+    v.reserve(vals.size());
+    for (auto val : vals) {
+        // ignore the zeros
+        if (val == 0)
+            continue;
+        // if a value is 1 or -1, the only common factor will be 1
+        if (val < 3)
+            return 1;
+        v.push_back(revs(val));
+        push_heap(v.begin(), v.end(), std::greater<T>());
+    }
+
+    if (v.empty() || v.front() < 3)
+        return 1;
+
+    do {
+        pop_heap(v.begin(), v.end(), std::greater<T>());
+        const T m(v.back()); // never less than 2
+        v.pop_back();
+        for (auto& t : v) t %= m;
+        v.push_back(m); // v is never empty
+        make_heap(v.begin(), v.end(), std::greater<T>());
+        while (v.size() && v.front() == 0) {
+            pop_heap(v.begin(), v.end(), std::greater<T>());
+            v.pop_back();
+        }
+        if (1 == v.front())
+            return 1;
+    } while (v.size() > 1);
+    return v.front();
+}
+
+//
+// Delta and sign reorder
+// All these templates work only for T unsigned, integer, 2s complement types
+// Even though T is unsigned, it is considered signed, that's the whole point!
+//
+
+
+// Encode integers as absolute magnitude and sign, so the bit 0 is the sign.
+// This encoding has the top bits always zero, regardless of sign
+// To keep the range exactly the same as two's complement, the magnitude of negative values is biased down by one (no negative zero)
+
+
+// These alternates use a conditional assignment that can't be predicted well
+// Change to mag-sign
+template<typename T>
+static T mags_alt(T v) {
+    return (v > (std::numeric_limits<T>::max() >> 1)) ? ~(v << 1) : (v << 1);
+}
+
+// Undo mag-sign
+template<typename T>
+static T smag_alt(T v) {
+    return (v & 1) ? ~(v >> 1) : (v >> 1);
+}
+
+// Change to mag-sign without conditionals, faster
+template<typename T>
+static T mags(T v) {
+    return (std::numeric_limits<T>::max() * (v >> (8 * sizeof(T) - 1))) ^ (v << 1);
+}
+
+// Undo mag-sign without conditionals, faster
+template<typename T>
+static T smag(T v) {
+    return (std::numeric_limits<T>::max() * (v & 1)) ^ (v >> 1);
+}
+
+// Convert a sequence to mag-sign delta
+template<typename T>
+static T dsign(std::vector<T>& v, T pred) {
+    assert(std::is_integral<T>::value && std::is_unsigned<T>::value);
+    for (auto& it : v) {
+        pred += it -= pred; // or std::swap(it, pred) ; it = pred - it;
+        it = mags(it);
+    }
+    return pred;
+}
+
+// Reverse mag-sign and delta
+template<typename T>
+static T undsign(std::vector<T>& v, T pred) {
     for (auto& it : v)
-        it = prev += (it & 1) ? ~(it >> 1) : (it >> 1);
-    return prev;
+        it = pred += smag(it);
+    return pred;
 }
 
 // Traversal order tables, first for powers of two
@@ -150,6 +252,9 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
     std::vector<T> prev(bands, 0u);      // Previous value per band
     std::vector<T> group(bsize * bsize); // Current 2D group to encode, as vector
 
+    uint64_t saved(0); // bits saved
+    uint64_t saved_count(0); // blocks with bits saved
+
     for (size_t y = 0; (y + bsize) <= ysize; y += bsize) {
         for (size_t x = 0; (x + bsize) <= xsize; x += bsize) {
             size_t loc = (y * xsize + x) * bands; // Top-left pixel address
@@ -180,6 +285,14 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
                     }
                     continue;
                 }
+
+                // Increase quanta!
+                //{
+                //    auto mv = gcode(group);
+                //    if (mv > 1) {
+                //        fprintf(stderr, "%llu vs %llu %llu\n", uint64_t(maxval / mv), uint64_t(maxval), uint64_t(mv));
+                //    }
+                //}
 
                 if (maxval < 4) { // Doesn't always have 2 detection bits
                     if (runbits[c] == 1)
@@ -223,7 +336,7 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
                             val = (val >> 2) | ((val & 0b11) << bits);
                             s.push(val, bits + 2); // starts with 00, rotated two bits
                         }
-                        else { // bits == 63, hardly ever happens
+                        else { // bits == 63, can't push 65 bits in one call
                             s.push(val >> 2, bits);
                             s.push(val & 0b11, 2);
                         }
@@ -270,17 +383,10 @@ std::vector<T> unsin(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                     }
                 }
                 else if (1 == bits) { // 2 bits nominal, could be a single bit
-                    for (auto& it : group) {
-                        if (0 != s.get()) {
-                            s.pull(it);
-                            if (0 == it) {
-                                s.pull(it);
-                                it |= 0b10;
-                            }
-                        }
-                        else
-                            it = 0;
-                    }
+                    for (auto& it : group)
+                        if ((it = static_cast<T>(s.get())))
+                            if (!(it = static_cast<T>(s.get())))
+                                it = static_cast<T>(0b10 + s.get());
                 }
                 else { // triple length
                     for (auto& it : group) {
@@ -309,4 +415,5 @@ std::vector<T> unsin(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
     }
     return image;
 }
+
 } // Namespace SiBi

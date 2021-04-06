@@ -46,10 +46,12 @@ void check(vector<uint8_t> &image, size_t bsize, uint64_t m) {
     time_span = duration_cast<duration<double>>(t2 - t1).count();
     cout << "UnSin took " << time_span << " seconds" << endl;
 
-    for (size_t i = 0; i < img.size(); i++)
-        if (img[i] != re[i])
-            cout << "Difference at " << i << " " 
-            << img[i] << " " << re[i] << endl;
+    if (img != re) {
+        for (size_t i = 0; i < img.size(); i++)
+            if (img[i] != re[i])
+                cout << "Difference at " << i << " "
+                << img[i] << " " << re[i] << endl;
+    }
 }
 
 int main()
@@ -100,11 +102,8 @@ int main()
     Bitstream outs(outv);
     unRLE(v, outs.v);
     cout << outs.v.size() * 8 << std::endl;
-    for (int i = 0; i < outv.size(); i++)
-        if (values[i] != outv[i]) {
-            cerr << "RLE error" << endl;
-            break;
-        }
+    if (memcmp(values.data(), outv.data(), outv.size()))
+        cerr << "RLE error" << endl;
 
     BMap bm1(sx, sy);
     // Reset s for reading
@@ -128,7 +127,7 @@ int main()
     fread(image.data(), ysize * bands, xsize, f);
     fclose(f);
     int bsize = 4;
-    //check<uint64_t>(image, bsize, 0x100000000000000u);
+    check<uint64_t>(image, bsize, 0x100000000000000u);
     check<uint64_t>(image, bsize, 5);
     check<uint64_t>(image, bsize, 1ull << 56);
     check<uint32_t>(image, bsize, 5);
