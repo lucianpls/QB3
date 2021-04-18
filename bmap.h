@@ -3,12 +3,10 @@
 #include <cinttypes>
 #include <vector>
 #include <algorithm>
-#include <cassert>
-
 // bitstream in low endian format, up to 64 bits at a time
 struct Bitstream {
     std::vector<uint8_t>& v;
-    size_t bitp; // Next bit for input
+    size_t bitp; // Next bit for input, absolute number
     Bitstream(std::vector<uint8_t>& data) : v(data), bitp(0) {};
 
     void clear() {
@@ -16,10 +14,11 @@ struct Bitstream {
         v.clear();
     }
 
-    // Do not call with val upper bits set, results will be corrupt
+    // Do not call with val having bits above "bits" set, the results will be corrupt
     template<typename T>
     void push(T val, size_t bits) {
-        assert(std::is_integral<T>::value && std::is_unsigned<T>::value);
+        static_assert(std::is_integral<T>::value && std::is_unsigned<T>::value,
+            "Only works for unsigned integral types");
         while (bits) {
             size_t used = std::min(8 - bitp, bits);
             if (bitp)
@@ -34,7 +33,8 @@ struct Bitstream {
 
     template<typename T = uint64_t>
     bool pull(T& val, size_t bits = 1) {
-        assert(std::is_integral<T>::value && std::is_unsigned<T>::value);
+        static_assert(std::is_integral<T>::value && std::is_unsigned<T>::value, 
+            "Only works for unsigned integral types");
         val = 0;
         size_t accsz = 0; // bits in accumulator
         while (bits && (bitp < v.size() * 8)) {

@@ -13,11 +13,11 @@ namespace SiBi {
 #undef R
 #undef M
 
-// rank of top set bit - 1
+// rank of top set bit
 static size_t ilogb(uint64_t val) {
-    for (int i = 0; i < 64; i++)
-        if (val <= mask[i+1])
-            return i;
+    for (int i = 1; i < 65; i++)
+        if (val <= mask[i])
+            return i - 1;
     return ~0; // not reached
 }
 
@@ -128,7 +128,8 @@ static T smag(T v) {
 // Convert a sequence to mag-sign delta
 template<typename T>
 static T dsign(std::vector<T>& v, T pred) {
-    assert(std::is_integral<T>::value && std::is_unsigned<T>::value);
+    static_assert(std::is_integral<T>::value && std::is_unsigned<T>::value,
+        "Only works for unsigned integral types");
     for (auto& it : v) {
         pred += it -= pred; // or std::swap(it, pred) ; it = pred - it;
         it = mags(it);
@@ -245,12 +246,16 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
     Bitstream s(result);
     const uint8_t* xlut = xx[bsize];
     const uint8_t* ylut = yy[bsize];
-    size_t bands = image.size() / xsize / ysize;
+    const size_t bands = image.size() / xsize / ysize;
     // Nominal bit length
-    constexpr uint8_t ubits = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+    const constexpr uint8_t ubits = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     std::vector<size_t> runbits(bands, sizeof(T)*8 - 1); // Running code length, start with nominal value
     std::vector<T> prev(bands, 0u);      // Previous value per band
     std::vector<T> group(bsize * bsize); // Current 2D group to encode, as vector
+
+    std::vector<size_t> offsets(group.size());
+    for (size_t i = 0; i < offsets.size(); i++)
+        offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
 
     uint64_t saved(0); // bits saved
     uint64_t saved_count(0); // blocks with bits saved
@@ -260,12 +265,13 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
             size_t loc = (y * xsize + x) * bands; // Top-left pixel address
             for (size_t c = 0; c < bands; c++) { // blocks are band interleaved
                 // Collect the block for this band
-                for (size_t i = 0; i < group.size(); i++)
-                    group[i] = image[loc + c + (ylut[i] * xsize + xlut[i]) * bands];
-                // Subtract the main group values
-                if (mb >= 0 && mb != c)
-                    for (size_t i = 0; i < group.size(); i++)
-                        group[i] -= image[loc + mb + (ylut[i] * xsize + xlut[i]) * bands];
+                for (size_t i = 0; i < group.size(); i++) {
+                    group[i] = image[loc + c + offsets[i]];
+                    // Subtract the main band values
+                    if (mb >= 0 && mb != c)
+                        group[i] -= image[loc + mb + offsets[i]];
+                }
+
                 // Delta with low sign group encode
                 prev[c] = dsign(group, prev[c]);
                 uint64_t maxval = *max_element(group.begin(), group.end());
@@ -311,7 +317,7 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
 
                 // Number of bits after the fist 1
                 size_t bits = ilogb(maxval);
-                if (bits == runbits[c])
+                if (runbits[c] == bits)
                     s.push(0u, 1); // Same as before, just a zero bit
                 else {
                     s.push(bits * 2 | 1, ubits + 1); // change bit + len on ubits
@@ -358,8 +364,12 @@ std::vector<T> unsin(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
     std::vector<T> group(bsize * bsize);
     const uint8_t* xlut = xx[bsize];
     const uint8_t* ylut = yy[bsize];
-    constexpr int ubits = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-    std::vector<size_t> runbits(bands, sizeof(T)*8 - 1);
+    const constexpr int ubits = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+    std::vector<size_t> runbits(bands, sizeof(T) * 8 - 1);
+
+    std::vector<size_t> offsets(group.size());
+    for (size_t i = 0; i < offsets.size(); i++)
+        offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
 
     for (size_t y = 0; (y + bsize) <= ysize; y += bsize) {
         for (size_t x = 0; (x + bsize) <= xsize; x += bsize) {
@@ -370,7 +380,7 @@ std::vector<T> unsin(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                     s.pull(runbits[c], ubits);
                     bits = runbits[c];
                 }
-                uint64_t val = 0;
+                uint64_t val;
                 if (0 == bits) { // 0 or 1
                     if (0 == s.get()) // All 0s
                         fill(group.begin(), group.end(), 0);
@@ -403,14 +413,12 @@ std::vector<T> unsin(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                 }
                 prev[c] = undsign(group, prev[c]);
                 for (size_t i = 0; i < group.size(); i++)
-                    image[loc + c + (ylut[i] * xsize + xlut[i]) * bands] = group[i];
+                    image[loc + c + offsets[i]] = group[i];
             }
-            if (mb >= 0)
-                for (int c = 0; c < bands; c++)
-                    if (mb != c)
-                        for (size_t i = 0; i < group.size(); i++)
-                            image[loc + c + (ylut[i] * xsize + xlut[i]) * bands] +=
-                            image[loc + mb + (ylut[i] * xsize + xlut[i]) * bands];
+            for (int c = 0; c < bands; c++)
+                if (mb >= 0 && mb != c)
+                    for (size_t i = 0; i < group.size(); i++)
+                        image[loc + c + offsets[i]] += image[loc + mb + offsets[i]];
         }
     }
     return image;

@@ -1,6 +1,7 @@
 #include "bmap.h"
 #include <iostream>
 #include <algorithm>
+#include <cassert>
 
 const uint8_t Bitstream::mask[9] = {
     0,
