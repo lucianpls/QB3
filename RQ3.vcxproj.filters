@@ -14,7 +14,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="SiBi.cpp">
+    <ClCompile Include="test_rq3.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="bmap.cpp">
