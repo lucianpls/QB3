@@ -98,7 +98,7 @@ Split the 64bit group in four 16bit quads, each will represent a 4x4 area. Each 
 
  - Tertiary encoding  
 Separate the quad in two byes. At least one of the bytes is all 0 or all 1 bits. All encodings are shorter than the 16 bits necessary otherwise.
-We encode the state of each byte using two prefix bits. 0b00 is a byte with all 0s, 0b11 is a byte with all 1s, 0b01 is any byte value > 127 and 0b10 is any byte value <= 127. Given that at least one of the two bytes is all 0s or all 1s, there are only 10 valid prefix combinations. These are further encoded into codewords using abbreviated binary.
+We encode the state of each byte using two prefix bits. 0b00 is a byte with all 0s, 0b11 is a byte with all 1s, 0b01 is any byte value > 127 and 0b10 is any byte value <= 127. Given that one of the two bytes is all 0s or all 1s, there are 10 valid prefix combinations. These are further encoded into codewords using abbreviated binary.
 
 |Prefix |Codeword|Rotated|
 |----|---:|---:|
