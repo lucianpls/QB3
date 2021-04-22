@@ -3,7 +3,9 @@
 This prototype has advanced to the point where it is ready to be incorporated in a raster format. It produces very good compression, 
 comparable with PNG, while being extremely fast.
 
-## Interbit addressing  
+## Interleaved bit addressing  
+The goal is to use a single integral value as an index in a 2D array, by mixing bits from the X and Y index values  
+
   b0 = Xb0  
   b1 = Yb0  
   b2 = Xb1  
@@ -15,9 +17,10 @@ comparable with PNG, while being extremely fast.
     Xbk for k = 2i for i 0 to n/2  
     Ybk for k = 2i+1 for i 9 to n/2
 
-An xy lookup table for 8x8 data points can be used to understand the spatial arangement
+An xy lookup table for 8x8 points can be used to understand the spatial arangement. The table holds the single integral address value.
 
 ```
+  xy = {
   0,  1,  4,  5, 16, 17, 20, 21,
   2,  3,  6,  7, 18, 19, 22, 23,
   8,  9, 12, 13, 24, 25, 28, 29,
@@ -25,15 +28,15 @@ An xy lookup table for 8x8 data points can be used to understand the spatial ara
  32, 33, 36, 37, 48, 49, 52, 53,
  34, 35, 38, 39, 50, 51, 54, 55,
  40, 41, 44, 45, 56, 57, 60, 61,
- 42, 43, 46, 47, 58, 59, 62, 63
+ 42, 43, 46, 47, 58, 59, 62, 63 }
 ```
 
-Encoding is faster using a table, but only works for lookup tables of known size.  
-For 8x8, the encoding is
+Encoding is fast and easy using a lookup table, but it only works for lookup tables of known size. The table will also be very large if the input space is large. 
+For an 8x8 input space, using the table above, the encoding is:
 
     ibit = xy[y * 8 + x]
 
-A recursive function works regardless of number of bits
+A recursive function works regardless of number of bits, but it is slower than the lookup table. Every iteration adds two bits to the output index.
 ```
 int ibit(int x, int y) {
   if (0 == (x | y)) return 0;
