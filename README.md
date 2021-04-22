@@ -3,7 +3,7 @@
 This prototype has advanced to the point where it is ready to be incorporated in a raster format. It produces very good compression, 
 comparable with PNG, while being extremely fast.
 
-## Interleaved bit addressing  
+## Bit Interleaved Index  
 The goal is to use a single integral value as an index in a 2D array, by mixing bits from the X and Y index values  
 
   b0 = Xb0  
@@ -45,8 +45,9 @@ int ibit(int x, int y) {
 ```
 
 The bit interleaved addressing can be extended to many dimensions.  
-For 3D, every third bit is for Z.  A table for 4x4x4, 64 points, would be:
+For three dimensions, every third bit is for Z.  A lookup table for 4x4x4, 64 points, will be:
 ```
+xyz = {
 # Z = 0
   0,  1,  8,  9,
   2,  3, 10, 11,
@@ -66,26 +67,24 @@ For 3D, every third bit is for Z.  A table for 4x4x4, 64 points, would be:
  36, 37, 44, 45,
  38, 39, 46, 47,
  52, 53, 60, 61,
- 54, 55, 62, 63
+ 54, 55, 62, 63 }
 
 
  ibit = xyz[z * 16 + y * 4 + x]
 ```
-
-This indexing reduces the spatial distance, not the Hamming distance like Gray code. 
-It is probably non-optimal, as an area filling line would be.  But it is simpler, 
-and simpler to calculate
+A recursive index calculation function is also simple to write.  
+This type of indexing reduces the spatial distance between successive points, not the Hamming distance like Gray code. 
+It is probably suboptimal for this role, an area filling line would be better. But it is simpler to understand.
 
 ## Bitmap entropy encoding
 
-When the datapoints are bits, the 8x8 2D group fits in a 64bit integer, a size which is available in most CPUs. The output is assumed to be a bit stream.  
-Every byte of the 64bit int represents a 4x2 group of pixels. Since they are close to each other, they tend to be either all 0s or all 1s.  
-The encoding uses this feature to store groups of 8x8 into a smaller number of bytes, if possible.
+When the datapoints are bits, an 8x8 group of values fits in a 64bit integer, a size which is available in most CPUs. The output is assumed to be a bit stream.  Every byte of the 64bit int represents a 4x2 group of pixels. Since they are close to each other, they tend to be either all 0s or all 1s.  
+The encoding uses this feature to store groups of 8x8 into a smaller number of bytes, if possible. Each such group of 8x8 input bits is entropy encoded individually, using a three level prefix code.
 
 - Primary encoding
 It is done for each 64 bit (8x8) group. The 64bit value to be encoded is *val*. The encoding prefix has two bits.  
-  - 0b00 if *val* has all 0 bits
-  - 0b11 if *val* has all 1 bits
+  - 0b00 if all bits are 0
+  - 0b11 if all bits are 1
   - 0b10 + secondary encoding, if at least two of the 8 bytes contain all 0 or all 1 bits
   - 0b01 + *val*, in little endian, otherwise
 
