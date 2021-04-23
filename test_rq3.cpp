@@ -40,15 +40,19 @@ void check(vector<uint8_t> &image, size_t bsize, uint64_t m) {
     auto v = sincode(img, xsize, ysize, bsize, 0);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
-    cout << "Encoded " << sizeof(T) * 8 << " size is " << v.size() << endl
-        << "\tCompressed to " << float(v.size()) * 100 / image.size() / sizeof(T) << endl
-        << "\tTook " << time_span << " seconds" << endl;
+
+    //cout << "Encoded " << sizeof(T) * 8 << " size is " << v.size()
+    //    << "\tCompressed to " << float(v.size()) * 100 / image.size() / sizeof(T)
+    //    << "\tTook " << time_span << " seconds.";
+
+    cout << float(v.size()) * 100 / image.size() / sizeof(T) << "\t" << time_span << "\t";
+
 
     t1 = high_resolution_clock::now();
     auto re = unsin<T>(v, xsize, ysize, bands, bsize, 0);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
-    cout << "Decode took " << time_span << " seconds" << endl;
+    cout << time_span;
 
     if (img != re) {
         for (size_t i = 0; i < img.size(); i++)
@@ -56,6 +60,35 @@ void check(vector<uint8_t> &image, size_t bsize, uint64_t m) {
                 cout << "Difference at " << i << " "
                 << img[i] << " " << re[i] << endl;
     }
+}
+
+int test(string fname) {
+	FILE* f;
+	if (fopen_s(&f, fname.c_str(), "rb") || !f) {
+		cerr << "Can't open input file\n";
+		exit(errno);
+	}
+	fseek(f, 0, SEEK_END);
+	auto fsize = ftell(f);
+	fseek(f, 0, SEEK_SET);
+	std::vector<uint8_t> src(fsize);
+	storage_manager source = { src.data(), src.size() };
+	fread(source.buffer, fsize, 1, f);
+	fclose(f);
+	Raster raster;
+	auto error_message = image_peek(source, raster);
+	if (error_message) {
+		cerr << error_message << endl;
+		exit(1);
+	}
+	//cout << "Size is " << raster.size.x << "x" << raster.size.y << "@" << raster.size.c << endl;
+
+	codec_params params(raster);
+	std::vector<uint8_t> image(params.get_buffer_size());
+	stride_decode(params, source, image.data());
+
+	check<uint8_t>(image, 4, 1);
+    return 0;
 }
 
 int main(int argc, char **argv)
@@ -123,8 +156,16 @@ int main(int argc, char **argv)
 
     if (test_RQ3) {
         if (argc < 2) {
-            cerr << "Need an input image, JPEG or PNG\n";
-            exit(1);
+            string fname;
+            for (;;) {
+                getline(cin, fname);
+                if (fname.empty())
+                    break;
+                cout << fname << '\t';
+                test(fname);
+                cout << endl;
+            }
+            return 0;
         }
 
         string fname = argv[1];
@@ -154,14 +195,13 @@ int main(int argc, char **argv)
 
         // From here on, test the algorithm for different data types
         int bsize = 4;
-        check<uint64_t>(image, bsize, 0x100000000000000u);
-        check<uint64_t>(image, bsize, 5);
         check<uint64_t>(image, bsize, 1ull << 56);
+        check<uint64_t>(image, bsize, 5);
         check<uint32_t>(image, bsize, 5);
         check<uint32_t>(image, bsize, 1ull << 24);
         check<uint16_t>(image, bsize, 5);
         check<uint16_t>(image, bsize, 1ull << 8);
-        check<uint8_t> (image, bsize, 1);
+        check<uint8_t>(image, bsize, 1);
     }
 
     return 0;
