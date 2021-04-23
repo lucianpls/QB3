@@ -167,7 +167,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="bmap.cpp" />
-    <ClCompile Include="test_rq3.cpp" />
+    <ClCompile Include="test_qb3.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="bmap.h" />
