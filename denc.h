@@ -240,8 +240,9 @@ static const uint8_t* yy[9] = { yp2, yp2, yp2, y3, yp2, y5, y6, y7, yp2 };
 // only the reference number of bits
 template <typename T = uint8_t>
 std::vector<uint8_t> sincode(const std::vector<T>& image,
-    size_t xsize, size_t ysize, size_t bsize, int mb = 1)
+    size_t xsize, size_t ysize, int mb = 1)
 {
+    static const size_t bsize = 4;
     std::vector<uint8_t> result;
     Bitstream s(result);
     const uint8_t* xlut = xx[bsize];
@@ -356,8 +357,9 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
 
 template<typename T = uint8_t>
 std::vector<T> unsin(std::vector<uint8_t>& src, size_t xsize, size_t ysize, 
-    size_t bands, size_t bsize, int mb = 1)
+    size_t bands, int mb = 1)
 {
+    static const size_t bsize = 4;
     std::vector<T> image(xsize * ysize * bands);
     Bitstream s(src);
     std::vector<T> prev(bands, 0);
