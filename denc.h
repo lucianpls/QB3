@@ -302,17 +302,49 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
                 //}
 
                 if (maxval < 4) { // Doesn't always have 2 detection bits
+                    uint64_t accum = 0;
+                    size_t abits = 0;
                     if (runbits[c] == 1)
-                        s.push(0u, 1); // Same, just one bit
+                        abits = 1; // Same, just one zero bit
                     else {
-                        s.push(3u, ubits + 1); // change flag, + 1 as ubit len
+                        // change flag, + 1 as ubit len
+                        accum = 3;
+                        abits = ubits + 1;
                         runbits[c] = 1;
                     }
-                    for (auto it : group)
-                        if (it < 2)
-                            s.push(it * 3u, 1ull + it);
-                        else
-                            s.push(((it & 1) << 2) | 1u, 3);
+                    const static uint64_t c2codes[] = { 0, 3, 1, 5 };
+                    const static size_t  c2sizes[] = { 1, 2, 3, 3 };
+                    for (auto it : group) {
+                        accum |= c2codes[it] << abits;
+                        abits += c2sizes[it];
+                    }
+
+                    s.push(accum, abits);
+                    continue;
+                }
+
+                // This is optional, makes encoding faster
+                if (maxval < 8) {
+                    // Encoded data is max 64bits
+                    // Push the code len first, so it wont't overflow the accumulator
+                    if (runbits[c] == 2)
+                        s.push(0u, 1);
+                    else {
+                        s.push(5u, ubits + 1);
+                        runbits[c] = 2;
+                    }
+
+                    uint64_t accum = 0;
+                    size_t abits = 0;
+                    const static uint64_t c3codes[] = { 0b10, 0b11, 0b001, 0b101,
+                        0b0000, 0b0100, 0b1000, 0b1100 };
+                    const static size_t  c3sizes[] = { 2, 2, 3, 3, 4, 4, 4, 4 };
+                    for (auto it : group) {
+                        accum |= c3codes[it] << abits;
+                        abits += c3sizes[it];
+                    }
+
+                    s.push(accum, abits);
                     continue;
                 }
 
@@ -339,13 +371,14 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
                     }
                     else { // last half, least likely, long codewords
                         val &= mask[bits];
-                        if (bits < 63) {
-                            val = (val >> 2) | ((val & 0b11) << bits);
-                            s.push(val, bits + 2); // starts with 00, rotated two bits
-                        }
-                        else { // bits == 63, can't push 65 bits in one call
+                        if (sizeof(T) == 8 && bits == 63) {
+                            // can't push 65 bits in a single call
                             s.push(val >> 2, bits);
                             s.push(val & 0b11, 2);
+                        } 
+                        else {
+                            val = (val >> 2) | ((val & 0b11) << bits);
+                            s.push(val, bits + 2); // starts with 00, rotated two bits
                         }
                     }
                 }

@@ -28,7 +28,7 @@ vector<T> to(vector<uint8_t> &v, T m) {
 }
 
 template<typename T>
-void check(vector<uint8_t> &image, const Raster &raster, uint64_t m) {
+void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_band = 0) {
     size_t xsize = raster.size.x;
     size_t ysize = raster.size.y;
     size_t bands = raster.size.c;
@@ -37,7 +37,7 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m) {
 
     auto img = to(image, static_cast<T>(m));
     t1 = high_resolution_clock::now();
-    auto v = sincode(img, xsize, ysize, 0);
+    auto v = sincode(img, xsize, ysize, main_band);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
 
@@ -45,11 +45,12 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m) {
     //    << "\tCompressed to " << float(v.size()) * 100 / image.size() / sizeof(T)
     //    << "\tTook " << time_span << " seconds.";
 
-    cout << float(v.size()) * 100 / image.size() / sizeof(T) << "\t" << time_span << "\t";
-
+    cout << sizeof(T) << '\t' 
+        << float(v.size()) * 100 / image.size() / sizeof(T) << "\t" 
+        << time_span << "\t";
 
     t1 = high_resolution_clock::now();
-    auto re = unsin<T>(v, xsize, ysize, bands, 0);
+    auto re = unsin<T>(v, xsize, ysize, bands, main_band);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
     cout << time_span;
@@ -58,7 +59,7 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m) {
         for (size_t i = 0; i < img.size(); i++)
             if (img[i] != re[i])
                 cout << "Difference at " << i << " "
-                << img[i] << " " << re[i] << endl;
+                    << img[i] << " " << re[i] << endl;
     }
 }
 
@@ -87,7 +88,7 @@ int test(string fname) {
 	std::vector<uint8_t> image(params.get_buffer_size());
 	stride_decode(params, source, image.data());
 
-	check<uint8_t>(image, raster, 1);
+    check<uint8_t>(image, raster, 1, 1);
     return 0;
 }
 
@@ -194,20 +195,19 @@ int main(int argc, char **argv)
         stride_decode(params, source, image.data());
 
         // From here on, test the algorithm for different data types
-        int bsize = 4;
-        //check<uint64_t>(image, raster, 1ull << 56); 
-        //cout << endl;
-        //check<uint64_t>(image, raster, 5);
-        //cout << endl;
-        //check<uint32_t>(image, raster, 5);
-        //cout << endl;
-        //check<uint32_t>(image, raster, 1ull << 24);
-        //cout << endl;
-        //check<uint16_t>(image, raster, 5);
-        //cout << endl;
-        //check<uint16_t>(image, raster, 1ull << 8);
-        //cout << endl;
-        check<uint8_t>(image, raster, 1);
+        check<uint64_t>(image, raster, 1ull << 56); 
+        cout << endl;
+        check<uint64_t>(image, raster, 5);
+        cout << endl;
+        check<uint32_t>(image, raster, 5);
+        cout << endl;
+        check<uint32_t>(image, raster, 1ull << 24);
+        cout << endl;
+        check<uint16_t>(image, raster, 5);
+        cout << endl;
+        check<uint16_t>(image, raster, 1ull << 8);
+        cout << endl;
+        check<uint8_t>(image, raster, 1, 1);
         cout << endl;
     }
 
