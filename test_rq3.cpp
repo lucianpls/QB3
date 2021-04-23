@@ -28,10 +28,10 @@ vector<T> to(vector<uint8_t> &v, T m) {
 }
 
 template<typename T>
-void check(vector<uint8_t> &image, size_t bsize, uint64_t m) {
-    size_t xsize = 3776;
-    size_t ysize = 2520;
-    size_t bands = 3;
+void check(vector<uint8_t> &image, const Raster &raster, size_t bsize, uint64_t m) {
+    size_t xsize = raster.size.x;
+    size_t ysize = raster.size.y;
+    size_t bands = raster.size.c;
     high_resolution_clock::time_point t1, t2;
     double time_span;
 
@@ -87,7 +87,7 @@ int test(string fname) {
 	std::vector<uint8_t> image(params.get_buffer_size());
 	stride_decode(params, source, image.data());
 
-	check<uint8_t>(image, 4, 1);
+	check<uint8_t>(image, raster, 4, 1);
     return 0;
 }
 
@@ -195,13 +195,20 @@ int main(int argc, char **argv)
 
         // From here on, test the algorithm for different data types
         int bsize = 4;
-        check<uint64_t>(image, bsize, 1ull << 56);
-        check<uint64_t>(image, bsize, 5);
-        check<uint32_t>(image, bsize, 5);
-        check<uint32_t>(image, bsize, 1ull << 24);
-        check<uint16_t>(image, bsize, 5);
-        check<uint16_t>(image, bsize, 1ull << 8);
-        check<uint8_t>(image, bsize, 1);
+        //check<uint64_t>(image, raster, bsize, 1ull << 56); 
+        //cout << endl;
+        //check<uint64_t>(image, raster, bsize, 5);
+        //cout << endl;
+        //check<uint32_t>(image, raster, bsize, 5);
+        //cout << endl;
+        //check<uint32_t>(image, raster, bsize, 1ull << 24);
+        //cout << endl;
+        //check<uint16_t>(image, raster, bsize, 5);
+        //cout << endl;
+        //check<uint16_t>(image, raster, bsize, 1ull << 8);
+        //cout << endl;
+        check<uint8_t>(image, raster, bsize, 1);
+        cout << endl;
     }
 
     return 0;
