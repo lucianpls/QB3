@@ -45,7 +45,7 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
     //    << "\tCompressed to " << float(v.size()) * 100 / image.size() / sizeof(T)
     //    << "\tTook " << time_span << " seconds.";
 
-    cout << sizeof(T) << '\t' 
+    cout << sizeof(T) << '\t' << v.size() << "\t"
         << float(v.size()) * 100 / image.size() / sizeof(T) << "\t" 
         << time_span << "\t";
 
@@ -195,9 +195,9 @@ int main(int argc, char **argv)
         stride_decode(params, source, image.data());
 
         // From here on, test the algorithm for different data types
-        check<uint64_t>(image, raster, 1ull << 56); 
-        cout << endl;
         check<uint64_t>(image, raster, 5);
+        cout << endl;
+        check<uint64_t>(image, raster, 1ull << 56);
         cout << endl;
         check<uint32_t>(image, raster, 5);
         cout << endl;
@@ -206,6 +206,14 @@ int main(int argc, char **argv)
         check<uint16_t>(image, raster, 5);
         cout << endl;
         check<uint16_t>(image, raster, 1ull << 8);
+        cout << endl;
+
+        cout << "Data type\n";
+        check<uint64_t>(image, raster, 1, 1);
+        cout << endl;
+        check<uint32_t>(image, raster, 1, 1);
+        cout << endl;
+        check<uint16_t>(image, raster, 1, 1);
         cout << endl;
         check<uint8_t>(image, raster, 1, 1);
         cout << endl;

@@ -22,9 +22,9 @@
     <VCProjectVersion>16.0</VCProjectVersion>
     <ProjectGuid>{9A4BFBDD-DF21-46B8-9831-AFC15D5E182D}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>RQ3</RootNamespace>
+    <RootNamespace>QB3</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <ProjectName>RQ3</ProjectName>
+    <ProjectName>QB3</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
