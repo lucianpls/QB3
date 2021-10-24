@@ -3,8 +3,9 @@
 #include <cinttypes>
 #include <limits>
 #include <functional>
+#include <intrin.h>
 
-namespace SiBi {
+namespace QB3 {
 // Masks, from 0 to 64 bits
 #define M(v) (~0ull >> (64 - (v)))
 // A row of 8 masks, starting with mask(n)
@@ -15,10 +16,16 @@ namespace SiBi {
 
 // rank of top set bit
 static size_t ilogb(uint64_t val) {
-    for (int i = 1; i < 65; i++)
-        if (val <= mask[i])
-            return i - 1;
-    return ~0; // not reached
+#if defined(_WIN32)
+    return 63 - __lzcnt64(val);
+#else
+// Linux
+    return 63 - __builtin_clzll(val);
+    //for (int i = 1; i < 65; i++)
+    //    if (val <= mask[i])
+    //        return i - 1;
+    //return ~0; // not reached
+#endif
 }
 
 // Greater common denominator
@@ -59,11 +66,9 @@ T gcode(const std::vector<T>& vals) {
     v.reserve(vals.size());
     for (auto val : vals) {
         // ignore the zeros
-        if (val == 0)
-            continue;
+        if (val == 0) continue;
         // if a value is 1 or -1, the only common factor will be 1
-        if (val < 3)
-            return 1;
+        if (val < 3) return 1;
         v.push_back(revs(val));
         push_heap(v.begin(), v.end(), std::greater<T>());
     }
@@ -143,6 +148,23 @@ static T undsign(std::vector<T>& v, T pred) {
     for (auto& it : v)
         it = pred += smag(it);
     return pred;
+}
+
+
+// If the front of v contains values higher than m and the rest are under or equal 
+// return the position of the last value higher than m.
+// Otherwise return the one after the last position
+template<typename T>
+static int step(const std::vector<T>& v, const T m = 0) {
+    const int sz = static_cast<int>(v.size());
+    int i = 0;
+    while (i < sz && v[i] > m)
+        i++;
+    int s = i; // Bit position of last high value
+    while (i < sz && v[i] <= m)
+        i++;
+    // If the loop completed then it's a step vector
+    return (i == sz) ? s : sz;
 }
 
 // Traversal order tables, first for powers of two
@@ -238,35 +260,37 @@ static const uint8_t* yy[9] = { yp2, yp2, yp2, y3, yp2, y5, y6, y7, yp2 };
 // Encoding with three codeword lenghts
 // Does not need the maxvalue to be encoded
 // only the reference number of bits
-template <typename T = uint8_t>
+template <typename T = uint8_t, size_t B = 4>
 std::vector<uint8_t> sincode(const std::vector<T>& image,
     size_t xsize, size_t ysize, int mb = 1)
 {
-    static const size_t bsize = 4;
     std::vector<uint8_t> result;
+    result.reserve(image.size() * sizeof(T));
     Bitstream s(result);
-    const uint8_t* xlut = xx[bsize];
-    const uint8_t* ylut = yy[bsize];
+    const uint8_t* xlut = xx[B];
+    const uint8_t* ylut = yy[B];
     const size_t bands = image.size() / xsize / ysize;
     // Nominal bit length
-    const constexpr uint8_t ubits = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+    constexpr size_t ubits = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+    constexpr size_t B2(B * B);
     std::vector<size_t> runbits(bands, sizeof(T)*8 - 1); // Running code length, start with nominal value
     std::vector<T> prev(bands, 0u);      // Previous value per band
-    std::vector<T> group(bsize * bsize); // Current 2D group to encode, as vector
+    std::vector<T> group(B2); // Current 2D group to encode, as vector
+    std::vector<size_t> offsets(B2);
 
-    std::vector<size_t> offsets(group.size());
-    for (size_t i = 0; i < offsets.size(); i++)
+    for (size_t i = 0; i < B2; i++)
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
 
     uint64_t saved(0); // bits saved
     uint64_t saved_count(0); // blocks with bits saved
+    int nsteps = 0;
 
-    for (size_t y = 0; (y + bsize) <= ysize; y += bsize) {
-        for (size_t x = 0; (x + bsize) <= xsize; x += bsize) {
+    for (size_t y = 0; (y + B) <= ysize; y += B) {
+        for (size_t x = 0; (x + B) <= xsize; x += B) {
             size_t loc = (y * xsize + x) * bands; // Top-left pixel address
             for (size_t c = 0; c < bands; c++) { // blocks are band interleaved
                 // Collect the block for this band
-                for (size_t i = 0; i < group.size(); i++) {
+                for (size_t i = 0; i < B2; i++) {
                     group[i] = image[loc + c + offsets[i]];
                     // Subtract the main band values
                     if (mb >= 0 && mb != c)
@@ -276,20 +300,22 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
                 // Delta with low sign group encode
                 prev[c] = dsign(group, prev[c]);
                 uint64_t maxval = *max_element(group.begin(), group.end());
-                if (maxval < 2) {
-                    // Special encoding, 000 0 for all zeros, or 000 1 followed by bit vector for 0 and 1
-                    if (runbits[c] == 0)
-                        s.push(maxval << 1, 2); // one zero bit prefix, same as before and the all zero flag
-                    else {
-                        s.push((maxval << (ubits + 1)) + 1, ubits + 2); // one 1 bit, then the 0 ubit len, then the zero flag
+                if (maxval < 2) { // only 1 and 0
+                    size_t abits = 2;
+                    uint64_t acc = maxval << 1;
+                    if (0 != runbits[c]) { // switch size
+                        acc = (acc << ubits) + 1;
+                        abits = ubits + 2;
                         runbits[c] = 0;
                     }
-                    if (1 == maxval) {
-                        uint64_t val = 0;
-                        for (auto it = group.crbegin(); it != group.crend(); it++)
-                            val = (val << 1) + *it;
-                        s.push(val, group.size());
+                    if (0 == maxval) { // Special encoding, single bit 0 means all zero
+                        s.push(acc, abits);
+                        continue;
                     }
+                    uint64_t val = 0;
+                    for (auto it = group.crbegin(); it != group.crend(); it++)
+                        val = (val << 1) + *it;
+                    s.push(acc + (val << abits), abits + B2);
                     continue;
                 }
 
@@ -301,49 +327,47 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
                 //    }
                 //}
 
-                if (maxval < 4) { // Doesn't always have 2 detection bits
+                //nsteps += (step(group, static_cast<T>(mask[ilogb(maxval)])) < group.size());
+
+                if (maxval < 4) { // 2 bit nominal size, doesn't always have 2 detection bits
                     uint64_t accum = 0;
                     size_t abits = 0;
                     if (runbits[c] == 1)
                         abits = 1; // Same, just one zero bit
-                    else {
-                        // change flag, + 1 as ubit len
+                    else { // change flag, + 1 as ubit len
                         accum = 3;
                         abits = ubits + 1;
                         runbits[c] = 1;
                     }
+                    const static size_t   c2sizes[] = { 1, 2, 3, 3 };
                     const static uint64_t c2codes[] = { 0, 3, 1, 5 };
-                    const static size_t  c2sizes[] = { 1, 2, 3, 3 };
                     for (auto it : group) {
                         accum |= c2codes[it] << abits;
                         abits += c2sizes[it];
                     }
-
                     s.push(accum, abits);
                     continue;
                 }
 
-                // This is optional, makes encoding faster
+                // This is optional, faster encoding
                 if (maxval < 8) {
-                    // Encoded data is max 64bits
-                    // Push the code len first, so it wont't overflow the accumulator
+                    // Encoded data size is 64bits max
+                    // Push the code len first, so it won't overflow the accumulator
                     if (runbits[c] == 2)
                         s.push(0u, 1);
                     else {
                         s.push(5u, ubits + 1);
                         runbits[c] = 2;
                     }
-
                     uint64_t accum = 0;
                     size_t abits = 0;
+                    const static size_t   c3sizes[] = { 2, 2, 3, 3, 4, 4, 4, 4 };
                     const static uint64_t c3codes[] = { 0b10, 0b11, 0b001, 0b101,
                         0b0000, 0b0100, 0b1000, 0b1100 };
-                    const static size_t  c3sizes[] = { 2, 2, 3, 3, 4, 4, 4, 4 };
                     for (auto it : group) {
                         accum |= c3codes[it] << abits;
                         abits += c3sizes[it];
                     }
-
                     s.push(accum, abits);
                     continue;
                 }
@@ -361,11 +385,11 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
                 // The bottom bits are read as a group
                 // which starts with the two detection bits
                 for (uint64_t val : group) {
-                    if (val <= mask[bits - 1]) { // short codewords
+                    if (val <= mask[bits - 1]) { // First quarter, short codewords
                         val |= 1ull << (bits - 1);
                         s.push(val, bits); // Starts with 1
                     }
-                    else if (val <= mask[bits]) { // Second quarter, nominal
+                    else if (val <= mask[bits]) { // Second quarter, nominal size
                         val = (val >> 1) | ((val & 1) << bits);
                         s.push(val, bits + 1); // starts with 01, rotated right one bit
                     }
@@ -385,6 +409,8 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
             }
         }
     }
+    if (nsteps)
+        fprintf(stderr, "Steps would save %d\n", nsteps / 8);
     return s.v;
 }
 
@@ -459,4 +485,4 @@ std::vector<T> unsin(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
     return image;
 }
 
-} // Namespace SiBi
+} // Namespace

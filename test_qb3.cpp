@@ -15,7 +15,7 @@
 
 using namespace std;
 using namespace chrono;
-using namespace SiBi;
+using namespace QB3;
 NS_ICD_USE
 
 template<typename T>
@@ -37,7 +37,7 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
 
     auto img = to(image, static_cast<T>(m));
     t1 = high_resolution_clock::now();
-    auto v = sincode(img, xsize, ysize, main_band);
+    auto v(sincode(img, xsize, ysize, main_band));
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
 
@@ -158,6 +158,7 @@ int main(int argc, char **argv)
     if (test_RQ3) {
         if (argc < 2) {
             string fname;
+            cout << "Provide input file name for testing\n";
             for (;;) {
                 getline(cin, fname);
                 if (fname.empty())
@@ -192,7 +193,15 @@ int main(int argc, char **argv)
 
         codec_params params(raster);
         std::vector<uint8_t> image(params.get_buffer_size());
+        auto t = high_resolution_clock::now();
         stride_decode(params, source, image.data());
+        auto time_span = duration_cast<duration<double>>(high_resolution_clock::now() - t).count();
+        cout << "Decode time " << time_span << endl;
+
+        cout << "Type" << '\t' << "Compressed" << "\t"
+            << "Ratio" << "\t"
+            << "Encode" << "\t"
+            << "Decode" << "\t" << endl << endl;
 
         // From here on, test the algorithm for different data types
         check<uint64_t>(image, raster, 5);
