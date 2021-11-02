@@ -37,7 +37,7 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
 
     auto img = to(image, static_cast<T>(m));
     t1 = high_resolution_clock::now();
-    auto v(sincode(img, xsize, ysize, main_band));
+    auto v(QB3::encode(img, xsize, ysize, main_band));
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
 
@@ -50,7 +50,7 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
         << time_span << "\t";
 
     t1 = high_resolution_clock::now();
-    auto re = unsin<T>(v, xsize, ysize, bands, main_band);
+    auto re = QB3::decode<T>(v, xsize, ysize, bands, main_band);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
     cout << time_span;

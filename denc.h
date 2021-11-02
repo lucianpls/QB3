@@ -105,20 +105,7 @@ T gcode(const std::vector<T>& vals) {
 // To keep the range exactly the same as two's complement, the magnitude of negative values is biased down by one (no negative zero)
 
 
-// These alternates use a conditional assignment that can't be predicted well
-// Change to mag-sign
-template<typename T>
-static T mags_alt(T v) {
-    return (v > (std::numeric_limits<T>::max() >> 1)) ? ~(v << 1) : (v << 1);
-}
-
-// Undo mag-sign
-template<typename T>
-static T smag_alt(T v) {
-    return (v & 1) ? ~(v >> 1) : (v >> 1);
-}
-
-// Change to mag-sign without conditionals, faster
+// Change to mag-sign without conditionals, fast
 template<typename T>
 static T mags(T v) {
     return (std::numeric_limits<T>::max() * (v >> (8 * sizeof(T) - 1))) ^ (v << 1);
@@ -132,7 +119,7 @@ static T smag(T v) {
 
 // Convert a sequence to mag-sign delta
 template<typename T, size_t B2 = 16>
-T dsign(T *v, T pred) {
+static T dsign(T *v, T pred) {
     static_assert(std::is_integral<T>::value && std::is_unsigned<T>::value,
         "Only works for unsigned integral types");
     for (int i = 0; i < B2; i++) {
@@ -142,15 +129,13 @@ T dsign(T *v, T pred) {
     return pred;
 }
 
-
 // Reverse mag-sign and delta
 template<typename T, size_t B2 = 16>
-T undsign(T *v, T pred) {
+static T undsign(T *v, T pred) {
     for (int i = 0; i < B2; i++)
         v[i] = pred += smag(v[i]);
     return pred;
 }
-
 
 // If the front of v contains values higher than m and the rest are under or equal 
 // return the position of the last value higher than m.
@@ -179,7 +164,7 @@ static const uint8_t ylut[16] = {0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3}
 
 // Encoding with three codeword lenghts
 template <typename T = uint8_t, size_t B = 4>
-std::vector<uint8_t> sincode(const std::vector<T>& image,
+std::vector<uint8_t> encode(const std::vector<T>& image,
     size_t xsize, size_t ysize, int mb = 1)
 {
     std::vector<uint8_t> result;
@@ -321,7 +306,7 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
 }
 
 template<typename T = uint8_t, size_t B = 4>
-std::vector<T> unsin(std::vector<uint8_t>& src, size_t xsize, size_t ysize, 
+std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize, 
     size_t bands, int mb = 1)
 {
     std::vector<T> image(xsize * ysize * bands);
