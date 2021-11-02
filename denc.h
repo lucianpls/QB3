@@ -168,99 +168,16 @@ static int step(const std::vector<T>& v, const T m = 0) {
     return (i == sz) ? s : sz;
 }
 
-// Traversal order tables, first for powers of two
-static const uint8_t xp2[64] = {
-    0, 1, 0, 1, 2, 3, 2, 3,
-    0, 1, 0, 1, 2, 3, 2, 3,
-    4, 5, 4, 5, 6, 7, 6, 7,
-    4, 5, 4, 5, 6, 7, 6, 7,
-    0, 1, 0, 1, 2, 3, 2, 3,
-    0, 1, 0, 1, 2, 3, 2, 3,
-    4, 5, 4, 5, 6, 7, 6, 7,
-    4, 5, 4, 5, 6, 7, 6, 7
-};
-
-static const uint8_t yp2[64] = {
-    0, 0, 1, 1, 0, 0, 1, 1,
-    2, 2, 3, 3, 2, 2, 3, 3,
-    0, 0, 1, 1, 0, 0, 1, 1,
-    2, 2, 3, 3, 2, 2, 3, 3,
-    4, 4, 5, 5, 4, 4, 5, 5,
-    6, 6, 7, 7, 6, 6, 7, 7,
-    4, 4, 5, 5, 4, 4, 5, 5,
-    6, 6, 7, 7, 6, 6, 7, 7
-};
-
-static const uint8_t x3[9] = {
-    0, 1, 0, 1, 2, 2, 0, 1, 2
-};
-static const uint8_t y3[9] = {
-    0, 0, 1, 1, 0, 1, 2, 2, 2
-};
-
-static const uint8_t x5[25] = {
-    0, 1, 0, 1, 2, 3, 2, 3,
-    0, 1, 0, 1, 2, 3, 2, 3,
-    4, 4, 4, 4,
-    0, 1, 2, 3, 4
-};
-
-static const uint8_t y5[25] = {
-    0, 0, 1, 1, 0, 0, 1, 1,
-    2, 2, 3, 3, 2, 2, 3, 3,
-    0, 1, 2, 3,
-    4, 4, 4, 4, 4
-};
-
-static const uint8_t x6[36] = {
-    0, 1, 0, 1, 2, 3, 2, 3,
-    0, 1, 0, 1, 2, 3, 2, 3,
-    4, 5, 4, 5, 4, 5, 4, 5,
-    0, 1, 0, 1, 2, 3, 2, 3,
-    4, 5, 4, 5
-};
-
-static const uint8_t y6[36] = {
-    0, 0, 1, 1, 0, 0, 1, 1,
-    2, 2, 3, 3, 2, 2, 3, 3,
-    0, 0, 1, 1, 2, 2, 3, 3,
-    4, 4, 5, 5, 4, 4, 5, 5,
-    4, 4, 5, 5
-};
-
-static const uint8_t x7[49] = {
-    0, 1, 0, 1, 2, 3, 2, 3,
-    0, 1, 0, 1, 2, 3, 2, 3,
-    4, 5, 4, 5, 6, 6,
-    4, 5, 4, 5, 6, 6,
-    0, 1, 0, 1, 2, 3, 2, 3,
-    0, 1, 2, 3,
-    4, 5, 4, 5, 6, 6,
-    4, 5, 6,
-};
-
-static const uint8_t y7[49] = {
-    0, 0, 1, 1, 0, 0, 1, 1,
-    2, 2, 3, 3, 2, 2, 3, 3,
-    0, 0, 1, 1, 0, 1,
-    2, 2, 3, 3, 2, 3,
-    4, 4, 5, 5, 4, 4, 5, 5,
-    6, 6, 6, 6,
-    4, 4, 5, 5, 4, 5,
-    6, 6, 6
-};
-
-static const uint8_t* xx[9] = { xp2, xp2, xp2, x3, xp2, x5, x6, x7, xp2 };
-static const uint8_t* yy[9] = { yp2, yp2, yp2, y3, yp2, y5, y6, y7, yp2 };
-
 // Block size should be 8, for noisy images 4 is better
 // 2 generates too much overhead
-// 16 might work for slow varying inputs, 
+// 16 might work for slow varying inputs
 // which would need the lookup tables extended
-// Works for non-power of two blocks, using custom tables
+
+// Traversal order tables
+static const uint8_t xlut[16] = {0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3};
+static const uint8_t ylut[16] = {0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3};
+
 // Encoding with three codeword lenghts
-// Does not need the maxvalue to be encoded
-// only the reference number of bits
 template <typename T = uint8_t, size_t B = 4>
 std::vector<uint8_t> sincode(const std::vector<T>& image,
     size_t xsize, size_t ysize, int mb = 1)
@@ -268,8 +185,6 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
     std::vector<uint8_t> result;
     result.reserve(image.size() * sizeof(T));
     Bitstream s(result);
-    const uint8_t* xlut = xx[B];
-    const uint8_t* ylut = yy[B];
     const size_t bands = image.size() / xsize / ysize;
     // Unit size bit length
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
@@ -321,16 +236,6 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
                     s.push(acc + (val << abits), abits + B2);
                     continue;
                 }
-
-                // Increase quanta!
-                //{
-                //    auto mv = gcode(group);
-                //    if (mv > 1) {
-                //        fprintf(stderr, "%llu vs %llu %llu\n", uint64_t(maxval / mv), uint64_t(maxval), uint64_t(mv));
-                //    }
-                //}
-
-                // nsteps += (step(group, static_cast<T>(mask[ilogb(maxval)])) < group.size());
 
                 if (maxval < 4) { // 2 bit nominal size, doesn't always have 2 detection bits
                     uint64_t accum = 0;
@@ -412,7 +317,7 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
             }
         }
     }
-    return s.v;
+    return result;
 }
 
 template<typename T = uint8_t, size_t B = 4>
@@ -425,8 +330,6 @@ std::vector<T> unsin(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
     // Elements in a group
     constexpr size_t B2(B * B);
     std::vector<T> group(B2);
-    const uint8_t* xlut = xx[B];
-    const uint8_t* ylut = yy[B];
 
     // Unit size bit length
     const constexpr int UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
