@@ -25,7 +25,7 @@
     <ClInclude Include="bmap.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="denc.h">
+    <ClInclude Include="QB3.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

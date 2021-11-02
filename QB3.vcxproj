@@ -171,7 +171,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="bmap.h" />
-    <ClInclude Include="denc.h" />
+    <ClInclude Include="QB3.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="README.md" />

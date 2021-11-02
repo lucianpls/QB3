@@ -11,7 +11,7 @@
 #include <icd_codecs.h>
 
 #include "bmap.h"
-#include "denc.h"
+#include "QB3.h"
 
 using namespace std;
 using namespace chrono;
