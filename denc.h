@@ -131,22 +131,23 @@ static T smag(T v) {
 }
 
 // Convert a sequence to mag-sign delta
-template<typename T>
-static T dsign(std::vector<T>& v, T pred) {
+template<typename T, size_t B2 = 16>
+T dsign(T *v, T pred) {
     static_assert(std::is_integral<T>::value && std::is_unsigned<T>::value,
         "Only works for unsigned integral types");
-    for (auto& it : v) {
-        pred += it -= pred; // or std::swap(it, pred) ; it = pred - it;
-        it = mags(it);
+    for (int i = 0; i < B2; i++) {
+        pred += v[i] -= pred; // or std::swap(v[i], pred); v[i] = pred - v[i] 
+        v[i] = mags(v[i]);
     }
     return pred;
 }
 
+
 // Reverse mag-sign and delta
-template<typename T>
-static T undsign(std::vector<T>& v, T pred) {
-    for (auto& it : v)
-        it = pred += smag(it);
+template<typename T, size_t B2 = 16>
+T undsign(T *v, T pred) {
+    for (int i = 0; i < B2; i++)
+        v[i] = pred += smag(v[i]);
     return pred;
 }
 
@@ -270,42 +271,44 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
     const uint8_t* xlut = xx[B];
     const uint8_t* ylut = yy[B];
     const size_t bands = image.size() / xsize / ysize;
-    // Nominal bit length
-    constexpr size_t ubits = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+    // Unit size bit length
+    constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+    // Elements in a group
     constexpr size_t B2(B * B);
-    std::vector<size_t> runbits(bands, sizeof(T)*8 - 1); // Running code length, start with nominal value
-    std::vector<T> prev(bands, 0u);      // Previous value per band
+
+    // Running code length, start with nominal value
+    std::vector<size_t> runbits(bands, sizeof(T) * 8 - 1);
+    std::vector<T> prev(bands, 0u);      // Previous value, per band
     std::vector<T> group(B2); // Current 2D group to encode, as vector
     std::vector<size_t> offsets(B2);
 
     for (size_t i = 0; i < B2; i++)
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
 
-    uint64_t saved(0); // bits saved
-    uint64_t saved_count(0); // blocks with bits saved
-    int nsteps = 0;
-
     for (size_t y = 0; (y + B) <= ysize; y += B) {
         for (size_t x = 0; (x + B) <= xsize; x += B) {
             size_t loc = (y * xsize + x) * bands; // Top-left pixel address
             for (size_t c = 0; c < bands; c++) { // blocks are band interleaved
+
                 // Collect the block for this band
-                for (size_t i = 0; i < B2; i++) {
-                    group[i] = image[loc + c + offsets[i]];
-                    // Subtract the main band values
-                    if (mb >= 0 && mb != c)
-                        group[i] -= image[loc + mb + offsets[i]];
+                if (mb >= 0 && mb != c) {
+                    for (size_t i = 0; i < B2; i++)
+                        group[i] = image[loc + offsets[i] + c] - image[loc + offsets[i] + mb];
+                }
+                else {
+                    for (size_t i = 0; i < B2; i++)
+                        group[i] = image[loc + offsets[i] + c];
                 }
 
-                // Delta with low sign group encode
-                prev[c] = dsign(group, prev[c]);
+                // Delta in low sign group encode
+                prev[c] = dsign(group.data(), prev[c]);
                 uint64_t maxval = *max_element(group.begin(), group.end());
                 if (maxval < 2) { // only 1 and 0
-                    size_t abits = 2;
+                    size_t abits = 2; // minimum
                     uint64_t acc = maxval << 1;
                     if (0 != runbits[c]) { // switch size
-                        acc = (acc << ubits) + 1;
-                        abits = ubits + 2;
+                        acc = (acc << UBITS) + 1;
+                        abits = UBITS + 2;
                         runbits[c] = 0;
                     }
                     if (0 == maxval) { // Special encoding, single bit 0 means all zero
@@ -327,16 +330,16 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
                 //    }
                 //}
 
-                //nsteps += (step(group, static_cast<T>(mask[ilogb(maxval)])) < group.size());
+                // nsteps += (step(group, static_cast<T>(mask[ilogb(maxval)])) < group.size());
 
                 if (maxval < 4) { // 2 bit nominal size, doesn't always have 2 detection bits
                     uint64_t accum = 0;
                     size_t abits = 0;
                     if (runbits[c] == 1)
                         abits = 1; // Same, just one zero bit
-                    else { // change flag, + 1 as ubit len
+                    else { // change size, + 1 as ubit len
                         accum = 3;
-                        abits = ubits + 1;
+                        abits = UBITS + 1;
                         runbits[c] = 1;
                     }
                     const static size_t   c2sizes[] = { 1, 2, 3, 3 };
@@ -355,8 +358,8 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
                     // Push the code len first, so it won't overflow the accumulator
                     if (runbits[c] == 2)
                         s.push(0u, 1);
-                    else {
-                        s.push(5u, ubits + 1);
+                    else { // switch size
+                        s.push(5u, UBITS + 1);
                         runbits[c] = 2;
                     }
                     uint64_t accum = 0;
@@ -377,7 +380,7 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
                 if (runbits[c] == bits)
                     s.push(0u, 1); // Same as before, just a zero bit
                 else {
-                    s.push(bits * 2 | 1, ubits + 1); // change bit + len on ubits
+                    s.push(bits * 2 | 1, UBITS + 1); // change bit + len on UBITS
                     runbits[c] = bits;
                 }
 
@@ -409,36 +412,37 @@ std::vector<uint8_t> sincode(const std::vector<T>& image,
             }
         }
     }
-    if (nsteps)
-        fprintf(stderr, "Steps would save %d\n", nsteps / 8);
     return s.v;
 }
 
-template<typename T = uint8_t>
+template<typename T = uint8_t, size_t B = 4>
 std::vector<T> unsin(std::vector<uint8_t>& src, size_t xsize, size_t ysize, 
     size_t bands, int mb = 1)
 {
-    static const size_t bsize = 4;
     std::vector<T> image(xsize * ysize * bands);
     Bitstream s(src);
     std::vector<T> prev(bands, 0);
-    std::vector<T> group(bsize * bsize);
-    const uint8_t* xlut = xx[bsize];
-    const uint8_t* ylut = yy[bsize];
-    const constexpr int ubits = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+    // Elements in a group
+    constexpr size_t B2(B * B);
+    std::vector<T> group(B2);
+    const uint8_t* xlut = xx[B];
+    const uint8_t* ylut = yy[B];
+
+    // Unit size bit length
+    const constexpr int UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     std::vector<size_t> runbits(bands, sizeof(T) * 8 - 1);
 
-    std::vector<size_t> offsets(group.size());
-    for (size_t i = 0; i < offsets.size(); i++)
+    std::vector<size_t> offsets(B2);
+    for (size_t i = 0; i < B2; i++)
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
 
-    for (size_t y = 0; (y + bsize) <= ysize; y += bsize) {
-        for (size_t x = 0; (x + bsize) <= xsize; x += bsize) {
+    for (size_t y = 0; (y + B) <= ysize; y += B) {
+        for (size_t x = 0; (x + B) <= xsize; x += B) {
             size_t loc = (y * xsize + x) * bands;
             for (int c = 0; c < bands; c++) {
                 uint64_t bits = runbits[c];
                 if (0 != s.get()) { // The bits change flag
-                    s.pull(runbits[c], ubits);
+                    s.pull(runbits[c], UBITS);
                     bits = runbits[c];
                 }
                 uint64_t val;
@@ -447,8 +451,8 @@ std::vector<T> unsin(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                         fill(group.begin(), group.end(), 0);
                     else { // 0 and 1s
                         s.pull(val, group.size());
-                        for (auto& it : group) {
-                            it = val & 1;
+                        for (int i = 0; i < B2; i++) {
+                            group[i] = val & 1;
                             val >>= 1;
                         }
                     }
@@ -472,7 +476,7 @@ std::vector<T> unsin(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                         }
                     }
                 }
-                prev[c] = undsign(group, prev[c]);
+                prev[c] = undsign(group.data(), prev[c]);
                 for (size_t i = 0; i < group.size(); i++)
                     image[loc + c + offsets[i]] = group[i];
             }
