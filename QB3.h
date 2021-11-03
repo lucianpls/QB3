@@ -4,6 +4,7 @@
 #include <limits>
 #include <functional>
 #include <intrin.h>
+#include <cassert>
 
 namespace QB3 {
 // Masks, from 0 to 64 bits
@@ -14,7 +15,7 @@ namespace QB3 {
 #undef R
 #undef M
 
-// rank of top set bit
+// rank of top set bit, returns -1 when val == 0
 static size_t ilogb(uint64_t val) {
 #if defined(_WIN32)
     return 63 - __lzcnt64(val);
@@ -171,6 +172,9 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
     result.reserve(image.size() * sizeof(T));
     Bitstream s(result);
     const size_t bands = image.size() / xsize / ysize;
+    assert(image.size() == xsize * ysize * bands);
+    assert(0 == xsize % B && 0 == ysize % B);
+
     // Unit size bit length
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     // Elements in a group
@@ -185,8 +189,10 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
     for (size_t i = 0; i < B2; i++)
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
 
-    for (size_t y = 0; (y + B) <= ysize; y += B) {
-        for (size_t x = 0; (x + B) <= xsize; x += B) {
+    //for (size_t y = 0; (y + B) <= ysize; y += B) {
+    //    for (size_t x = 0; (x + B) <= xsize; x += B) {
+    for (size_t y = 0; y < ysize; y += B) {
+        for (size_t x = 0; x < xsize; x += B) {
             size_t loc = (y * xsize + x) * bands; // Top-left pixel address
             for (size_t c = 0; c < bands; c++) { // blocks are band interleaved
 
@@ -202,10 +208,16 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
 
                 // Delta in low sign group encode
                 prev[c] = dsign(group.data(), prev[c]);
-                uint64_t maxval = *max_element(group.begin(), group.end());
+                const uint64_t maxval = *max_element(group.begin(), group.end());
+                // Top set bit
+                const size_t bits = ilogb(maxval);
+
+                uint64_t acc = 0;
+                size_t abits = 0;
+
                 if (maxval < 2) { // only 1 and 0
-                    size_t abits = 2; // minimum
-                    uint64_t acc = maxval << 1;
+                    abits = 2; // minimum
+                    acc = maxval << 1;
                     if (0 != runbits[c]) { // switch size
                         acc = (acc << UBITS) + 1;
                         abits = UBITS + 2;
@@ -222,60 +234,40 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                     continue;
                 }
 
-                if (maxval < 4) { // 2 bit nominal size, doesn't always have 2 detection bits
-                    uint64_t accum = 0;
-                    size_t abits = 0;
-                    if (runbits[c] == 1)
-                        abits = 1; // Same, just one zero bit
-                    else { // change size, + 1 as ubit len
-                        accum = 3;
-                        abits = UBITS + 1;
-                        runbits[c] = 1;
-                    }
+                // Class change, if needed
+                if (runbits[c] == bits)
+                    s.push(0u, 1); // Same as before, just a zero bit
+                else {
+                    s.push((bits << 1) + 1, UBITS + 1); // change bit + len on UBITS
+                    runbits[c] = bits;
+                }
+
+                if (1 == bits) { // 2 bit nominal size, doesn't always have 2 detection bits
                     const static size_t   c2sizes[] = { 1, 2, 3, 3 };
                     const static uint64_t c2codes[] = { 0, 3, 1, 5 };
                     for (auto it : group) {
-                        accum |= c2codes[it] << abits;
+                        acc |= c2codes[it] << abits;
                         abits += c2sizes[it];
                     }
-                    s.push(accum, abits);
+                    s.push(acc, abits);
                     continue;
                 }
 
                 // This is optional, faster encoding
-                if (maxval < 8) {
-                    // Encoded data size is 64bits max
-                    // Push the code len first, so it won't overflow the accumulator
-                    if (runbits[c] == 2)
-                        s.push(0u, 1);
-                    else { // switch size
-                        s.push(5u, UBITS + 1);
-                        runbits[c] = 2;
-                    }
-                    uint64_t accum = 0;
-                    size_t abits = 0;
+                if (2 == bits) { // Encoded data size is 64bits max
                     const static size_t   c3sizes[] = { 2, 2, 3, 3, 4, 4, 4, 4 };
                     const static uint64_t c3codes[] = { 0b10, 0b11, 0b001, 0b101,
                         0b0000, 0b0100, 0b1000, 0b1100 };
                     for (auto it : group) {
-                        accum |= c3codes[it] << abits;
+                        acc |= c3codes[it] << abits;
                         abits += c3sizes[it];
                     }
-                    s.push(accum, abits);
+                    s.push(acc, abits);
                     continue;
                 }
 
-                // Number of bits after the fist 1
-                size_t bits = ilogb(maxval);
-                if (runbits[c] == bits)
-                    s.push(0u, 1); // Same as before, just a zero bit
-                else {
-                    s.push(bits * 2 | 1, UBITS + 1); // change bit + len on UBITS
-                    runbits[c] = bits;
-                }
-
                 // Three length encoding
-                // The bottom bits are read as a group
+                // The bottom "bits" are read as a group
                 // which starts with the two detection bits
                 for (uint64_t val : group) {
                     if (val <= mask[bits - 1]) { // First quarter, short codewords
