@@ -157,45 +157,6 @@ static int step(const std::vector<T>& v, const T m = 0) {
     return (i == sz) ? s : sz;
 }
 
-// Returns encoding for given difference
-// bottom 32 bits is the code, top 32 bits code size
-
-template<typename T>
-static uint64_t rswitch(uint64_t diff) {
-    // Diff 0 means switch in band, can't happen
-    const constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-    assert(0 != diff);
-    diff &= mask[UBITS];
-    if (!(diff >> (UBITS - 1)))
-        diff--; // Shift down the positive side
-
-    // Top positive (middle - 1) is a signal, not used by this function
-    static const uint64_t bcodes[8] =  {
-        0b101ull + (3ull << 32), 0b0011ull + (4ull << 32), 0b00001ull + (5ull << 32), 0b10001ull + (5ull << 32), 
-        0b111ull + (3ull << 32), 0b1011ull + (4ull << 32), 0b01001ull + (5ull << 32), 0b11001ull + (5ull << 32)};
-
-    // TODO: tables for 4, 5, and 6 bit lengths, these are just placeholders
-    static const uint64_t scodes[16] = {
-        0b101ull + (3ull << 32), 0b0011ull + (4ull << 32), 0b00001ull + (5ull << 32), 0b10001ull + (5ull << 32),
-        0b111ull + (3ull << 32), 0b1011ull + (4ull << 32), 0b01001ull + (5ull << 32), 0b11001ull + (5ull << 32) };
-    static const uint64_t icodes[32] = {
-        0b101ull + (3ull << 32), 0b0011ull + (4ull << 32), 0b00001ull + (5ull << 32), 0b10001ull + (5ull << 32),
-        0b111ull + (3ull << 32), 0b1011ull + (4ull << 32), 0b01001ull + (5ull << 32), 0b11001ull + (5ull << 32) };
-    static const uint64_t lcodes[64] = {
-        0b101ull + (3ull << 32), 0b0011ull + (4ull << 32), 0b00001ull + (5ull << 32), 0b10001ull + (5ull << 32),
-        0b111ull + (3ull << 32), 0b1011ull + (4ull << 32), 0b01001ull + (5ull << 32), 0b11001ull + (5ull << 32) };
-    
-    switch(sizeof(T)) {
-    case 1:
-        return bcodes[diff];
-    case 2:
-        return scodes[diff];
-    case 4:
-        return icodes[diff];
-    }
-    return lcodes[diff];
-}
-
 // Block size should be 8, for noisy images 4 is better
 // 2 generates too much overhead
 // 16 might work for slow varying inputs
@@ -266,9 +227,8 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
     // Running code length, start with nominal value
     std::vector<size_t> runbits(bands, sizeof(T) * 8 - 1);
     std::vector<T> prev(bands, 0u);      // Previous value, per band
-    std::vector<T> group(B2); // Current 2D group to encode, as vector
-    std::vector<size_t> offsets(B2);
-
+    T group[B2];  // Current 2D group to encode, as array
+    size_t offsets[B2];
     for (size_t i = 0; i < B2; i++)
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
 
@@ -290,8 +250,8 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                 }
 
                 // Delta in low sign group encode
-                prev[c] = dsign(group.data(), prev[c]);
-                const uint64_t maxval = *max_element(group.begin(), group.end());
+                prev[c] = dsign(group, prev[c]);
+                const uint64_t maxval = *std::max_element(group, group + B2);
 
                 uint64_t acc = 0;
                 size_t abits = 0;
@@ -322,7 +282,7 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                 if (runbits[c] == rung)
                     s.push(0u, 1); // Same rung single zero bit
                 else {
-                    auto newcode = rswitch<T>(rung - runbits[c]);
+                    //auto newcode = rswitch<T>(rung - runbits[c]);
                     s.push((rung << 1) + 1, UBITS + 1); // change bit + len on UBITS
                     runbits[c] = rung;
                 }
@@ -338,11 +298,62 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                     continue;
                 }
 
-                // This is optional, faster encoding
                 if (2 == rung) { // Encoded data size fits in 64 bits
                     for (auto it : group) {
                         acc |= (0xfffull & crg2[it]) << abits;
                         abits += crg2[it] >> 12;
+                    }
+                    s.push(acc, abits);
+                    continue;
+                }
+
+                if (7 > rung) { // Encoded data fits in 128 bits, unroll by 2
+                    auto table = CRG[rung];
+                    int i = 0;
+                    for (; i < B2 / 2; i++) {
+                        auto v = table[group[i]];
+                        acc |= (0xfffull & v) << abits;
+                        abits += v >> 12;
+                    }
+                    s.push(acc, abits);
+                    acc = abits = 0;
+                    for (; i < B2; i++) {
+                        auto v = table[group[i]];
+                        acc |= (0xfffull & v) << abits;
+                        abits += v >> 12;
+                    }
+                    s.push(acc, abits);
+                    continue;
+                }
+
+                if (7 == rung) { // Encoded data fits in 128 bits, unroll by 2
+                    auto table = CRG[rung];
+                    int i = 0;
+                    for (; i < B2 / 4; i++) {
+                        auto v = table[group[i]];
+                        acc |= (0xfffull & v) << abits;
+                        abits += v >> 12;
+                    }
+                    s.push(acc, abits);
+                    acc = abits = 0;
+                    for (; i < B2 / 2; i++) {
+                        auto v = table[group[i]];
+                        acc |= (0xfffull & v) << abits;
+                        abits += v >> 12;
+                    }
+                    s.push(acc, abits);
+                    acc = abits = 0;
+                    for (; i < B2 * 3 / 4; i++) {
+                        auto v = table[group[i]];
+                        acc |= (0xfffull & v) << abits;
+                        abits += v >> 12;
+                    }
+                    s.push(acc, abits);
+                    acc = abits = 0;
+                    for (; i < B2; i++) {
+                        auto v = table[group[i]];
+                        acc |= (0xfffull & v) << abits;
+                        abits += v >> 12;
                     }
                     s.push(acc, abits);
                     continue;
