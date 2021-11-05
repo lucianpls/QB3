@@ -213,7 +213,7 @@ static const uint16_t crg7[] = {0x7040, 0x7041, 0x7042, 0x7043, 0x7044, 0x7045, 
 0x901f, 0x909f, 0x911f, 0x919f};
 
 #if defined(QB3_OPTIMIZE_ONLY_BYTE)
-static const uint16_t *CRG[] = {nullptr, nullptr, crg2, crg3, crg4, crg5, crg6, crg7};
+static const uint16_t *CRG[] = {nullptr, crg1, crg2, crg3, crg4, crg5, crg6, crg7};
 #else
 // Define encoding tables for rungs 8, 9 and 10. They make no difference when encoding byte data
 static const uint16_t crg8[] = { 0x8080, 0x8081, 0x8082, 0x8083, 0x8084, 0x8085, 0x8086, 0x8087, 0x8088, 0x8089, 0x808a, 0x808b,
@@ -450,17 +450,17 @@ static const uint16_t *CRG[] = {nullptr, crg1, crg2, crg3, crg4, crg5, crg6, crg
 // Yes, it's horrid, but it works. Bit fiddling!
 // No conditionals, computes all three forms and chooses one by multiplying with the condition bit
 // It is roughly 25% faster than similar code with conditions, at least with MSVC on i7-8x
-// Could be made faster in assembly, this seems to be too complex for compilers
+// This seems to be too complex for compilers
 // The "(~0ull * (1 &" is to show the compiler that the multiplication is really a mask operation
 // It is only used for encoding higher rungs, so it's not critical
 static inline std::pair<uint64_t, size_t> q3csz(uint64_t val, size_t rung) {
     uint64_t nxt = (val >> (rung - 1)) & 1;
     uint64_t top = val >> rung;
-    // <value, size>
+    // <size, value>
     return std::make_pair<uint64_t, size_t>(rung + top + (top | nxt)
         , ((val + (1ull << (rung - 1))) & (~0ull * (1 & (1ull - (top | nxt)))))                   // 0 0
         + ((val >> 1 | ((val & 1) << rung)) & (~0ull * (1 & ((1ull - top) & nxt))))               // 0 1
-        + ((((val ^ (1ull << rung)) >> 2) | ((val & 0b11ull) << rung)) & (~0ull * (1 & top))));     // 1 x
+        + ((((val ^ (1ull << rung)) >> 2) | ((val & 0b11ull) << rung)) & (~0ull * (1 & top))));   // 1 x
 }
 
 template <typename T = uint8_t, size_t B = 4>
@@ -506,8 +506,10 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                 prev[c] = dsign(group, prev[c]);
                 const uint64_t maxval = *std::max_element(group, group + B2);
 
+                const size_t rung = (maxval < 2) ? 0 : bsr(maxval);
                 uint64_t acc = 0;
                 size_t abits = 0;
+
 
                 if (maxval < 2) { // only 1 and 0, rung is -1 or 0
                     abits = 2; // assume no rung change
@@ -523,9 +525,6 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                     s.push(acc, abits);
                     continue;
                 }
-
-                // Top set bit, safe to call because maxval > 1 here
-                const size_t rung = bsr(maxval);
 
                 // Rung change, if needed
                 // For the table accelerated modes, only rungs 2 and 6 don't have enough space in the accumulator
@@ -575,14 +574,12 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                     auto t = CRG[rung];
                     size_t a[4] = { acc, 0, 0, 0 };
                     size_t asz[4] = { abits, 0, 0, 0 };
-                    for (int i = 0; i < B2 / 4; i++) {
-                        uint16_t v[4] = { 0, 0, 0, 0 };
+                    for (int i = 0; i < B2 / 4; i++)
                         for (int j = 0; j < 4; j++) {
-                            v[j] = t[group[j * 4 + i]];
-                            a[j] |= (TBLMASK & v[j]) << asz[j];
-                            asz[j] += v[j] >> 12;
+                            uint16_t v = t[group[j * 4 + i]];
+                            a[j] |= (TBLMASK & v) << asz[j];
+                            asz[j] += v >> 12;
                         }
-                    }
                     for (int j = 0; j < 4; j++)
                         s.push(a[j], asz[j]);
                     continue;
