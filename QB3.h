@@ -491,7 +491,7 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                 uint64_t acc = 0;
                 size_t abits = 0;
 
-                if (maxval < 2) { // only 1 and 0, rung -1 or 0
+                if (maxval < 2) { // only 1 and 0, rung is -1 or 0
                     abits = 2; // assume no rung change
                     acc = maxval << 1; // 00 for rung -1, 01 for rung 0
                     if (0 != runbits[c]) { // rung change
@@ -499,13 +499,9 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                         abits = UBITS + 2;
                         runbits[c] = 0;
                     }
-                    if (0 == maxval) { // rung -1, we're done
-                        s.push(acc, abits);
-                        continue;
-                    }
-                    // rung 0
-                    for (auto& v : group)
-                        acc |= v << abits++;
+                    if (0 != maxval) // rung 0
+                        for (auto& v : group)
+                            acc |= v << abits++;
                     s.push(acc, abits);
                     continue;
                 }
@@ -516,22 +512,19 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                 // Rung change, if needed
                 // For the table accelerated modes, only rungs 2 and 6 don't have enough space in the accumulator
                 if ((sizeof(CRG) / sizeof(*CRG)) <= rung || 2 == rung || 6 == rung) {
-                    if (runbits[c] == rung) {
+                    if (runbits[c] == rung)
                         s.push(0u, 1);
-                    }
-                    else {
+                    else
                         s.push((rung << 1) + 1, UBITS + 1);
-                        runbits[c] = rung;
-                    }
                 }
                 else {
                     abits = 1;
                     if (runbits[c] != rung) {
                         acc = (rung << 1) + 1;
                         abits += UBITS;
-                        runbits[c] = rung;
                     }
                 }
+                runbits[c] = rung;
 
                 auto t = CRG[rung];
                 if (3 > rung) { // Encoded data size fits in 64 bits
