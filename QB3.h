@@ -172,6 +172,7 @@ static const int ylut[16] = {0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3};
 // QB3 encoding tables for rungs 2 to 11, for speedup. Rung 0 and 1 are special
 // Storage is under 8K by using short int, or under 1K when only byte data is optimized
 // See tables.py for how they are generated
+static const uint16_t crg1[] = {0x1000, 0x2003, 0x3001, 0x3005};
 static const uint16_t crg2[] = {0x2002, 0x2003, 0x3001, 0x3005, 0x4000, 0x4004, 0x4008, 0x400c};
 static const uint16_t crg3[] = {0x3004, 0x3005, 0x3006, 0x3007, 0x4002, 0x400a, 0x4003, 0x400b, 0x5000, 0x5008, 0x5010, 0x5018,
 0x5001, 0x5009, 0x5011, 0x5019};
@@ -440,7 +441,7 @@ static const uint16_t crg10[] = { 0xa200, 0xa201, 0xa202, 0xa203, 0xa204, 0xa205
 0xccf6, 0xc0f7, 0xc4f7, 0xc8f7, 0xccf7, 0xc0f8, 0xc4f8, 0xc8f8, 0xccf8, 0xc0f9, 0xc4f9, 0xc8f9, 0xccf9, 0xc0fa, 0xc4fa, 0xc8fa,
 0xccfa, 0xc0fb, 0xc4fb, 0xc8fb, 0xccfb, 0xc0fc, 0xc4fc, 0xc8fc, 0xccfc, 0xc0fd, 0xc4fd, 0xc8fd, 0xccfd, 0xc0fe, 0xc4fe, 0xc8fe,
 0xccfe, 0xc0ff, 0xc4ff, 0xc8ff, 0xccff };
-static const uint16_t *CRG[] = {nullptr, nullptr, crg2, crg3, crg4, crg5, crg6, crg7, crg8, crg9, crg10};
+static const uint16_t *CRG[] = {nullptr, crg1, crg2, crg3, crg4, crg5, crg6, crg7, crg8, crg9, crg10};
 #endif
 
 // Encoding with three codeword lenghts
@@ -513,47 +514,45 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                 const size_t rung = bsr(maxval);
 
                 // Rung change, if needed
-                if (runbits[c] == rung)
-                    s.push(0u, 1); // Same rung single zero bit
+                // For the table accelerated modes, only rungs 2 and 6 don't have enough space in the accumulator
+                if ((sizeof(CRG) / sizeof(*CRG)) <= rung || 2 == rung || 6 == rung) {
+                    if (runbits[c] == rung) {
+                        s.push(0u, 1);
+                    }
+                    else {
+                        s.push((rung << 1) + 1, UBITS + 1);
+                        runbits[c] = rung;
+                    }
+                }
                 else {
-                    //auto newcode = rswitch<T>(rung - runbits[c]);
-                    s.push((rung << 1) + 1, UBITS + 1); // change bit + len on UBITS
-                    runbits[c] = rung;
+                    abits = 1;
+                    if (runbits[c] != rung) {
+                        acc = (rung << 1) + 1;
+                        abits += UBITS;
+                        runbits[c] = rung;
+                    }
                 }
 
-                if (1 == rung) { // 2 bit nominal size, doesn't always have 2 detection rung
-                    const static size_t   c1sizes[] = { 1, 2, 3, 3 };
-                    const static uint64_t c1codes[] = { 0, 3, 1, 5 };
-                    for (auto it : group) {
-                        acc |= c1codes[it] << abits;
-                        abits += c1sizes[it];
+                auto t = CRG[rung];
+                if (3 > rung) { // Encoded data size fits in 64 bits
+                    for (int i = 0; i < B2; i++) {
+                        acc |= (0xfffull & t[group[i]]) << abits;
+                        abits += t[group[i]] >> 12;
                     }
                     s.push(acc, abits);
                     continue;
                 }
 
-                if (2 == rung) { // Encoded data size fits in 64 bits
-                    for (auto it : group) {
-                        acc |= (0xfffull & crg2[it]) << abits;
-                        abits += crg2[it] >> 12;
-                    }
-                    s.push(acc, abits);
-                    continue;
-                }
-
-                if (7 > rung) { // Encoded data fits in 128 bits, unroll by 2
-                    auto table = CRG[rung];
+                if (7 > rung) { // Encoded data fits in 128 bits
                     for (int i = 0; i < B2 / 2; i++) {
-                        auto v = table[group[i]];
-                        acc |= (0xfffull & v) << abits;
-                        abits += v >> 12;
+                        acc |= (0xfffull & t[group[i]]) << abits;
+                        abits += t[group[i]] >> 12;
                     }
                     s.push(acc, abits);
                     acc = abits = 0;
                     for (int i = B2 / 2; i < B2; i++) {
-                        auto v = table[group[i]];
-                        acc |= (0xfffull & v) << abits;
-                        abits += v >> 12;
+                        acc |= (0xfffull & t[group[i]]) << abits;
+                        abits += t[group[i]] >> 12;
                     }
                     s.push(acc, abits);
                     continue;
@@ -561,13 +560,12 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
 
                 if ((sizeof(CRG)/sizeof(*CRG)) > rung) { // Encoded data fits in 256 bits, unroll by 4
                     // Unroll and interleave, with 4 accumulators
-                    auto table = CRG[rung];
-                    size_t a[4] = { 0, 0, 0, 0 };
-                    size_t asz[4] = { 0, 0, 0, 0 };
+                    size_t a[4] = { acc, 0, 0, 0 };
+                    size_t asz[4] = { abits, 0, 0, 0 };
                     for (int i = 0; i < B2 / 4; i++) {
                         uint16_t v[4] = { 0, 0, 0, 0 };
                         for (int j = 0; j < 4; j++) {
-                            v[j] = table[group[j * 4 + i]];
+                            v[j] = t[group[j * 4 + i]];
                             a[j] |= (0xfffull & v[j]) << asz[j];
                             asz[j] += v[j] >> 12;
                         }
