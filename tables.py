@@ -15,6 +15,19 @@ def show_magsign():
         for v in range(-2**rung, 2**rung):
             print(f"{v:x}, {mags(v):x}, {smag(mags(v))}")
 
+# These only work for short int data, aka rung > 7 and rung < 16
+def magss(v):
+    v &= 0xffff
+    return 0xffff & ((0xffff * (v >> 15)) ^ (v << 1))
+
+def smags(v):
+    return -((v >> 1) + 1) if (v & 1) else v >> 1
+
+def show_magsigns():
+    for rung in range(8, 16):
+        for v in range(-2**rung, 2**rung):
+            print(f"{v}, {magss(v):x}, {smags(magss(v))}")
+
 # Returns a 16 bit value, top 4 bits is payload size
 # This system would work up to rung 11
 def encode(v, rung):
@@ -25,7 +38,7 @@ def encode(v, rung):
     else: # Long, rotated right two bits
         return ((rung + 2) << 12) + ((v - (1 << rung)) >> 2) + ((v & 3) << rung)
 
-def showencode():
+def showencode8():
     for rung in range(2, 8):
         s = f"static const uint16_t crg{rung}[] = {{"
         for v in range(2**(rung+1)):
@@ -35,5 +48,16 @@ def showencode():
                 s = ""
         print(s[:-2] + "};")
 
+def showencode16():
+    for rung in range(8, 11):
+        s = f"static const uint16_t crg{rung}[] = {{"
+        for v in range(2**(rung+1)):
+            s += f"0x{encode(v, rung):4x}, "
+            if len(s) > 120:
+                print(s)
+                s = ""
+        print(s[:-2] + "};")
+
 if __name__ == "__main__":
-    showencode()
+    showencode8()
+    showencode16()
