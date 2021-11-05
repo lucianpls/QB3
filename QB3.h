@@ -16,7 +16,6 @@ namespace QB3 {
 #define R(n) M(n), M(n + 1), M(n + 2), M(n + 3), M(n + 4), M(n + 5), M(n + 6), M(n + 7)
     const uint64_t mask[] = { 0, R(1), R(9), R(17), R(25), R(33), R(41), R(49), R(57) };
 #undef R
-#undef M
 
 // rank of top set bit, result is undefined for val == 0
 static size_t bsr(uint64_t val) {
@@ -172,6 +171,7 @@ static const int ylut[16] = {0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3};
 // QB3 encoding tables for rungs 2 to 11, for speedup. Rung 0 and 1 are special
 // Storage is under 8K by using short int, or under 1K when only byte data is optimized
 // See tables.py for how they are generated
+#define TBLMASK 0xfffull
 static const uint16_t crg1[] = {0x1000, 0x2003, 0x3001, 0x3005};
 static const uint16_t crg2[] = {0x2002, 0x2003, 0x3001, 0x3005, 0x4000, 0x4004, 0x4008, 0x400c};
 static const uint16_t crg3[] = {0x3004, 0x3005, 0x3006, 0x3007, 0x4002, 0x400a, 0x4003, 0x400b, 0x5000, 0x5008, 0x5010, 0x5018,
@@ -214,6 +214,7 @@ static const uint16_t crg7[] = {0x7040, 0x7041, 0x7042, 0x7043, 0x7044, 0x7045, 
 #if defined(QB3_OPTIMIZE_ONLY_BYTE)
 static const uint16_t *CRG[] = {nullptr, nullptr, crg2, crg3, crg4, crg5, crg6, crg7};
 #else
+// Define encoding tables for rungs 8, 9 and 10. They make no difference when encoding byte data
 static const uint16_t crg8[] = { 0x8080, 0x8081, 0x8082, 0x8083, 0x8084, 0x8085, 0x8086, 0x8087, 0x8088, 0x8089, 0x808a, 0x808b,
 0x808c, 0x808d, 0x808e, 0x808f, 0x8090, 0x8091, 0x8092, 0x8093, 0x8094, 0x8095, 0x8096, 0x8097, 0x8098, 0x8099, 0x809a, 0x809b,
 0x809c, 0x809d, 0x809e, 0x809f, 0x80a0, 0x80a1, 0x80a2, 0x80a3, 0x80a4, 0x80a5, 0x80a6, 0x80a7, 0x80a8, 0x80a9, 0x80aa, 0x80ab,
@@ -526,10 +527,10 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                 }
                 runbits[c] = rung;
 
-                auto t = CRG[rung];
-                if (3 > rung) { // Encoded data size fits in 64 bits
+                if (3 > rung) { // Rungs 1 and 2, encoded group fits in accumulator
+                    auto t = CRG[rung];
                     for (int i = 0; i < B2; i++) {
-                        acc |= (0xfffull & t[group[i]]) << abits;
+                        acc |= (TBLMASK & t[group[i]]) << abits;
                         abits += t[group[i]] >> 12;
                     }
                     s.push(acc, abits);
@@ -537,29 +538,31 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                 }
 
                 if (7 > rung) { // Encoded data fits in 128 bits
+                    auto t = CRG[rung];
                     for (int i = 0; i < B2 / 2; i++) {
-                        acc |= (0xfffull & t[group[i]]) << abits;
+                        acc |= (TBLMASK & t[group[i]]) << abits;
                         abits += t[group[i]] >> 12;
                     }
                     s.push(acc, abits);
                     acc = abits = 0;
                     for (int i = B2 / 2; i < B2; i++) {
-                        acc |= (0xfffull & t[group[i]]) << abits;
+                        acc |= (TBLMASK & t[group[i]]) << abits;
                         abits += t[group[i]] >> 12;
                     }
                     s.push(acc, abits);
                     continue;
                 }
 
-                if ((sizeof(CRG)/sizeof(*CRG)) > rung) { // Encoded data fits in 256 bits, unroll by 4
-                    // Unroll and interleave, with 4 accumulators
+                // For byte data, this covers only rung 7, otherwise up to 10
+                if ((sizeof(CRG)/sizeof(*CRG)) > rung) { // Encoded data fits in 256 bits, 4 way interleaved
+                    auto t = CRG[rung];
                     size_t a[4] = { acc, 0, 0, 0 };
                     size_t asz[4] = { abits, 0, 0, 0 };
                     for (int i = 0; i < B2 / 4; i++) {
                         uint16_t v[4] = { 0, 0, 0, 0 };
                         for (int j = 0; j < 4; j++) {
                             v[j] = t[group[j * 4 + i]];
-                            a[j] |= (0xfffull & v[j]) << asz[j];
+                            a[j] |= (TBLMASK & v[j]) << asz[j];
                             asz[j] += v[j] >> 12;
                         }
                     }
@@ -568,29 +571,29 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                     continue;
                 }
 
-                // Computed three length encoding, works for rung > 2 but we use tables for 8 bit data
+                // Computed three length encoding, works for rung > 2 but we use tables for low rungs
                 // This code vanishes in 8 bit mode
                 if (sizeof(T) > 1) {
                     // The bottom "rung" bits start with two detection bits and are read as a group
                     for (uint64_t val : group) {
-                        if (val <= mask[rung - 1]) { // First quarter, short codewords
+                        if (val <= M(rung - 1)) { // First quarter, short codewords
                             val |= 1ull << (rung - 1);
                             s.push(val, rung); // Starts with 1
                         }
-                        else if (val <= mask[rung]) { // Second quarter, nominal size
+                        else if (val <= M(rung)) { // Second quarter, nominal size
                             val = (val >> 1) | ((val & 1) << rung);
                             s.push(val, rung + 1); // starts with 01, rotated right one bit
                         }
                         else { // last half, least likely, long codewords
-                            val &= mask[rung];
+                            val &= M(rung);
                             if (sizeof(T) == 8 && rung == 63) {
-                                // can't push 65 rung in a single call
+                                // can't push 65 bits in a single call
                                 s.push(val >> 2, rung);
                                 s.push(val & 0b11, 2);
                             }
                             else {
                                 val = (val >> 2) | ((val & 0b11) << rung);
-                                s.push(val, rung + 2); // starts with 00, rotated two rung
+                                s.push(val, rung + 2); // starts with 00, rotated two bits
                             }
                         }
                     }
@@ -624,13 +627,11 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
         for (size_t x = 0; (x + B) <= xsize; x += B) {
             size_t loc = (y * xsize + x) * bands;
             for (int c = 0; c < bands; c++) {
-                uint64_t bits = runbits[c];
-                if (0 != s.get()) { // The rung change flag
+                if (0 != s.get()) // The rung change flag
                     s.pull(runbits[c], UBITS);
-                    bits = runbits[c];
-                }
+                const int64_t rung = runbits[c];
                 uint64_t val;
-                if (0 == bits) { // 0 or 1
+                if (0 == rung) { // 0 or 1
                     if (0 == s.get()) // All 0s
                         fill(group.begin(), group.end(), 0);
                     else { // 0 and 1s
@@ -641,7 +642,7 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                         }
                     }
                 }
-                else if (1 == bits) { // 2 rung nominal, could be a single bit
+                else if (1 == rung) { // 2 rung nominal, could be a single bit
                     for (auto& it : group)
                         if ((it = static_cast<T>(s.get())))
                             if (!(it = static_cast<T>(s.get())))
@@ -649,14 +650,14 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                 }
                 else { // triple length
                     for (auto& it : group) {
-                        s.pull(it, bits);
-                        if (it > mask[bits - 1]) // Starts with 1x
-                            it &= mask[bits - 1];
-                        else if (it > mask[bits - 2]) // Starts with 01
+                        s.pull(it, rung);
+                        if (it > mask[rung - 1]) // Starts with 1x
+                            it &= mask[rung - 1];
+                        else if (it > mask[rung - 2]) // Starts with 01
                             it = static_cast<T>(s.get() + (it << 1));
                         else { // starts with 00
                             s.pull(val, 2);
-                            it = static_cast<T>((1ull << bits) + (it << 2) + val);
+                            it = static_cast<T>((1ull << rung) + (it << 2) + val);
                         }
                     }
                 }
