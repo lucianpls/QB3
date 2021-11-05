@@ -5,6 +5,7 @@
 #include <functional>
 #include <intrin.h>
 #include <cassert>
+#include <utility>
 
 // Define this to minimize the size of the code, loosing some speed for large data types
 // #define QB3_OPTIMIZE_ONLY_BYTE
@@ -446,6 +447,22 @@ static const uint16_t *CRG[] = {nullptr, crg1, crg2, crg3, crg4, crg5, crg6, crg
 #endif
 
 // Encoding with three codeword lenghts
+// Yes, it's horrid, but it works. Bit fiddling!
+// No conditionals, computes all three forms and chooses one by multiplying with the condition bit
+// It is roughly 25% faster than similar code with conditions, at least with MSVC on i7-8x
+// Could be made faster in assembly, this seems to be too complex for compilers
+// The "(~0ull * (1 &" is to show the compiler that the multiplication is really a mask operation
+// It is only used for encoding higher rungs, so it's not critical
+static inline std::pair<uint64_t, size_t> q3csz(uint64_t val, size_t rung) {
+    uint64_t nxt = (val >> (rung - 1)) & 1;
+    uint64_t top = val >> rung;
+    // <value, size>
+    return std::make_pair<uint64_t, size_t>(rung + top + (top | nxt)
+        , ((val + (1ull << (rung - 1))) & (~0ull * (1 & (1ull - (top | nxt)))))                   // 0 0
+        + ((val >> 1 | ((val & 1) << rung)) & (~0ull * (1 & ((1ull - top) & nxt))))               // 0 1
+        + ((((val ^ (1ull << rung)) >> 2) | ((val & 0b11ull) << rung)) & (~0ull * (1 & top))));     // 1 x
+}
+
 template <typename T = uint8_t, size_t B = 4>
 std::vector<uint8_t> encode(const std::vector<T>& image,
     size_t xsize, size_t ysize, int mb = 1)
@@ -502,7 +519,7 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                     }
                     if (0 != maxval) // rung 0
                         for (auto& v : group)
-                            acc |= v << abits++;
+                            acc |= static_cast<uint64_t>(v) << abits++;
                     s.push(acc, abits);
                     continue;
                 }
@@ -573,28 +590,23 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
 
                 // Computed three length encoding, works for rung > 2 but we use tables for low rungs
                 // This code vanishes in 8 bit mode
-                if (sizeof(T) > 1) {
-                    // The bottom "rung" bits start with two detection bits and are read as a group
-                    for (uint64_t val : group) {
-                        if (val <= M(rung - 1)) { // First quarter, short codewords
-                            val |= 1ull << (rung - 1);
-                            s.push(val, rung); // Starts with 1
+                if (1 < sizeof(T)) {
+                    if (63 > rung) {
+                        for (uint64_t val : group) {
+                            auto p = q3csz(val, rung);
+                            s.push(p.second, p.first);
                         }
-                        else if (val <= M(rung)) { // Second quarter, nominal size
-                            val = (val >> 1) | ((val & 1) << rung);
-                            s.push(val, rung + 1); // starts with 01, rotated right one bit
-                        }
-                        else { // last half, least likely, long codewords
-                            val &= M(rung);
-                            if (sizeof(T) == 8 && rung == 63) {
-                                // can't push 65 bits in a single call
-                                s.push(val >> 2, rung);
-                                s.push(val & 0b11, 2);
+                            //s.push(qb3code(val, rung), qb3size(val, rung));
+                    }
+                    else { // rung 63 may overflow 64 bits
+                        for (uint64_t val : group) {
+                            auto p = q3csz(val, rung);
+                            if (65 == p.first) {
+                                s.push(p.second, 64);
+                                s.push((val >> 1) & 1, 1);
                             }
-                            else {
-                                val = (val >> 2) | ((val & 0b11) << rung);
-                                s.push(val, rung + 2); // starts with 00, rotated two bits
-                            }
+                            else
+                                s.push(p.second, p.first);
                         }
                     }
                 }
@@ -603,6 +615,7 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
     }
     return result;
 }
+
 
 template<typename T = uint8_t, size_t B = 4>
 std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize, 
@@ -644,9 +657,9 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                 }
                 else if (1 == rung) { // 2 rung nominal, could be a single bit
                     for (auto& it : group)
-                        if ((it = static_cast<T>(s.get())))
+                        if (0 != (it = static_cast<T>(s.get())))
                             if (!(it = static_cast<T>(s.get())))
-                                it = static_cast<T>(0b10 + s.get());
+                                it = static_cast<T>(s.get() | 0b10);
                 }
                 else { // triple length
                     for (auto& it : group) {
@@ -654,10 +667,10 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                         if (it > mask[rung - 1]) // Starts with 1x
                             it &= mask[rung - 1];
                         else if (it > mask[rung - 2]) // Starts with 01
-                            it = static_cast<T>(s.get() + (it << 1));
+                            it = static_cast<T>(s.get() + (static_cast<uint64_t>(it) << 1));
                         else { // starts with 00
                             s.pull(val, 2);
-                            it = static_cast<T>((1ull << rung) + (it << 2) + val);
+                            it = static_cast<T>((1ull << rung) + (static_cast<uint64_t>(it) << 2) + val);
                         }
                     }
                 }
