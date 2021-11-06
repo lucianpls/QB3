@@ -572,24 +572,23 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                 // Computed three length encoding, works for rung > 2 but we use tables for low rungs
                 // This code vanishes in 8 bit mode
                 if (1 < sizeof(T)) {
-                    // We could use the accumulator, for values under rung 31, it would save one push out of two
-                    if (63 > rung) {
+                    if (63 != rung) {
                         for (uint64_t val : group) {
                             auto p = q3csz(val, rung);
                             s.push(p.second, p.first);
                         }
-                            //s.push(qb3code(val, rung), qb3size(val, rung));
+                        continue;
                     }
-                    else { // rung 63 may overflow 64 bits
-                        for (uint64_t val : group) {
-                            auto p = q3csz(val, rung);
-                            if (65 == p.first) {
-                                s.push(p.second, 64);
-                                s.push((val >> 1) & 1, 1);
-                            }
-                            else
-                                s.push(p.second, p.first);
+
+                    // rung 63 may overflow 64 bits
+                    for (uint64_t val : group) {
+                        auto p = q3csz(val, rung);
+                        if (65 == p.first) {
+                            s.push(p.second, 64);
+                            s.push((val >> 1) & 1, 1);
                         }
+                        else
+                            s.push(p.second, p.first);
                     }
                 }
             }
