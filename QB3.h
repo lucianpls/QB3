@@ -492,6 +492,19 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
             size_t loc = (y * xsize + x) * bands; // Top-left pixel address
             for (size_t c = 0; c < bands; c++) { // blocks are band interleaved
 
+                if (0)
+                {
+                    static int i = 0;
+                    if (i++ < 12) {
+                        printf("%d - %llu\n", i, (s.v.size() - 1) * 8 + s.bitp);
+                        for (auto v : s.v)
+                            printf("%02x", v);
+                        printf("\n");
+                    }
+                    else
+                        exit(0);
+                }
+
                 // Collect the block for this band
                 if (mb >= 0 && mb < bands && mb != c) {
                     for (size_t i = 0; i < B2; i++)
@@ -506,42 +519,30 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                 prev[c] = dsign(group, prev[c]);
                 const uint64_t maxval = *std::max_element(group, group + B2);
 
-                const size_t rung = (maxval < 2) ? 0 : bsr(maxval);
+                const size_t rung = bsr(maxval | 1); // Force at least one bit set
                 uint64_t acc = 0;
-                size_t abits = 0;
+                size_t abits = 1;
 
+                if (runbits[c] != rung) {
+                    acc = (rung << 1) + 1;
+                    abits = UBITS + 1;
+                }
+                runbits[c] = rung;
 
-                if (maxval < 2) { // only 1 and 0, rung is -1 or 0
-                    abits = 2; // assume no rung change
-                    acc = maxval << 1; // 00 for rung -1, 01 for rung 0
-                    if (0 != runbits[c]) { // rung change
-                        acc = (acc << UBITS) + 1;
-                        abits = UBITS + 2;
-                        runbits[c] = 0;
-                    }
-                    if (0 != maxval) // rung 0
+                if (0 == rung) { // only 1s and 0s, rung is -1 or 0
+                    acc |= maxval << abits++;
+                    if (0 != maxval)
                         for (auto& v : group)
                             acc |= static_cast<uint64_t>(v) << abits++;
                     s.push(acc, abits);
                     continue;
                 }
 
-                // Rung change, if needed
-                // For the table accelerated modes, only rungs 2 and 6 don't have enough space in the accumulator
+                // Clean up the accumulator if needed
                 if ((sizeof(CRG) / sizeof(*CRG)) <= rung || 2 == rung || 6 == rung) {
-                    if (runbits[c] == rung)
-                        s.push(0u, 1);
-                    else
-                        s.push((rung << 1) + 1, UBITS + 1);
+                    s.push(acc, abits);
+                    acc = abits = 0;
                 }
-                else {
-                    abits = 1;
-                    if (runbits[c] != rung) {
-                        acc = (rung << 1) + 1;
-                        abits += UBITS;
-                    }
-                }
-                runbits[c] = rung;
 
                 if (3 > rung) { // Rungs 1 and 2, encoded group fits in accumulator
                     auto t = CRG[rung];
