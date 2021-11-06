@@ -492,20 +492,7 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
             size_t loc = (y * xsize + x) * bands; // Top-left pixel address
             for (size_t c = 0; c < bands; c++) { // blocks are band interleaved
 
-                if (0)
-                {
-                    static int i = 0;
-                    if (i++ < 12) {
-                        printf("%d - %llu\n", i, (s.v.size() - 1) * 8 + s.bitp);
-                        for (auto v : s.v)
-                            printf("%02x", v);
-                        printf("\n");
-                    }
-                    else
-                        exit(0);
-                }
-
-                // Collect the block for this band
+                                                 // Collect the block for this band
                 if (mb >= 0 && mb < bands && mb != c) {
                     for (size_t i = 0; i < B2; i++)
                         group[i] = image[loc + offsets[i] + c] - image[loc + offsets[i] + mb];
@@ -539,29 +526,25 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                 }
 
                 // Clean up the accumulator if needed
-                if ((sizeof(CRG) / sizeof(*CRG)) <= rung || 2 == rung || 6 == rung) {
+                // We don't need to clean the accumulator at rung 2 because we have an optional mid-cycle flush based on size
+                if ((sizeof(CRG) / sizeof(*CRG)) <= rung || 6 == rung) {
                     s.push(acc, abits);
                     acc = abits = 0;
                 }
 
-                if (3 > rung) { // Rungs 1 and 2, encoded group fits in accumulator
-                    auto t = CRG[rung];
-                    for (int i = 0; i < B2; i++) {
-                        acc |= (TBLMASK & t[group[i]]) << abits;
-                        abits += t[group[i]] >> 12;
-                    }
-                    s.push(acc, abits);
-                    continue;
-                }
-
-                if (7 > rung) { // Encoded data fits in 128 bits
+                if (7 > rung) { // Encoded data fits in 64 or 128 bits
                     auto t = CRG[rung];
                     for (int i = 0; i < B2 / 2; i++) {
                         acc |= (TBLMASK & t[group[i]]) << abits;
                         abits += t[group[i]] >> 12;
                     }
-                    s.push(acc, abits);
-                    acc = abits = 0;
+
+                    // Only at rung 1 and rung 2 we can skip this push, if the accum has enough space
+                    if (!((rung == 1 && abits < 41) || (rung == 2 && abits < 33))) {
+                        s.push(acc, abits);
+                        acc = abits = 0;
+                    }
+
                     for (int i = B2 / 2; i < B2; i++) {
                         acc |= (TBLMASK & t[group[i]]) << abits;
                         abits += t[group[i]] >> 12;
@@ -589,6 +572,7 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                 // Computed three length encoding, works for rung > 2 but we use tables for low rungs
                 // This code vanishes in 8 bit mode
                 if (1 < sizeof(T)) {
+                    // We could use the accumulator, for values under rung 31, it would save one push out of two
                     if (63 > rung) {
                         for (uint64_t val : group) {
                             auto p = q3csz(val, rung);
