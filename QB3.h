@@ -458,8 +458,8 @@ static inline std::pair<uint64_t, size_t> q3csz(uint64_t val, size_t rung) {
     uint64_t top = val >> rung;
     // <size, value>
     return std::make_pair<uint64_t, size_t>(rung + top + (top | nxt)
-        , ((val + (1ull << (rung - 1))) & (~0ull * (1 & (1ull - (top | nxt)))))                   // 0 0
-        + ((val >> 1 | ((val & 1) << rung)) & (~0ull * (1 & ((1ull - top) & nxt))))               // 0 1
+        , ((val + (1ull << (rung - 1))) & (~0ull * (1 & ~(top | nxt))))                   // 0 0
+        + ((val >> 1 | ((val & 1) << rung)) & (~0ull * (1 & (~top & nxt))))               // 0 1
         + ((((val ^ (1ull << rung)) >> 2) | ((val & 0b11ull) << rung)) & (~0ull * (1 & top))));   // 1 x
 }
 
@@ -492,7 +492,7 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
             size_t loc = (y * xsize + x) * bands; // Top-left pixel address
             for (size_t c = 0; c < bands; c++) { // blocks are band interleaved
 
-                                                 // Collect the block for this band
+                // Collect the block for this band
                 if (mb >= 0 && mb < bands && mb != c) {
                     for (size_t i = 0; i < B2; i++)
                         group[i] = image[loc + offsets[i] + c] - image[loc + offsets[i] + mb];
@@ -519,15 +519,13 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                 if (0 == rung) { // only 1s and 0s, rung is -1 or 0
                     acc |= maxval << abits++;
                     if (0 != maxval)
-                        for (auto& v : group)
-                            acc |= static_cast<uint64_t>(v) << abits++;
+                        for (uint64_t v : group)
+                            acc |= v << abits++;
                     s.push(acc, abits);
                     continue;
                 }
 
-                // Clean up the accumulator if needed
-                // We don't need to clean the accumulator at rung 2 because we have an optional mid-cycle flush based on size
-                if ((sizeof(CRG) / sizeof(*CRG)) <= rung || 6 == rung) {
+                if (6 == rung) {
                     s.push(acc, abits);
                     acc = abits = 0;
                 }
@@ -553,7 +551,7 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                     continue;
                 }
 
-                // For byte data, this covers only rung 7, otherwise up to 10
+                // For byte data this covers only rung 7, otherwise up to 10
                 if ((sizeof(CRG)/sizeof(*CRG)) > rung) { // Encoded data fits in 256 bits, 4 way interleaved
                     auto t = CRG[rung];
                     size_t a[4] = { acc, 0, 0, 0 };
@@ -568,6 +566,9 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                         s.push(a[j], asz[j]);
                     continue;
                 }
+
+                // Push the code switch for non-table encoding
+                s.push(acc, abits);
 
                 // Computed three length encoding, works for rung > 2 but we use tables for low rungs
                 // This code vanishes in 8 bit mode

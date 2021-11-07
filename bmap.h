@@ -19,12 +19,13 @@ struct Bitstream {
     void push(T val, size_t bits) {
         static_assert(std::is_integral<T>::value && std::is_unsigned<T>::value,
             "Only works for unsigned integral types");
-        while (bits) {
-            size_t used = std::min(8 - bitp, bits);
+
+        for (;bits;) {
             if (bitp)
                 v.back() |= static_cast<uint8_t>(val << bitp);
             else
                 v.push_back(static_cast<uint8_t>(val));
+            size_t used = std::min(8 - bitp, bits);
             bits -= used;
             bitp = (bitp + used) & 7;
             val >>= used;
