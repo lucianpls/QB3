@@ -25,21 +25,39 @@ namespace QB3 {
     const uint64_t mask[] = { 0, R(1), R(9), R(17), R(25), R(33), R(41), R(49), R(57) };
 #undef R
 
+#if defined(_WIN32_)
 // rank of top set bit, result is undefined for val == 0
-static inline size_t topbit(uint64_t val) {
-#if defined(_WIN32)
+static size_t topbit(uint64_t val) {
     return 63 - __lzcnt64(val);
-#else
-#if defined(__GNUC__)
+}
+
+static size_t setbits(uint64_t val) {
+    return __popcnt64(val);
+}
+
+static size_t setbits16(uint64_t val) {
+    return __popcnt64(val);
+}
+
+#elif defined(__GNUC__)
+static size_t topbit(uint64_t val) {
     return 63 - __builtin_clzll(val);
-#else
-    // no builtin is available
+}
+
+static size_t setbits(uint64_t val) {
+    return __builtin_popcountll(val);
+}
+
+static size_t setbits16(uint64_t val) {
+    return setbits(val);
+}
+
+#else // no builtins, portable C
+static size_t topbit(uint64_t val) {
     unsigned r = 0;
     while (val >>= 1)
         r++;
     return r;
-#endif
-#endif
 }
 
 // My own portable byte bitcount
@@ -47,38 +65,21 @@ static inline int nbits(unsigned char v) {
     return ((((v - ((v >> 1) & 0x55u)) * 0x1010101u) & 0x30c00c03u) * 0x10040041u) >> 0x1cu;
 }
 
-static inline size_t setbits(uint64_t val) {
-#if defined(_WIN32)
-    return __popcnt64(val);
-#else
-#if defined(__GNUC__)
-    return __builtin_popcountll(val);
-#else
-    size_t r = 0;
-    for (int i = 0; i < sizeof(val); i++, val >>= 8)
-        r += nbits(0xff & val);
-    return r;
-#endif
-#endif
+// This should get vectorized
+static size_t setbits(uint64_t val) {
+    return nbits(0xff & val) + nbits(0xff & (val >> 8)) + nbits(0xff & (val >> 16)) + nbits(0xff & (val >> 24))
+        + nbits(0xff & (val >> 32)) + nbits(0xff & (val >> 40)) + nbits(0xff & (val >> 48)) + nbits(0xff & (val >> 56));
 }
 
-// Same, except we only count the bottom 16 bits
-static inline size_t setbits16(uint64_t val) {
-#if defined(_WIN32)
-    return __popcnt64(val & 0xffffull);
-#else
-#if defined(__GNUC__)
-    return __builtin_popcountll(val & 0xffffull);
-#else
-    return nbits(0xff & val) + (nbits(0xff & (val >> 8)));
-#endif
-#endif
+static size_t setbits16(uint64_t val) {
+    return nbits(0xff & val) + nbits(0xff & (val >> 8));
 }
+#endif
 
 // Looks for 1*0* in the rung bits of the input values, returns the position of last 1
 // Assumes at least one of the bits is set
 template<typename T>
-static size_t stepdownl(const T * const v, size_t rung) {
+static size_t stepleft(const T * const v, size_t rung) {
     const int B2 = 16;
     // We are looking for 1*0* pattern on the B2 bits
     uint64_t acc = ~0ull;
@@ -98,7 +99,7 @@ static size_t stepdownl(const T * const v, size_t rung) {
 // Looks for 1*0* in the rung bits of the input values, returns the position of first 0
 // If the group was stepdown left shifted, the last rung bit has to be 0
 template<typename T>
-static size_t stepdownr(const T* const v, size_t rung) {
+static size_t stepright(const T* const v, size_t rung) {
     const int B2 = 16;
     // We are looking for 1*0* pattern on the B2 bits
     uint64_t acc = ~0ull;
@@ -509,26 +510,43 @@ static const uint16_t crg10[] = { 0xa200, 0xa201, 0xa202, 0xa203, 0xa204, 0xa205
 static const uint16_t *CRG[] = {nullptr, crg1, crg2, crg3, crg4, crg5, crg6, crg7, crg8, crg9, crg10};
 #endif
 
+// Code switch encoding tables, stored the same way, see tables.py for how they are generated
+// They are defined for 3 4 5 and 6 bits for unit length
+// First element means no-change
+static const uint16_t csw3[] = { 0x1000, 0x3005, 0x4003, 0x5001, 0x5019, 0x5009, 0x400b, 0x3007};
+static const uint16_t csw4[] = { 0x1000, 0x4009, 0x400d, 0x5005, 0x5007, 0x6001, 0x6021, 0x6003, 0x6033, 0x6013, 0x6031,
+0x6011, 0x5017, 0x5015, 0x400f, 0x400b};
+static const uint16_t csw5[] = { 0x1000, 0x5011, 0x5015, 0x5019, 0x501d, 0x6009, 0x600b, 0x600d, 0x600f, 0x7001, 0x7041,
+0x7003, 0x7043, 0x7005, 0x7045, 0x7007, 0x7067, 0x7027, 0x7065, 0x7025, 0x7063, 0x7023, 0x7061, 0x7021, 0x602f, 0x602d, 0x602b,
+0x6029, 0x501f, 0x501b, 0x5017, 0x5013};
+static const uint16_t csw6[] = { 0x1000, 0x6021, 0x6025, 0x6029, 0x602d, 0x6031, 0x6035, 0x6039, 0x603d, 0x7011, 0x7013,
+0x7015, 0x7017, 0x7019, 0x701b, 0x701d, 0x701f, 0x8001, 0x8081, 0x8003, 0x8083, 0x8005, 0x8085, 0x8007, 0x8087, 0x8009, 0x8089,
+0x800b, 0x808b, 0x800d, 0x808d, 0x800f, 0x80cf, 0x804f, 0x80cd, 0x804d, 0x80cb, 0x804b, 0x80c9, 0x8049, 0x80c7, 0x8047, 0x80c5,
+0x8045, 0x80c3, 0x8043, 0x80c1, 0x8041, 0x705f, 0x705d, 0x705b, 0x7059, 0x7057, 0x7055, 0x7053, 0x7051, 0x603f, 0x603b, 0x6037,
+0x6033, 0x602f, 0x602b, 0x6027, 0x6023};
+
+static const uint16_t *CSW[] = {nullptr, nullptr, nullptr, csw3, csw4, csw5, csw6};
+
 // Encoding with three codeword lenghts, used for higher rungs, not for byte data
 // Yes, it's horrid, but it works. Bit fiddling!
 // No conditionals, computes all three forms and chooses one by masking with the condition
 // It is faster than similar code with conditions because the calculations for the three lines get interleaved
 // The "(~0ull * (1 &" is to show the compiler that the multiplication is a mask operation
-static inline std::pair<size_t, uint64_t> q3csz(uint64_t val, size_t rung) {
+static std::pair<size_t, uint64_t> q3csz(uint64_t val, size_t rung) {
     uint64_t nxt = (val >> (rung - 1)) & 1;
     uint64_t top = val >> rung;
     // <size, value>
     return std::make_pair<size_t, uint64_t>(rung + top + (top | nxt),
-        + ((~0ull * (1 & top)) & (((val ^ (1ull << rung)) >> 2) | ((val & 0b11ull) << rung)))   // 1 x
-        + ((~0ull * (1 & ~(top | nxt))) & (val + (1ull << (rung - 1))))                         // 0 0
-        + ((~0ull * (1 & (~top & nxt))) & (val >> 1 | ((val & 1) << rung)))                     // 0 1
-        );
+        +((~0ull * (1 & top)) & (((val ^ (1ull << rung)) >> 2) | ((val & 0b11ull) << rung)))   // 1 x BIG     -> 00
+        +((~0ull * (1 & ~(top | nxt))) & (val + (1ull << (rung - 1))))                         // 0 0 LITTLE  -> 1?
+        +((~0ull * (1 & (~top & nxt))) & (val >> 1 | ((val & 1) << rung))));                   // 0 1 MIDDLE  -> 01
 }
 
-template <typename T = uint8_t, size_t B = 4>
+template <typename T = uint8_t>
 std::vector<uint8_t> encode(const std::vector<T>& image,
     size_t xsize, size_t ysize, int mb = 1)
 {
+    constexpr size_t B = 4; // Block is 4x4 pixels
     std::vector<uint8_t> result;
     result.reserve(image.size() * sizeof(T));
     Bitstream s(result);
@@ -538,6 +556,7 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
 
     // Unit size bit length
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+
     // Elements in a group
     constexpr size_t B2(B * B);
 
@@ -569,13 +588,21 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                 const uint64_t maxval = *std::max_element(group, group + B2);
 
                 const size_t rung = topbit(maxval | 1); // Force at least one bit set
+
                 uint64_t acc = 0;
                 size_t abits = 1;
-
-                if (runbits[c] != rung) {
-                    acc = (rung << 1) + 1;
-                    abits = UBITS + 1;
+                if (0) {
+                    if (runbits[c] != rung) {
+                        acc = (rung << 1) + 1;
+                        abits = UBITS + 1;
+                    }
                 }
+                else { // Encode the rung switch using a table lookup
+                    acc = CSW[UBITS][(rung - runbits[c]) & ((1ull << UBITS) - 1)];
+                    abits = acc >> 12;
+                    acc &= 0xff; // Max switch code size is 8 bits
+                }
+
                 runbits[c] = rung;
 
                 if (0 == rung) { // only 1s and 0s, rung is -1 or 0
@@ -593,7 +620,7 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                 }
 
                 // If the rung bit sequence is a step down, flip down the last set bit, saves one or two bits
-                auto p = stepdownl(group, rung);
+                auto p = stepleft(group, rung);
                 if (p < B2)
                     group[p] ^= static_cast<T>(1) << rung;
 
@@ -731,7 +758,7 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
 
                 // Undo the step change
                 if (rung > 0 && (0 == (group[B2 - 1] >> rung))) {
-                    auto p = stepdownr(group.data(), rung);
+                    auto p = stepright(group.data(), rung);
                     if (p < B2)
                         group[p] ^= static_cast<T>(1) << rung;
                 }

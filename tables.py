@@ -29,7 +29,7 @@ def show_magsigns():
             print(f"{v}, {magss(v):x}, {smags(magss(v))}")
 
 # Returns a 16 bit value, top 4 bits is payload size
-# This system would work up to rung 11
+# This system works up to rung 11
 def encode(v, rung):
     if v < (1 << (rung - 1)): # Short
         return (rung << 12) + v + (1 << (rung - 1))
@@ -38,6 +38,7 @@ def encode(v, rung):
     else: # Long, rotated right two bits
         return ((rung + 2) << 12) + ((v - (1 << rung)) >> 2) + ((v & 3) << rung)
 
+# tables for byte data
 def showencode8():
     for rung in range(2, 8):
         s = f"static const uint16_t crg{rung}[] = {{"
@@ -48,6 +49,7 @@ def showencode8():
                 s = ""
         print(s[:-2] + "};")
 
+# tables for rungs 8 to 10 (up to 11 bits, encoded fits in 12 bits)
 def showencode16():
     for rung in range(8, 11):
         s = f"static const uint16_t crg{rung}[] = {{"
@@ -58,6 +60,30 @@ def showencode16():
                 s = ""
         print(s[:-2] + "};")
 
+def cs(v, u):
+    'convert delta to codeword for codeswitch'
+    sbitp = 1 << (u - 1) # Sign bit position
+    if (v & sbitp): # Negative
+        return mags(v - sbitp * 2)
+    else: # Shift the positives, so zero becomes max pos
+        return mags((v - 1) & (sbitp - 1))
+
+def showcodeswitch():
+    for ubits in (3,4,5,6):
+        # If delta is zero, there is no code switch, just send the 0 bit
+        s = f"static const uint16_t csw{ubits}[] = {{ 0x1000, "
+        for v in range(1, 2**ubits):
+            v = cs(v, ubits) # the magsign value
+            v = encode(v, ubits - 1)
+            # Add the change bit, change code and length
+            v =  ((v + 0x1000) & 0xf000) | ((v << 1) & 0xff) | 1
+            s += f"0x{v:4x}, "
+            if len(s) > 120:
+                print(s)
+                s = ""
+        print(s[:-2] + "};")
+
 if __name__ == "__main__":
-    showencode8()
-    showencode16()
+    # showencode8()
+    # showencode16()
+    showcodeswitch()
