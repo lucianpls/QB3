@@ -3,12 +3,19 @@
 #include <cinttypes>
 #include <limits>
 #include <functional>
-#include <intrin.h>
 #include <cassert>
 #include <utility>
+#if defined(_WIN32)
+#include <intrin.h>
+#endif
 
 // Define this to minimize the size of the code, loosing some speed for large data types
 // #define QB3_OPTIMIZE_ONLY_BYTE
+
+#if defined(__GNUC__) && defined(__x86_64__)
+// Comment out if binary is to run on processors without sse4
+#pragma GCC target("sse4")
+#endif
 
 namespace QB3 {
     // Masks, from 0 to 64 rung
@@ -19,7 +26,7 @@ namespace QB3 {
 #undef R
 
 // rank of top set bit, result is undefined for val == 0
-static size_t bsr(uint64_t val) {
+static inline size_t topbit(uint64_t val) {
 #if defined(_WIN32)
     return 63 - __lzcnt64(val);
 #else
@@ -33,6 +40,78 @@ static size_t bsr(uint64_t val) {
     return r;
 #endif
 #endif
+}
+
+// My own portable byte bitcount
+static inline int nbits(unsigned char v) {
+    return ((((v - ((v >> 1) & 0x55u)) * 0x1010101u) & 0x30c00c03u) * 0x10040041u) >> 0x1cu;
+}
+
+static inline size_t setbits(uint64_t val) {
+#if defined(_WIN32)
+    return __popcnt64(val);
+#else
+#if defined(__GNUC__)
+    return __builtin_popcountll(val);
+#else
+    size_t r = 0;
+    for (int i = 0; i < sizeof(val); i++, val >>= 8)
+        r += nbits(0xff & val);
+    return r;
+#endif
+#endif
+}
+
+// Same, except we only count the bottom 16 bits
+static inline size_t setbits16(uint64_t val) {
+#if defined(_WIN32)
+    return __popcnt64(val & 0xffffull);
+#else
+#if defined(__GNUC__)
+    return __builtin_popcountll(val & 0xffffull);
+#else
+    return nbits(0xff & val) + (nbits(0xff & (val >> 8)));
+#endif
+#endif
+}
+
+// Looks for 1*0* in the rung bits of the input values, returns the position of last 1
+// Assumes at least one of the bits is set
+template<typename T>
+static size_t stepdownl(const T * const v, size_t rung) {
+    const int B2 = 16;
+    // We are looking for 1*0* pattern on the B2 bits
+    uint64_t acc = ~0ull;
+    // collect inverted rung bits, we are now looking for 0*1*
+    for (int i = 0; i < B2; i++)
+        acc = (acc << 1) | (1 & (v[i] >> rung));
+    // Flip bits so the top ones are 0 and bottom ones are 1
+    acc = ~acc;
+
+    // Can call topbit since acc != 0
+    if (topbit(acc) != setbits16(acc) - 1)
+        return B2;
+    return B2 - 1 - setbits16(acc);
+}
+
+// Undo the stepdown shift
+// Looks for 1*0* in the rung bits of the input values, returns the position of first 0
+// If the group was stepdown left shifted, the last rung bit has to be 0
+template<typename T>
+static size_t stepdownr(const T* const v, size_t rung) {
+    const int B2 = 16;
+    // We are looking for 1*0* pattern on the B2 bits
+    uint64_t acc = ~0ull;
+    // collect inverted rung bits, we are now looking for 0*1*
+    for (int i = 0; i < B2; i++)
+        acc = (acc << 1) | (1 & (v[i] >> rung));
+    // Flip bits so the top ones are 0 and bottom ones are 1
+    acc = ~acc;
+
+    // Can call topbit since acc != 0
+    if (topbit(acc) != setbits16(acc) - 1)
+        return B2;
+    return B2 - setbits16(acc);
 }
 
 // Greater common denominator
@@ -112,13 +191,13 @@ T gcode(const std::vector<T>& vals) {
 // To keep the range exactly the same as two's complement, the magnitude of negative values is biased down by one (no negative zero)
 
 
-// Change to mag-sign without conditionals, fast
+// Change to mag-sign without conditionals, as fast as C can make it
 template<typename T>
 static T mags(T v) {
     return (std::numeric_limits<T>::max() * (v >> (8 * sizeof(T) - 1))) ^ (v << 1);
 }
 
-// Undo mag-sign without conditionals, faster
+// Undo mag-sign without conditionals, as fast as C can make it
 template<typename T>
 static T smag(T v) {
     return (std::numeric_limits<T>::max() * (v & 1)) ^ (v >> 1);
@@ -142,22 +221,6 @@ static T undsign(T *v, T pred) {
     for (int i = 0; i < B2; i++)
         v[i] = pred += smag(v[i]);
     return pred;
-}
-
-// If the front of v contains values higher than m and the rest are under or equal 
-// return the position of the last value higher than m.
-// Otherwise return the one after the last position
-template<typename T>
-static int step(const std::vector<T>& v, const T m = 0) {
-    const int sz = static_cast<int>(v.size());
-    int i = 0;
-    while (i < sz && v[i] > m)
-        i++;
-    int s = i; // Bit position of last high value
-    while (i < sz && v[i] <= m)
-        i++;
-    // If the loop completed then it's a step vector
-    return (i == sz) ? s : sz;
 }
 
 // Block size should be 8, for noisy images 4 is better
@@ -446,21 +509,20 @@ static const uint16_t crg10[] = { 0xa200, 0xa201, 0xa202, 0xa203, 0xa204, 0xa205
 static const uint16_t *CRG[] = {nullptr, crg1, crg2, crg3, crg4, crg5, crg6, crg7, crg8, crg9, crg10};
 #endif
 
-// Encoding with three codeword lenghts
+// Encoding with three codeword lenghts, used for higher rungs, not for byte data
 // Yes, it's horrid, but it works. Bit fiddling!
-// No conditionals, computes all three forms and chooses one by multiplying with the condition bit
-// It is roughly 25% faster than similar code with conditions, at least with MSVC on i7-8x
-// This seems to be too complex for compilers
-// The "(~0ull * (1 &" is to show the compiler that the multiplication is really a mask operation
-// It is only used for encoding higher rungs, so it's not critical
-static inline std::pair<uint64_t, size_t> q3csz(uint64_t val, size_t rung) {
+// No conditionals, computes all three forms and chooses one by masking with the condition
+// It is faster than similar code with conditions because the calculations for the three lines get interleaved
+// The "(~0ull * (1 &" is to show the compiler that the multiplication is a mask operation
+static inline std::pair<size_t, uint64_t> q3csz(uint64_t val, size_t rung) {
     uint64_t nxt = (val >> (rung - 1)) & 1;
     uint64_t top = val >> rung;
     // <size, value>
-    return std::make_pair<uint64_t, size_t>(rung + top + (top | nxt)
-        , ((val + (1ull << (rung - 1))) & (~0ull * (1 & ~(top | nxt))))                   // 0 0
-        + ((val >> 1 | ((val & 1) << rung)) & (~0ull * (1 & (~top & nxt))))               // 0 1
-        + ((((val ^ (1ull << rung)) >> 2) | ((val & 0b11ull) << rung)) & (~0ull * (1 & top))));   // 1 x
+    return std::make_pair<size_t, uint64_t>(rung + top + (top | nxt),
+        + ((~0ull * (1 & top)) & (((val ^ (1ull << rung)) >> 2) | ((val & 0b11ull) << rung)))   // 1 x
+        + ((~0ull * (1 & ~(top | nxt))) & (val + (1ull << (rung - 1))))                         // 0 0
+        + ((~0ull * (1 & (~top & nxt))) & (val >> 1 | ((val & 1) << rung)))                     // 0 1
+        );
 }
 
 template <typename T = uint8_t, size_t B = 4>
@@ -486,7 +548,7 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
     size_t offsets[B2];
     for (size_t i = 0; i < B2; i++)
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
-
+    uint64_t count = 0;
     for (size_t y = 0; y < ysize; y += B) {
         for (size_t x = 0; x < xsize; x += B) {
             size_t loc = (y * xsize + x) * bands; // Top-left pixel address
@@ -506,7 +568,7 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                 prev[c] = dsign(group, prev[c]);
                 const uint64_t maxval = *std::max_element(group, group + B2);
 
-                const size_t rung = bsr(maxval | 1); // Force at least one bit set
+                const size_t rung = topbit(maxval | 1); // Force at least one bit set
                 uint64_t acc = 0;
                 size_t abits = 1;
 
@@ -529,6 +591,14 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                     s.push(acc, abits);
                     acc = abits = 0;
                 }
+
+                // If the rung bit sequence is a step down, flip down the last set bit, saves one or two bits
+                auto p = stepdownl(group, rung);
+                if (p < B2)
+                    group[p] ^= static_cast<T>(1) << rung;
+
+                //if (0 != (group[15] >> rung) && (stepup(group, rung) < B2))
+                //    count++;
 
                 if (7 > rung) { // Encoded data fits in 64 or 128 bits
                     auto t = CRG[rung];
@@ -595,6 +665,8 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
             }
         }
     }
+    if (count)
+        printf("Count %lld\n", count);
     return result;
 }
 
@@ -624,7 +696,7 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
             for (int c = 0; c < bands; c++) {
                 if (0 != s.get()) // The rung change flag
                     s.pull(runbits[c], UBITS);
-                const int64_t rung = runbits[c];
+                const size_t rung = runbits[c];
                 uint64_t val;
                 if (0 == rung) { // 0 or 1
                     if (0 == s.get()) // All 0s
@@ -656,6 +728,14 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                         }
                     }
                 }
+
+                // Undo the step change
+                if (rung > 0 && (0 == (group[B2 - 1] >> rung))) {
+                    auto p = stepdownr(group.data(), rung);
+                    if (p < B2)
+                        group[p] ^= static_cast<T>(1) << rung;
+                }
+
                 prev[c] = undsign(group.data(), prev[c]);
                 for (size_t i = 0; i < group.size(); i++)
                     image[loc + c + offsets[i]] = group[i];

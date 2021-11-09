@@ -57,9 +57,11 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
 
     if (img != re) {
         for (size_t i = 0; i < img.size(); i++)
-            if (img[i] != re[i])
-                cout << "Difference at " << i << " "
-                    << img[i] << " " << re[i] << endl;
+            if (img[i] != re[i]) {
+                cout << endl << "Difference at " << i << " "
+                    << img[i] << " " << re[i];
+                break;
+            }
     }
 }
 
@@ -169,6 +171,13 @@ int main(int argc, char **argv)
             }
             return 0;
         }
+
+        //const int B2 = 16;
+        //uint64_t v[B2];
+        //for (int i = 0; i < B2; i++)
+        //    v[i] = i < 1 ? 0xf : 0xf;
+        //v[5] = 0;
+        //return bitstep(v, 3);
 
         string fname = argv[1];
         FILE* f;
