@@ -602,7 +602,6 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                     abits = acc >> 12;
                     acc &= 0xff; // Max switch code size is 8 bits
                 }
-
                 runbits[c] = rung;
 
                 if (0 == rung) { // only 1s and 0s, rung is -1 or 0
@@ -721,8 +720,31 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
         for (size_t x = 0; (x + B) <= xsize; x += B) {
             size_t loc = (y * xsize + x) * bands;
             for (int c = 0; c < bands; c++) {
-                if (0 != s.get()) // The rung change flag
-                    s.pull(runbits[c], UBITS);
+                if (0 != s.get()) { // The rung change flag
+                    if (0) {
+                        s.pull(runbits[c], UBITS);
+                    }
+                    else { // Ugh, variable size
+                        uint8_t cs;
+                        s.pull(cs, UBITS - 1); // 5
+
+                        if (cs >= (1ull << (UBITS - 2))) // Starts with 1x, short
+                            cs ^= (1ull << (UBITS - 2));
+                        else if (cs >= (1ull << (UBITS - 3))) // Starts with 01, middle
+                            cs = cs * 2 + s.get();
+                        else { // starts with 00, long
+                            uint8_t val;
+                            s.pull(val, 2);
+                            cs = (cs << 2) + val + (1ull << (UBITS - 1));
+                        }
+
+                        // Undo the mags operation
+                        cs = smag(cs);
+                        // do the positive shift
+                        cs += ((cs >> 7) ^ 1);
+                        runbits[c] = (runbits[c] + cs) & ((1ull << UBITS) - 1);
+                    }
+                }
                 const size_t rung = runbits[c];
                 uint64_t val;
                 if (0 == rung) { // 0 or 1
