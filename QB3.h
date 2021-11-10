@@ -2,7 +2,7 @@
 #include <vector>
 #include <cinttypes>
 #include <limits>
-#include <functional>
+//#include <functional>
 #include <cassert>
 #include <utility>
 #if defined(_WIN32)
@@ -510,21 +510,20 @@ static const uint16_t crg10[] = { 0xa200, 0xa201, 0xa202, 0xa203, 0xa204, 0xa205
 static const uint16_t *CRG[] = {nullptr, crg1, crg2, crg3, crg4, crg5, crg6, crg7, crg8, crg9, crg10};
 #endif
 
-// Code switch encoding tables, stored the same way, see tables.py for how they are generated
-// They are defined for 3 4 5 and 6 bits for unit length
-// First element means no-change
-static const uint16_t csw3[] = { 0x1000, 0x3005, 0x4003, 0x5001, 0x5019, 0x5009, 0x400b, 0x3007};
-static const uint16_t csw4[] = { 0x1000, 0x4009, 0x400d, 0x5005, 0x5007, 0x6001, 0x6021, 0x6003, 0x6033, 0x6013, 0x6031,
-0x6011, 0x5017, 0x5015, 0x400f, 0x400b};
-static const uint16_t csw5[] = { 0x1000, 0x5011, 0x5015, 0x5019, 0x501d, 0x6009, 0x600b, 0x600d, 0x600f, 0x7001, 0x7041,
+// Code switch encoding tables, about 256 bytes, stored the same way
+// See tables.py for how they are generated
+// They are defined for 3 4 5 and 6 bits for unit length. 0x1000 means no change
+static const uint16_t csw3[] = {0x1000, 0x3005, 0x4003, 0x5001, 0x5019, 0x5009, 0x400b, 0x3007};
+static const uint16_t csw4[] = {0x1000, 0x4009, 0x400d, 0x5005, 0x5007, 0x6001, 0x6021, 0x6003, 0x6033, 0x6013, 0x6031, 0x6011, 
+0x5017, 0x5015, 0x400f, 0x400b};
+static const uint16_t csw5[] = {0x1000, 0x5011, 0x5015, 0x5019, 0x501d, 0x6009, 0x600b, 0x600d, 0x600f, 0x7001, 0x7041,
 0x7003, 0x7043, 0x7005, 0x7045, 0x7007, 0x7067, 0x7027, 0x7065, 0x7025, 0x7063, 0x7023, 0x7061, 0x7021, 0x602f, 0x602d, 0x602b,
 0x6029, 0x501f, 0x501b, 0x5017, 0x5013};
-static const uint16_t csw6[] = { 0x1000, 0x6021, 0x6025, 0x6029, 0x602d, 0x6031, 0x6035, 0x6039, 0x603d, 0x7011, 0x7013,
+static const uint16_t csw6[] = {0x1000, 0x6021, 0x6025, 0x6029, 0x602d, 0x6031, 0x6035, 0x6039, 0x603d, 0x7011, 0x7013,
 0x7015, 0x7017, 0x7019, 0x701b, 0x701d, 0x701f, 0x8001, 0x8081, 0x8003, 0x8083, 0x8005, 0x8085, 0x8007, 0x8087, 0x8009, 0x8089,
 0x800b, 0x808b, 0x800d, 0x808d, 0x800f, 0x80cf, 0x804f, 0x80cd, 0x804d, 0x80cb, 0x804b, 0x80c9, 0x8049, 0x80c7, 0x8047, 0x80c5,
 0x8045, 0x80c3, 0x8043, 0x80c1, 0x8041, 0x705f, 0x705d, 0x705b, 0x7059, 0x7057, 0x7055, 0x7053, 0x7051, 0x603f, 0x603b, 0x6037,
 0x6033, 0x602f, 0x602b, 0x6027, 0x6023};
-
 static const uint16_t *CSW[] = {nullptr, nullptr, nullptr, csw3, csw4, csw5, csw6};
 
 // Encoding with three codeword lenghts, used for higher rungs, not for byte data
@@ -547,18 +546,17 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
     size_t xsize, size_t ysize, int mb = 1)
 {
     constexpr size_t B = 4; // Block is 4x4 pixels
+    // Unit size bit length
+    constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+    // Elements in a group
+    constexpr size_t B2(B * B);
+
     std::vector<uint8_t> result;
     result.reserve(image.size() * sizeof(T));
     Bitstream s(result);
     const size_t bands = image.size() / xsize / ysize;
     assert(image.size() == xsize * ysize * bands);
     assert(0 == xsize % B && 0 == ysize % B);
-
-    // Unit size bit length
-    constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-
-    // Elements in a group
-    constexpr size_t B2(B * B);
 
     // Running code length, start with nominal value
     std::vector<size_t> runbits(bands, sizeof(T) * 8 - 1);
@@ -567,7 +565,6 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
     size_t offsets[B2];
     for (size_t i = 0; i < B2; i++)
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
-    uint64_t count = 0;
     for (size_t y = 0; y < ysize; y += B) {
         for (size_t x = 0; x < xsize; x += B) {
             size_t loc = (y * xsize + x) * bands; // Top-left pixel address
@@ -586,10 +583,9 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                 // Delta in low sign group encode
                 prev[c] = dsign(group, prev[c]);
                 const uint64_t maxval = *std::max_element(group, group + B2);
-
                 const size_t rung = topbit(maxval | 1); // Force at least one bit set
 
-                // Use rung switch tables, the work even if no switch is needed
+                // Encode rung switch using tables, works even with no rung change
                 uint64_t acc = CSW[UBITS][(rung - runbits[c]) & ((1ull << UBITS) - 1)];
                 size_t abits = acc >> 12;
                 acc &= 0xff; // Strip the size
@@ -604,25 +600,20 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                     continue;
                 }
 
-                if (6 == rung) {
-                    s.push(acc, abits);
-                    acc = abits = 0;
-                }
-
-                // If the rung bit sequence is a step down, flip down the last set bit, saves one or two bits
+                // If the rung bit sequence is a step down flip the last set bit, it saves one or two bits
                 auto p = stepleft(group, rung);
                 if (p < B2)
-                    group[p] ^= static_cast<T>(1) << rung;
+                    group[p] ^= static_cast<T>(1ull << rung);
 
-                if (7 > rung) { // Encoded data fits in 64 or 128 bits
+                if (6 > rung) { // Encoded data fits in 64 or 128 bits
                     auto t = CRG[rung];
                     for (int i = 0; i < B2 / 2; i++) {
                         acc |= (TBLMASK & t[group[i]]) << abits;
                         abits += t[group[i]] >> 12;
                     }
 
-                    // Only at rung 1 and rung 2 we can skip this push, if the accum has enough space
-                    if (!((rung == 1 && abits < 41) || (rung == 2 && abits < 33))) {
+                    // At rung 1 and 2 this push can be skipped, if the accum has enough space
+                    if (!((rung == 1) || (rung == 2 && abits < 33))) {
                         s.push(acc, abits);
                         acc = abits = 0;
                     }
@@ -635,8 +626,9 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                     continue;
                 }
 
-                // For byte data this covers only rung 7, otherwise up to 10
-                if ((sizeof(CRG)/sizeof(*CRG)) > rung) { // Encoded data fits in 256 bits, 4 way interleaved
+                // Last part of table encoding, rung 6-7 or 6-10
+                // Encoded data fits in 256 bits, 4 way interleaved
+                if ((sizeof(CRG)/sizeof(*CRG)) > rung) {
                     auto t = CRG[rung];
                     size_t a[4] = { acc, 0, 0, 0 };
                     size_t asz[4] = { abits, 0, 0, 0 };
@@ -651,36 +643,28 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                     continue;
                 }
 
-                // Push the code switch for non-table encoding
-                s.push(acc, abits);
-
-                // Computed three length encoding, works for rung > 2 but we use tables for low rungs
-                // This code vanishes in 8 bit mode
-                if (1 < sizeof(T)) {
+                // Computed three length encoding, slower, works for rung > 1
+                if (1 < sizeof(T)) { // This code vanishes in 8 bit mode
+                    // Push the code switch for non-table encoding, not worth the hassle
+                    s.push(acc, abits);
                     if (63 != rung) {
                         for (uint64_t val : group) {
                             auto p = q3csz(val, rung);
                             s.push(p.second, p.first);
                         }
-                        continue;
                     }
-
-                    // rung 63 may overflow 64 bits
-                    for (uint64_t val : group) {
-                        auto p = q3csz(val, rung);
-                        if (65 == p.first) {
-                            s.push(p.second, 64);
-                            s.push((val >> 1) & 1, 1);
+                    else { // rung 63 may overflow 64 bits, push the second val bit explicitly
+                        for (uint64_t val : group) {
+                            auto p = q3csz(val, rung);
+                            size_t ovf = p.first & (p.first >> 6); // overflow flag
+                            s.push(p.second, p.first ^ ovf); // changes 65 in 64
+                            s.push((val >> 1) & 1, ovf); // safe to call with 0 bits
                         }
-                        else
-                            s.push(p.second, p.first);
                     }
                 }
             }
         }
     }
-    if (count)
-        printf("Count %lld\n", count);
     return result;
 }
 
@@ -708,7 +692,6 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
         for (size_t x = 0; (x + B) <= xsize; x += B) {
             size_t loc = (y * xsize + x) * bands;
             for (int c = 0; c < bands; c++) {
-
                 if (0 != s.get()) { // The rung change flag, triggers variable side decoding
                     uint8_t cs;
                     s.pull(cs, UBITS - 1); // 5
@@ -716,7 +699,7 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                     if (cs >= (1ull << (UBITS - 2))) // Starts with 1x, short
                         cs ^= (1ull << (UBITS - 2));
                     else if (cs >= (1ull << (UBITS - 3))) // Starts with 01, middle
-                        cs = cs * 2 + s.get();
+                        cs = static_cast<uint8_t>(s.get()) + cs * 2;
                     else { // starts with 00, long
                         uint8_t val;
                         s.pull(val, 2);
@@ -725,8 +708,7 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
 
                     // Undo the mags operation
                     cs = smag(cs);
-
-                    assert(cs != 0); // This is where the useless switch can be detected
+                    assert(cs != 0); // This is where the in-rung signal can be detected
 
                     // do the positive shift if needed
                     cs += ((cs >> 7) ^ 1);
@@ -772,7 +754,6 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                     if (p < B2)
                         group[p] ^= static_cast<T>(1) << rung;
                 }
-
                 prev[c] = undsign(group.data(), prev[c]);
                 for (size_t i = 0; i < group.size(); i++)
                     image[loc + c + offsets[i]] = group[i];
