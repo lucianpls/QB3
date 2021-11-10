@@ -589,19 +589,10 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
 
                 const size_t rung = topbit(maxval | 1); // Force at least one bit set
 
-                uint64_t acc = 0;
-                size_t abits = 1;
-                if (0) {
-                    if (runbits[c] != rung) {
-                        acc = (rung << 1) + 1;
-                        abits = UBITS + 1;
-                    }
-                }
-                else { // Encode the rung switch using a table lookup
-                    acc = CSW[UBITS][(rung - runbits[c]) & ((1ull << UBITS) - 1)];
-                    abits = acc >> 12;
-                    acc &= 0xff; // Max switch code size is 8 bits
-                }
+                // Use rung switch tables, the work even if no switch is needed
+                uint64_t acc = CSW[UBITS][(rung - runbits[c]) & ((1ull << UBITS) - 1)];
+                size_t abits = acc >> 12;
+                acc &= 0xff; // Strip the size
                 runbits[c] = rung;
 
                 if (0 == rung) { // only 1s and 0s, rung is -1 or 0
@@ -622,9 +613,6 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                 auto p = stepleft(group, rung);
                 if (p < B2)
                     group[p] ^= static_cast<T>(1) << rung;
-
-                //if (0 != (group[15] >> rung) && (stepup(group, rung) < B2))
-                //    count++;
 
                 if (7 > rung) { // Encoded data fits in 64 or 128 bits
                     auto t = CRG[rung];
@@ -720,31 +708,31 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
         for (size_t x = 0; (x + B) <= xsize; x += B) {
             size_t loc = (y * xsize + x) * bands;
             for (int c = 0; c < bands; c++) {
-                if (0 != s.get()) { // The rung change flag
-                    if (0) {
-                        s.pull(runbits[c], UBITS);
-                    }
-                    else { // Ugh, variable size
-                        uint8_t cs;
-                        s.pull(cs, UBITS - 1); // 5
 
-                        if (cs >= (1ull << (UBITS - 2))) // Starts with 1x, short
-                            cs ^= (1ull << (UBITS - 2));
-                        else if (cs >= (1ull << (UBITS - 3))) // Starts with 01, middle
-                            cs = cs * 2 + s.get();
-                        else { // starts with 00, long
-                            uint8_t val;
-                            s.pull(val, 2);
-                            cs = (cs << 2) + val + (1ull << (UBITS - 1));
-                        }
+                if (0 != s.get()) { // The rung change flag, triggers variable side decoding
+                    uint8_t cs;
+                    s.pull(cs, UBITS - 1); // 5
 
-                        // Undo the mags operation
-                        cs = smag(cs);
-                        // do the positive shift
-                        cs += ((cs >> 7) ^ 1);
-                        runbits[c] = (runbits[c] + cs) & ((1ull << UBITS) - 1);
+                    if (cs >= (1ull << (UBITS - 2))) // Starts with 1x, short
+                        cs ^= (1ull << (UBITS - 2));
+                    else if (cs >= (1ull << (UBITS - 3))) // Starts with 01, middle
+                        cs = cs * 2 + s.get();
+                    else { // starts with 00, long
+                        uint8_t val;
+                        s.pull(val, 2);
+                        cs = (cs << 2) + val + (1ull << (UBITS - 1));
                     }
+
+                    // Undo the mags operation
+                    cs = smag(cs);
+
+                    assert(cs != 0); // This is where the useless switch can be detected
+
+                    // do the positive shift if needed
+                    cs += ((cs >> 7) ^ 1);
+                    runbits[c] = (runbits[c] + cs) & ((1ull << UBITS) - 1);
                 }
+
                 const size_t rung = runbits[c];
                 uint64_t val;
                 if (0 == rung) { // 0 or 1
