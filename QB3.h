@@ -230,8 +230,17 @@ static T undsign(T *v, T pred) {
 // which would need the lookup tables extended
 
 // Traversal order tables
-static const int xlut[16] = {0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3};
-static const int ylut[16] = {0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3};
+#if defined(LINEAR)
+static const int xlut[16] = { 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3 };
+static const int ylut[16] = { 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3 };
+#elif defined(DIAG)
+static const int xlut[16] = { 0, 1, 0, 2, 1, 0, 3, 2, 1, 0, 3, 2, 1, 3, 2, 3 };
+static const int ylut[16] = { 0, 0, 1, 0, 1, 2, 0, 1, 2, 3, 1, 2, 3, 2, 3, 3 };
+#else
+// Better in most cases
+static const int xlut[16] = { 0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3 };
+static const int ylut[16] = { 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3 };
+#endif
 
 // QB3 encoding tables for rungs 2 to 11, for speedup. Rung 0 and 1 are special
 // Storage is under 8K by using short int, or under 1K when only byte data is optimized
@@ -541,6 +550,19 @@ static std::pair<size_t, uint64_t> q3csz(uint64_t val, size_t rung) {
         +((~0ull * (1 & (~top & nxt))) & (val >> 1 | ((val & 1) << rung))));                   // 0 1 MIDDLE  -> 01
 }
 
+// Computed decoding, might be faster with some common factor
+static std::pair<size_t, uint64_t> q3d(uint64_t acc, size_t rung) {
+    uint64_t ntop = (~(acc >> (rung - 1))) & 1;
+    uint64_t nnxt = (~(acc >> (rung - 2))) & 1;
+    uint64_t rbit = 1ull << rung;
+    return std::make_pair(rung + (ntop & 1) + (ntop & nnxt & 1),
+        (1 & ~ntop) * (acc & ((rbit >> 1) - 1))
+        + (1 & ntop & ~nnxt) * (((acc << 1) & (rbit - 1)) | ((acc >> rung) & 1))
+        + (1 & ntop & nnxt) * (rbit + ((acc & ((rbit >> 1) - 1)) << 2) + ((acc >> rung) & 0b11))
+    );
+}
+
+
 template <typename T = uint8_t>
 std::vector<uint8_t> encode(const std::vector<T>& image,
     size_t xsize, size_t ysize, int mb = 1)
@@ -668,7 +690,6 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
     return result;
 }
 
-
 template<typename T = uint8_t, size_t B = 4>
 std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize, 
     size_t bands, int mb = 1)
@@ -708,10 +729,10 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
 
                     // Undo the mags operation
                     cs = smag(cs);
-                    assert(cs != 0); // This is where the in-rung signal can be detected
-
                     // do the positive shift if needed
                     cs += ((cs >> 7) ^ 1);
+
+                    assert(cs != 0); // This is where the in-rung signal can be detected
                     runbits[c] = (runbits[c] + cs) & ((1ull << UBITS) - 1);
                 }
 
@@ -736,14 +757,56 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                 }
                 else { // triple length
                     for (auto& it : group) {
-                        s.pull(it, rung);
-                        if (it > mask[rung - 1]) // Starts with 1x
-                            it &= mask[rung - 1];
-                        else if (it > mask[rung - 2]) // Starts with 01
-                            it = static_cast<T>(s.get() + (static_cast<uint64_t>(it) << 1));
-                        else { // starts with 00
-                            s.pull(val, 2);
-                            it = static_cast<T>((1ull << rung) + (static_cast<uint64_t>(it) << 2) + val);
+                        if (1) {
+                            s.pull(it, rung);
+                            if (it > mask[rung - 1]) // Starts with 1x
+                                it &= mask[rung - 1];
+                            else if (it > mask[rung - 2]) // Starts with 01
+                                it = static_cast<T>(s.get() + (static_cast<uint64_t>(it) << 1));
+                            else { // starts with 00
+                                s.pull(val, 2);
+                                it = static_cast<T>((1ull << rung) + (static_cast<uint64_t>(it) << 2) + val);
+                            }
+                        }
+                        else {
+                            if (sizeof(T) != 8) {
+                                auto p = q3d(s.peek(), rung);
+                                it = static_cast<T>(p.second);
+                                s.advance(p.first);
+                            }
+                            else {
+                                auto acc = s.peek();
+                                if (acc & (1ull << (rung - 1))) { // Starts with 1x
+                                    it = acc & ((1ull << (rung - 1)) - 1);
+                                    // mask[rung - 1];
+                                    s.advance(rung);
+                                }
+                                else if (acc & (1ull << (rung - 2))) { // Starts with 01
+                                    it = ((acc << 1) & ((1ull << rung) - 1)) | ((acc >> rung) & 1);
+                                    //it = ((acc << 1) & mask[rung]) | ((acc >> rung) & 1);
+                                    s.advance(rung + 1);
+                                }
+                                else { // starts with 00, rung + 2 overflows
+                                    if (sizeof(T) != 8) {
+                                        it = static_cast<T>(1ull << rung) + ((acc & ((1ull << (rung - 1)) - 1)) << 2) + ((acc >> rung) & 0b11);
+                                        s.advance(rung + 2);
+                                    }
+                                    else { // Safe for overflow due to unit size
+                                        if (rung != 63) {
+                                            //it = static_cast<T>(1ull << rung) + ((acc & mask[rung - 1]) << 2) + ((acc >> rung) & 0b11);
+                                            it = static_cast<T>(1ull << rung) | ((acc & (1ull << (rung - 1)) - 1) << 2) | ((acc >> rung) & 0b11);
+                                            s.advance(rung + 2);
+                                        }
+                                        else { // Overflow, bit 1 is not in accumulator
+        //                                    it = static_cast<T>(1ull << rung) + ((acc & mask[rung - 1]) << 2);
+                                            it = static_cast<T>(1ull << rung) | ((acc & (1ull << (rung - 1)) - 1) << 2);
+                                            s.advance(63);
+                                            s.pull(acc, 2);
+                                            it += static_cast<T>(acc);
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

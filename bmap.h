@@ -48,6 +48,34 @@ struct Bitstream {
         return bitp <= v.size() * 8;
     }
 
+    // Get 64bits without changing the state of the stream
+    uint64_t peek() const {
+        uint64_t val = 0;
+        size_t bits = 0;
+        if (bitp % 8) { // partial bits
+            val = v[bitp / 8] >> (bitp % 8);
+            bits = 8 - (bitp % 8);
+        }
+
+        // Single test, works most of the time
+        //if (bitp + bits + 64 <= v.size() * 8) {
+        //    for (int i = 0; i < 8; i++, bits += 8)
+        //        val |= static_cast<uint64_t>(v[(bitp + bits) / 8]) << bits;
+        //    return val;
+        //}
+
+        // (bitp + bits) is now byte aligned, we need data from 8 more bytes
+        for (; bits < 64 && bitp + bits < v.size() * 8; bits += 8)
+            val |= static_cast<uint64_t>(v[(bitp + bits) / 8]) << bits;
+        return val;
+    }
+
+    // Advance bitp if doing so won't go out of bounds
+    void advance(size_t d) {
+        if (bitp + d < v.size() * 8)
+            bitp += d;
+    }
+
     // Single bit fetch
     uint64_t get() {
         if (bitp >= 8 * v.size()) return 0; // Don't go past the end
