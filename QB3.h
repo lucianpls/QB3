@@ -124,12 +124,12 @@ T gcd(const std::vector<T>& vals) {
     auto vb(v.begin()), ve(v.end());
     for (;;) {
         sort(vb, ve);
-        while (!*vb)
+        while (!*vb) // Skip the zeros
             if (++vb == ve)
                 return 0;
-        auto m(*vb);
+        auto m(*vb); // smallest value
         if (vb + 1 == ve)
-            return m;
+            return m; // Done
         for (auto vi(vb + 1); vi < ve; vi++)
             *vi %= m;
     }
@@ -535,6 +535,28 @@ static const uint16_t csw6[] = {0x1000, 0x6021, 0x6025, 0x6029, 0x602d, 0x6031, 
 0x6033, 0x602f, 0x602b, 0x6027, 0x6023};
 static const uint16_t *CSW[] = {nullptr, nullptr, nullptr, csw3, csw4, csw5, csw6};
 
+// Decoding tables for codeswitch
+static const uint16_t dsw3[] = { 0x5003, 0x4002, 0x3001, 0x3007, 0x5005, 0x4006, 0x3001, 0x3007, 0x5004, 0x4002, 0x3001, 
+0x3007, 0x5004, 0x4006, 0x3001, 0x3007};
+static const uint16_t dsw4[] = { 0x6005, 0x6007, 0x5003, 0x5004, 0x4001, 0x400f, 0x4002, 0x400e, 0x600b, 0x6009, 0x500d,
+0x500c, 0x4001, 0x400f, 0x4002, 0x400e, 0x6006, 0x6008, 0x5003, 0x5004, 0x4001, 0x400f, 0x4002, 0x400e, 0x600a, 0x6008, 0x500d,
+0x500c, 0x4001, 0x400f, 0x4002, 0x400e};
+static const uint16_t dsw5[] = { 0x7009, 0x700b, 0x700d, 0x700f, 0x6005, 0x6006, 0x6007, 0x6008, 0x5001, 0x501f, 0x5002,
+0x501e, 0x5003, 0x501d, 0x5004, 0x501c, 0x7017, 0x7015, 0x7013, 0x7011, 0x601b, 0x601a, 0x6019, 0x6018, 0x5001, 0x501f, 0x5002,
+0x501e, 0x5003, 0x501d, 0x5004, 0x501c, 0x700a, 0x700c, 0x700e, 0x7010, 0x6005, 0x6006, 0x6007, 0x6008, 0x5001, 0x501f, 0x5002,
+0x501e, 0x5003, 0x501d, 0x5004, 0x501c, 0x7016, 0x7014, 0x7012, 0x7010, 0x601b, 0x601a, 0x6019, 0x6018, 0x5001, 0x501f, 0x5002,
+0x501e, 0x5003, 0x501d, 0x5004, 0x501c};
+static const uint16_t dsw6[] = { 0x8011, 0x8013, 0x8015, 0x8017, 0x8019, 0x801b, 0x801d, 0x801f, 0x7009, 0x700a, 0x700b,
+0x700c, 0x700d, 0x700e, 0x700f, 0x7010, 0x6001, 0x603f, 0x6002, 0x603e, 0x6003, 0x603d, 0x6004, 0x603c, 0x6005, 0x603b, 0x6006,
+0x603a, 0x6007, 0x6039, 0x6008, 0x6038, 0x802f, 0x802d, 0x802b, 0x8029, 0x8027, 0x8025, 0x8023, 0x8021, 0x7037, 0x7036, 0x7035,
+0x7034, 0x7033, 0x7032, 0x7031, 0x7030, 0x6001, 0x603f, 0x6002, 0x603e, 0x6003, 0x603d, 0x6004, 0x603c, 0x6005, 0x603b, 0x6006,
+0x603a, 0x6007, 0x6039, 0x6008, 0x6038, 0x8012, 0x8014, 0x8016, 0x8018, 0x801a, 0x801c, 0x801e, 0x8020, 0x7009, 0x700a, 0x700b,
+0x700c, 0x700d, 0x700e, 0x700f, 0x7010, 0x6001, 0x603f, 0x6002, 0x603e, 0x6003, 0x603d, 0x6004, 0x603c, 0x6005, 0x603b, 0x6006,
+0x603a, 0x6007, 0x6039, 0x6008, 0x6038, 0x802e, 0x802c, 0x802a, 0x8028, 0x8026, 0x8024, 0x8022, 0x8020, 0x7037, 0x7036, 0x7035,
+0x7034, 0x7033, 0x7032, 0x7031, 0x7030, 0x6001, 0x603f, 0x6002, 0x603e, 0x6003, 0x603d, 0x6004, 0x603c, 0x6005, 0x603b, 0x6006,
+0x603a, 0x6007, 0x6039, 0x6008, 0x6038};
+static const uint16_t *DSW[] = {nullptr, nullptr, nullptr, dsw3, dsw4, dsw5, dsw6};
+
 // Encoding with three codeword lenghts, used for higher rungs, not for byte data
 // Yes, it's horrid, but it works. Bit fiddling!
 // No conditionals, computes all three forms and chooses one by masking with the condition
@@ -702,7 +724,8 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
     std::vector<T> group(B2);
 
     // Unit size bit length
-    const constexpr int UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+    constexpr int UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+    auto dsw = DSW[UBITS];
     std::vector<size_t> runbits(bands, sizeof(T) * 8 - 1);
 
     std::vector<size_t> offsets(B2);
@@ -713,30 +736,44 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
         for (size_t x = 0; (x + B) <= xsize; x += B) {
             size_t loc = (y * xsize + x) * bands;
             for (int c = 0; c < bands; c++) {
-                if (0 != s.get()) { // The rung change flag, triggers variable side decoding
-                    uint8_t cs;
-                    s.pull(cs, UBITS - 1); // 5
+                if (1) {
+                    if (0 != s.get()) { // The rung change flag, triggers variable size decoding
+                        uint8_t cs;
+                        s.pull(cs, UBITS - 1);
 
-                    if (cs >= (1ull << (UBITS - 2))) // Starts with 1x, short
-                        cs ^= (1ull << (UBITS - 2));
-                    else if (cs >= (1ull << (UBITS - 3))) // Starts with 01, middle
-                        cs = static_cast<uint8_t>(s.get()) + cs * 2;
-                    else { // starts with 00, long
-                        uint8_t val;
-                        s.pull(val, 2);
-                        cs = (cs << 2) + val + (1ull << (UBITS - 1));
+                        if (cs >= (1ull << (UBITS - 2))) // Starts with 1x, short
+                            cs ^= (1ull << (UBITS - 2));
+                        else if (cs >= (1ull << (UBITS - 3))) // Starts with 01, middle
+                            cs = static_cast<uint8_t>(s.get()) + cs * 2;
+                        else { // starts with 00, long
+                            uint8_t val;
+                            s.pull(val, 2);
+                            cs = (cs << 2) + val + (1ull << (UBITS - 1));
+                        }
+
+                        // Undo the mags operation
+                        cs = smag(cs);
+                        // do the positive shift if needed
+                        cs += ((cs >> 7) ^ 1);
+
+                        assert(cs != 0); // This is where the in-rung signal can be detected
+                        runbits[c] = (runbits[c] + cs) & ((1ull << UBITS) - 1);
                     }
-
-                    // Undo the mags operation
-                    cs = smag(cs);
-                    // do the positive shift if needed
-                    cs += ((cs >> 7) ^ 1);
-
-                    assert(cs != 0); // This is where the in-rung signal can be detected
-                    runbits[c] = (runbits[c] + cs) & ((1ull << UBITS) - 1);
+                }
+                else {
+                    auto acc = s.peek();
+                    if (acc & 1) {
+                        auto cs = dsw[(acc >> 1) & ((1ull << (UBITS + 1)) - 1)];
+                        runbits[c] = (runbits[c] + cs) & ((1ull << UBITS) - 1);
+                        s.advance(cs >> 12);
+                    }
+                    else {
+                        s.advance(1); // No rung change bit
+                    }
                 }
 
                 const size_t rung = runbits[c];
+                //printf("%d\n", int(rung));
                 uint64_t val;
                 if (0 == rung) { // 0 or 1
                     if (0 == s.get()) // All 0s
@@ -778,12 +815,10 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                                 auto acc = s.peek();
                                 if (acc & (1ull << (rung - 1))) { // Starts with 1x
                                     it = acc & ((1ull << (rung - 1)) - 1);
-                                    // mask[rung - 1];
                                     s.advance(rung);
                                 }
                                 else if (acc & (1ull << (rung - 2))) { // Starts with 01
                                     it = ((acc << 1) & ((1ull << rung) - 1)) | ((acc >> rung) & 1);
-                                    //it = ((acc << 1) & mask[rung]) | ((acc >> rung) & 1);
                                     s.advance(rung + 1);
                                 }
                                 else { // starts with 00, rung + 2 overflows
@@ -793,12 +828,10 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                                     }
                                     else { // Safe for overflow due to unit size
                                         if (rung != 63) {
-                                            //it = static_cast<T>(1ull << rung) + ((acc & mask[rung - 1]) << 2) + ((acc >> rung) & 0b11);
                                             it = static_cast<T>(1ull << rung) | ((acc & (1ull << (rung - 1)) - 1) << 2) | ((acc >> rung) & 0b11);
                                             s.advance(rung + 2);
                                         }
                                         else { // Overflow, bit 1 is not in accumulator
-        //                                    it = static_cast<T>(1ull << rung) + ((acc & mask[rung - 1]) << 2);
                                             it = static_cast<T>(1ull << rung) | ((acc & (1ull << (rung - 1)) - 1) << 2);
                                             s.advance(63);
                                             s.pull(acc, 2);

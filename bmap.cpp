@@ -19,6 +19,7 @@ BMap::BMap(int x, int y) : _x(x), _y(y), _lw((x + 7) / 8) {
     v.assign(_lw * ((y + 7) / 8), ~0); // All data
 }
 
+// runlength
 int rlen(const uint8_t* ch, size_t mlen) {
     static const size_t MRUN = 0x300 + 0xffff;
     mlen = std::min(mlen, MRUN);
@@ -31,7 +32,7 @@ int rlen(const uint8_t* ch, size_t mlen) {
 void RLE(std::vector<uint8_t>& v, std::vector<uint8_t>& result) {
     // Do a byte RLE on v
     std::vector<uint8_t> tmp;
-
+    
     size_t len = 0;
     while (len < v.size()) {
         int l = rlen(v.data() + len, v.size() - len);

@@ -38,6 +38,15 @@ def encode(v, rung):
     else: # Long, rotated right two bits
         return ((rung + 2) << 12) + ((v - (1 << rung)) >> 2) + ((v & 3) << rung)
 
+# Decode a var length unsigned int, returns value (lower rung - 1 bits) and source size bits 12+
+def decode(v, rung):
+    if v & (1 << (rung - 1)): # Short
+        return (rung << 12) | (v & ((1 << (rung - 1)) - 1))
+    if v & (1 << (rung - 2)): # Nominal
+        return ((rung + 1) << 12) | ((v << 1) & ((1 << rung) - 1) | ((v >> rung) & 1))
+    # long
+    return ((rung + 2) << 12) | ((v << 2) & ((1 << (rung + 1)) - 1) | (1 << rung) | ((v >> rung) & 3))
+
 # tables for byte data
 def showencode8():
     for rung in range(2, 8):
@@ -77,13 +86,62 @@ def showcodeswitch():
             v = encode(v, ubits - 1)
             # Add the change bit, change code and length
             v =  ((v + 0x1000) & 0xf000) | ((v << 1) & 0xff) | 1
-            s += f"0x{v:4x}, "
+            s += f"0x{v:04x}, "
             if len(s) > 120:
                 print(s)
                 s = ""
         print(s[:-2] + "};")
 
+def showdecodeswitch():
+    for ubits in (3, 4, 5, 6):
+        s = f"static const uint16_t dsw{ubits}[] = {{ "
+        for v in range(2**(ubits + 1)):
+            v = decode(v, ubits - 1)
+            # Account for the change bit
+            sz = 1 + (v >> 12)
+            v = smag(v & 0xff)
+            if v >= 0:
+                v = v + 1
+            else:
+                v = v & ((1 << ubits) -1)
+            v |= sz << 12
+            # All even values are no rung change, one bit
+            s += f"0x{v:04x}, "
+            if len(s) > 120:
+                print(s)
+                s = ""
+        print(s[:-2] + "};")
+
+
+# Check the code switch encode-decode
+def trycs(ubits):
+    enct = [0x1000,]
+    for v in range(1, 2**ubits):
+        v = cs(v, ubits) # the magsign value
+        v = encode(v, ubits - 1)
+        # Add the change bit, change code and length
+        v =  ((v + 0x1000) & 0xf000) | ((v << 1) & 0xff) | 1
+        enct.append(v)
+    dect = []
+    for v in range( 2**(ubits+1) ):
+        v = decode(v, ubits -1)
+        sz = 1 + (v >> 12)
+        v = smag(v & 0xff)
+        if v >= 0:
+            v = v + 1
+        else:
+            v = v & ((1<< ubits) - 1) # Negative on ubits
+        v |= sz << 12
+        dect.append(v)
+    # Try them
+    for d in range(1 << ubits):
+        print(f"{d} {enct[d]:04x} {dect[0xff & (enct[d] >> 1)]:04x}")
+    for d in dect:
+        print(f"{d:04x}")
+
 if __name__ == "__main__":
     # showencode8()
     # showencode16()
-    showcodeswitch()
+    # showcodeswitch()
+    showdecodeswitch()
+#    trycs(6)
