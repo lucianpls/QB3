@@ -732,11 +732,13 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
     for (size_t i = 0; i < B2; i++)
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
 
+    uint64_t acc;
+    size_t abits = 0;
     for (size_t y = 0; (y + B) <= ysize; y += B) {
         for (size_t x = 0; (x + B) <= xsize; x += B) {
             size_t loc = (y * xsize + x) * bands;
             for (int c = 0; c < bands; c++) {
-                if (1) {
+                if (0) {
                     if (0 != s.get()) { // The rung change flag, triggers variable size decoding
                         uint8_t cs;
                         s.pull(cs, UBITS - 1);
@@ -761,14 +763,12 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                     }
                 }
                 else {
-                    auto acc = s.peek();
+                    acc = s.peek();
+                    abits = 1; // Used bits
                     if (acc & 1) {
                         auto cs = dsw[(acc >> 1) & ((1ull << (UBITS + 1)) - 1)];
                         runbits[c] = (runbits[c] + cs) & ((1ull << UBITS) - 1);
-                        s.advance(cs >> 12);
-                    }
-                    else {
-                        s.advance(1); // No rung change bit
+                        abits = static_cast<size_t>(cs >> 12);
                     }
                 }
 
@@ -776,23 +776,36 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                 //printf("%d\n", int(rung));
                 uint64_t val;
                 if (0 == rung) { // 0 or 1
-                    if (0 == s.get()) // All 0s
-                        fill(group.begin(), group.end(), 0);
-                    else { // 0 and 1s
-                        s.pull(val, group.size());
-                        for (int i = 0; i < B2; i++) {
-                            group[i] = val & 1;
-                            val >>= 1;
+                    if (0) {
+                        if (0 == s.get()) // All 0s
+                            fill(group.begin(), group.end(), 0);
+                        else { // 0 and 1s
+                            s.pull(val, group.size());
+                            for (int i = 0; i < B2; i++) {
+                                group[i] = val & 1;
+                                val >>= 1;
+                            }
                         }
+                    }
+                    else { // Accumulator based
+                        if (0 == ((acc >> abits++) & 1))
+                            fill(group.begin(), group.end(), 0);
+                        else {
+                            for (auto& v : group)
+                                v = 1 & (acc >> abits++);
+                        }
+                        s.advance(abits);
                     }
                 }
                 else if (1 == rung) { // 2 rung nominal, could be a single bit
+                    s.advance(abits);
                     for (auto& it : group)
                         if (0 != (it = static_cast<T>(s.get())))
                             if (!(it = static_cast<T>(s.get())))
                                 it = static_cast<T>(s.get() | 0b10);
                 }
                 else { // triple length
+                    s.advance(abits);
                     for (auto& it : group) {
                         if (1) {
                             s.pull(it, rung);
