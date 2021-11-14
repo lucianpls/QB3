@@ -49,6 +49,7 @@ def decode(v, rung):
 
 # tables for byte data
 def showencode8():
+    print("static const uint16_t crg1[] = {0x1000, 0x2003, 0x3001, 0x3005};")
     for rung in range(2, 8):
         s = f"static const uint16_t crg{rung}[] = {{"
         for v in range(2**(rung+1)):
@@ -69,6 +70,17 @@ def showencode16():
                 s = ""
         print(s[:-2] + "};")
 
+def showdecode():
+    print("static const uint16_t drg1[] = {0x1000, 0x3002, 0x1000, 0x2001, 0x1000, 0x3003, 0x1000, 0x2001 };")
+    for rung in range(2, 11):
+        s = f"static const uint16_t drg{rung}[] = {{"
+        for v in range(2**(rung + 2)):
+            s += f"0x{decode(v, rung):04x}, "
+            if len(s) > 120:
+                print(s)
+                s=""
+        print(s[:-2] + "};")
+
 def cs(v, u):
     'convert delta to codeword for codeswitch'
     sbitp = 1 << (u - 1) # Sign bit position
@@ -78,7 +90,7 @@ def cs(v, u):
         return mags((v - 1) & (sbitp - 1))
 
 def showcodeswitch():
-    for ubits in (3,4,5,6):
+    for ubits in (3, 4, 5, 6):
         # If delta is zero, there is no code switch, just send the 0 bit
         s = f"static const uint16_t csw{ubits}[] = {{ 0x1000, "
         for v in range(1, 2**ubits):
@@ -112,7 +124,6 @@ def showdecodeswitch():
                 s = ""
         print(s[:-2] + "};")
 
-
 # Check the code switch encode-decode
 def trycs(ubits):
     enct = [0x1000,]
@@ -136,12 +147,11 @@ def trycs(ubits):
     # Try them
     for d in range(1 << ubits):
         print(f"{d} {enct[d]:04x} {dect[0xff & (enct[d] >> 1)]:04x}")
-    for d in dect:
-        print(f"{d:04x}")
 
 if __name__ == "__main__":
     # showencode8()
     # showencode16()
     # showcodeswitch()
-    showdecodeswitch()
-#    trycs(6)
+    # showdecodeswitch()
+    showdecode()
+
