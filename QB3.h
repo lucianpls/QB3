@@ -429,8 +429,7 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                     goto GROUP_DONE;
                 }
 
-                // triple length
-                if (rung < 6) { // Table, at least half of the values fit in the accumulator
+                if (rung < 6) { // Table decode, at least half the values fit in accumulator
                     auto drg = DRG[rung];
                     auto m = (1ull << (rung + 2)) - 1;
                     for (int i = 0; i < B2 / 2; i++) {
@@ -453,12 +452,12 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                     goto GROUP_DONE;
                 }
 
-                // Last part of table decoding, can use the accumulator for 4 values
+                // Last part of table decoding, can use the accumulator for every 4 values
                 if ((sizeof(DRG) / sizeof(*DRG)) > rung) {
                     auto drg = DRG[rung];
                     auto m = (1ull << (rung + 2)) - 1;
-                    for (int j = 0; j < B2; j += B2 / 4) {
-                        for (int i = 0; i < B2 / 4; i++) {
+                    for (size_t j = 0; j < B2; j += B2 / 4) {
+                        for (size_t i = 0; i < B2 / 4; i++) {
                             auto v = drg[(acc >> abits) & m];
                             abits += v >> 12;
                             group[j + i] = static_cast<T>(v & (m >> 1));
@@ -470,41 +469,25 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                     goto GROUP_DONE;
                 }
 
-                // Computed decoding
+                // Computed decoding, with single stream read
                 s.advance(abits);
                 for (auto& it : group) {
-                    if (sizeof(T) != 8) {
+                    if (sizeof(T) != 8) { // Can't overflow
                         auto p = q3d(s.peek(), rung);
                         it = static_cast<T>(p.second);
                         s.advance(p.first);
                     }
                     else {
-                        acc = s.peek();
-                        if (acc & (1ull << (rung - 1))) { // Starts with 1x
-                            it = acc & ((1ull << (rung - 1)) - 1);
-                            s.advance(rung);
+                        auto p = q3d(s.peek(), rung);
+                        it = static_cast<T>(p.second);
+                        if (63 != rung) { // No overflow possible, same as above
+                            s.advance(p.first);
                         }
-                        else if (acc & (1ull << (rung - 2))) { // Starts with 01
-                            it = ((acc << 1) & ((1ull << rung) - 1)) | ((acc >> rung) & 1);
-                            s.advance(rung + 1);
-                        }
-                        else { // starts with 00, rung + 2 overflows
-                            if (sizeof(T) != 8) {
-                                it = static_cast<T>(1ull << rung) + ((acc & ((1ull << (rung - 1)) - 1)) << 2) + ((acc >> rung) & 0b11);
-                                s.advance(rung + 2);
-                            }
-                            else { // Safe for overflow due to unit size
-                                if (rung != 63) {
-                                    it = static_cast<T>(1ull << rung) | ((acc & (1ull << (rung - 1)) - 1) << 2) | ((acc >> rung) & 0b11);
-                                    s.advance(rung + 2);
-                                }
-                                else { // Overflow, bit 1 is not in accumulator
-                                    it = static_cast<T>(1ull << rung) | ((acc & (1ull << (rung - 1)) - 1) << 2);
-                                    s.advance(63);
-                                    s.pull(acc, 2);
-                                    it += static_cast<T>(acc);
-                                }
-                            }
+                        else {
+                            auto ovf = p.first & (p.first >> 6);
+                            s.advance(p.first - ovf);
+                            if (ovf) // Missing bit 1
+                                it |= s.get() << 1;
                         }
                     }
                 }

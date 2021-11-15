@@ -215,7 +215,7 @@ int main(int argc, char **argv)
         // From here on, test the algorithm for different data types
         check<uint64_t>(image, raster, 5);
         cout << endl;
-        check<uint64_t>(image, raster, 1ull << 56);
+        check<uint64_t>(image, raster, (1ull << 56) + 11);
         cout << endl;
         check<uint32_t>(image, raster, 5);
         cout << endl;
