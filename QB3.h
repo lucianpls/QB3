@@ -2,29 +2,23 @@
 #include <vector>
 #include <cinttypes>
 #include <limits>
-//#include <functional>
 #include <cassert>
 #include <utility>
 #if defined(_WIN32)
 #include <intrin.h>
 #endif
-#include "qb3_tables.h"
 
-// Define this to minimize the size of the code, loosing some speed for large data types
+// Define this to minimize the size of the code, loosing speed for large data types
+// It saves about 20KB, could be useful if only byte data is required
 // #define QB3_OPTIMIZE_ONLY_BYTE
 
+namespace QB3 {
+#include "qb3_tables.h"
+
 #if defined(__GNUC__) && defined(__x86_64__)
-// Comment out if binary is to run on processors without sse4
+    // Comment out if binary is to run on processors without sse4
 #pragma GCC target("sse4")
 #endif
-
-namespace QB3 {
-    // Masks, from 0 to 64 rung
-#define M(v) (~0ull >> (64 - (v)))
-// A row of 8 masks, starting with mask(n)
-#define R(n) M(n), M(n + 1), M(n + 2), M(n + 3), M(n + 4), M(n + 5), M(n + 6), M(n + 7)
-    const uint64_t mask[] = { 0, R(1), R(9), R(17), R(25), R(33), R(41), R(49), R(57) };
-#undef R
 
 #if defined(_WIN32_)
 // rank of top set bit, result is undefined for val == 0
@@ -386,9 +380,8 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
     std::vector<T> image(xsize * ysize * bands);
     Bitstream s(src);
     std::vector<T> prev(bands, 0);
-    // Elements in a group
     constexpr size_t B2(B * B);
-    std::vector<T> group(B2);
+    T group[B2];
 
     // Unit size bit length
     constexpr int UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
@@ -416,7 +409,7 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
 
                 if (0 == rung) { // 0 or 1, special case
                     if (0 == ((acc >> abits++) & 1))
-                        fill(group.begin(), group.end(), 0);
+                        memset(group, 0, sizeof(group));
                     else {
                         acc >>= abits;
                         abits += B2;
@@ -437,7 +430,7 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                         abits += v >> 12;
                         group[i] = static_cast<T>(v & (m >> 1));
                     }
-                    // Skep the peek if we have enough bits
+                    // Skip the peek if we have enough bits in accumulator
                     if (!((rung == 1) || (rung == 2 && abits < 33))) {
                         s.advance(abits);
                         acc = s.peek();
@@ -471,22 +464,29 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
 
                 // Computed decoding, with single stream read
                 s.advance(abits);
-                for (auto& it : group) {
-                    if (sizeof(T) != 8) { // Can't overflow
+                if (sizeof(T) != 8) {
+                    for (auto& it : group) {
                         auto p = q3d(s.peek(), rung);
                         it = static_cast<T>(p.second);
                         s.advance(p.first);
                     }
-                    else {
-                        auto p = q3d(s.peek(), rung);
-                        it = static_cast<T>(p.second);
-                        if (63 != rung) { // No overflow possible, same as above
+                }
+                else { // This code vanishes except for 64bit data
+                    if (63 != rung) {
+                        // Same as before, no overflow possible
+                        for (auto& it : group) {
+                            auto p = q3d(s.peek(), rung);
+                            it = static_cast<T>(p.second);
                             s.advance(p.first);
                         }
-                        else {
+                    }
+                    else { // Might overflow
+                        for (auto& it : group) {
+                            auto p = q3d(s.peek(), rung);
                             auto ovf = p.first & (p.first >> 6);
+                            it = static_cast<T>(p.second);
                             s.advance(p.first - ovf);
-                            if (ovf) // Missing bit 1
+                            if (ovf)
                                 it |= s.get() << 1;
                         }
                     }
@@ -494,18 +494,18 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
 
 GROUP_DONE:
                 // Undo the step shift
-                if (rung > 0 && (0 == (group[B2 - 1] >> rung))) {
-                    auto p = stepright(group.data(), rung);
+                if ((0 == (group[B2 - 1] >> rung)) && (rung > 0)) {
+                    auto p = stepright(group, rung);
                     if (p < B2)
                         group[p] ^= static_cast<T>(1) << rung;
                 }
-                prev[c] = undsign(group.data(), prev[c]);
-                for (size_t i = 0; i < group.size(); i++)
+                prev[c] = undsign(group, prev[c]);
+                for (size_t i = 0; i < B2; i++)
                     image[loc + c + offsets[i]] = group[i];
             }
             for (int c = 0; c < bands; c++)
                 if (mb >= 0 && mb != c)
-                    for (size_t i = 0; i < group.size(); i++)
+                    for (size_t i = 0; i < B2; i++)
                         image[loc + c + offsets[i]] += image[loc + mb + offsets[i]];
         }
     }
