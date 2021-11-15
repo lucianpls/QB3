@@ -212,8 +212,8 @@ static std::pair<size_t, uint64_t> q3csz(uint64_t val, size_t rung) {
         +((~0ull * (1 & (~top & nxt))) & (val >> 1 | ((val & 1) << rung))));                   // 0 1 MIDDLE  -> 01
 }
 
-// Computed decoding, might be faster with some common factor
-static std::pair<size_t, uint64_t> q3d(uint64_t acc, size_t rung) {
+// Computed decoding
+static std::pair<size_t, uint64_t> q3do(uint64_t acc, size_t rung) {
     uint64_t ntop = (~(acc >> (rung - 1))) & 1;
     uint64_t nnxt = (~(acc >> (rung - 2))) & 1;
     uint64_t rbit = 1ull << rung;
@@ -224,6 +224,17 @@ static std::pair<size_t, uint64_t> q3d(uint64_t acc, size_t rung) {
     );
 }
 
+// Computed decoding
+static std::pair<size_t, uint64_t> q3d(uint64_t acc, size_t rung) {
+    uint64_t rbit = 1ull << rung;
+    uint64_t ntop = (~(acc >> (rung - 1))) & 1;
+    if (1 & ~ntop)
+        return std::make_pair(rung, acc & ((rbit >> 1) - 1));
+    uint64_t nnxt = (~(acc >> (rung - 2))) & 1;
+    return std::make_pair(rung + 1 + (nnxt & 1),
+        + (1 & ~nnxt) * (((acc << 1) & (rbit - 1)) | ((acc >> rung) & 1))
+        + (1 & nnxt) * (rbit + ((acc & ((rbit >> 1) - 1)) << 2) + ((acc >> rung) & 0b11)));
+}
 
 template <typename T = uint8_t>
 std::vector<uint8_t> encode(const std::vector<T>& image,
