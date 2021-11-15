@@ -405,126 +405,112 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
         for (size_t x = 0; (x + B) <= xsize; x += B) {
             size_t loc = (y * xsize + x) * bands;
             for (int c = 0; c < bands; c++) {
-                if (0) {
-                    if (0 != s.get()) { // The rung change flag, triggers variable size decoding
-                        uint8_t cs;
-                        s.pull(cs, UBITS - 1);
-
-                        if (cs >= (1ull << (UBITS - 2))) // Starts with 1x, short
-                            cs ^= (1ull << (UBITS - 2));
-                        else if (cs >= (1ull << (UBITS - 3))) // Starts with 01, middle
-                            cs = static_cast<uint8_t>(s.get()) + cs * 2;
-                        else { // starts with 00, long
-                            uint8_t val;
-                            s.pull(val, 2);
-                            cs = (cs << 2) + val + (1ull << (UBITS - 1));
-                        }
-
-                        // Undo the mags operation
-                        cs = smag(cs);
-                        // do the positive shift if needed
-                        cs += ((cs >> 7) ^ 1);
-
-                        assert(cs != 0); // This is where the in-rung signal can be detected
-                        runbits[c] = (runbits[c] + cs) & ((1ull << UBITS) - 1);
-                    }
+                acc = s.peek();
+                abits = 1; // Used bits
+                if (acc & 1) {
+                    auto cs = dsw[(acc >> 1) & ((1ull << (UBITS + 1)) - 1)];
+                    runbits[c] = (runbits[c] + cs) & ((1ull << UBITS) - 1);
+                    abits = static_cast<size_t>(cs >> 12);
                 }
-                else {
-                    acc = s.peek();
-                    abits = 1; // Used bits
-                    if (acc & 1) {
-                        auto cs = dsw[(acc >> 1) & ((1ull << (UBITS + 1)) - 1)];
-                        runbits[c] = (runbits[c] + cs) & ((1ull << UBITS) - 1);
-                        abits = static_cast<size_t>(cs >> 12);
-                    }
-                }
-
                 const size_t rung = runbits[c];
-                //printf("%d\n", int(rung));
-                uint64_t val;
-                if (0 == rung) { // 0 or 1
-                    if (0) {
-                        if (0 == s.get()) // All 0s
-                            fill(group.begin(), group.end(), 0);
-                        else { // 0 and 1s
-                            s.pull(val, group.size());
-                            for (int i = 0; i < B2; i++) {
-                                group[i] = val & 1;
-                                val >>= 1;
-                            }
+
+                if (0 == rung) { // 0 or 1, special case
+                    if (0 == ((acc >> abits++) & 1))
+                        fill(group.begin(), group.end(), 0);
+                    else {
+                        acc >>= abits;
+                        abits += B2;
+                        for (auto& v : group) {
+                            v = 1 & acc;
+                            acc >>= 1;
                         }
                     }
-                    else { // Accumulator based
-                        if (0 == ((acc >> abits++) & 1))
-                            fill(group.begin(), group.end(), 0);
-                        else {
-                            for (auto& v : group)
-                                v = 1 & (acc >> abits++);
+                    s.advance(abits);
+                    goto GROUP_DONE;
+                }
+
+                // triple length
+                if (rung < 6) { // Table, at least half of the values fit in the accumulator
+                    auto drg = DRG[rung];
+                    auto m = (1ull << (rung + 2)) - 1;
+                    for (int i = 0; i < B2 / 2; i++) {
+                        auto v = drg[(acc >> abits) & m];
+                        abits += v >> 12;
+                        group[i] = static_cast<T>(v & (m >> 1));
+                    }
+                    // Skep the peek if we have enough bits
+                    if (!((rung == 1) || (rung == 2 && abits < 33))) {
+                        s.advance(abits);
+                        acc = s.peek();
+                        abits = 0;
+                    }
+                    for (int i = B2 / 2; i < B2; i++) {
+                        auto v = drg[(acc >> abits) & m];
+                        abits += v >> 12;
+                        group[i] = static_cast<T>(v & (m >> 1));
+                    }
+                    s.advance(abits);
+                    goto GROUP_DONE;
+                }
+
+                // Last part of table decoding, can use the accumulator for 4 values
+                if ((sizeof(DRG) / sizeof(*DRG)) > rung) {
+                    auto drg = DRG[rung];
+                    auto m = (1ull << (rung + 2)) - 1;
+                    for (int j = 0; j < B2; j += B2 / 4) {
+                        for (int i = 0; i < B2 / 4; i++) {
+                            auto v = drg[(acc >> abits) & m];
+                            abits += v >> 12;
+                            group[j + i] = static_cast<T>(v & (m >> 1));
                         }
                         s.advance(abits);
+                        acc = s.peek();
+                        abits = 0;
                     }
+                    goto GROUP_DONE;
                 }
-                else if (1 == rung) { // 2 rung nominal, could be a single bit
-                    s.advance(abits);
-                    for (auto& it : group)
-                        if (0 != (it = static_cast<T>(s.get())))
-                            if (!(it = static_cast<T>(s.get())))
-                                it = static_cast<T>(s.get() | 0b10);
-                }
-                else { // triple length
-                    s.advance(abits);
-                    for (auto& it : group) {
-                        if (1) {
-                            s.pull(it, rung);
-                            if (it > mask[rung - 1]) // Starts with 1x
-                                it &= mask[rung - 1];
-                            else if (it > mask[rung - 2]) // Starts with 01
-                                it = static_cast<T>(s.get() + (static_cast<uint64_t>(it) << 1));
-                            else { // starts with 00
-                                s.pull(val, 2);
-                                it = static_cast<T>((1ull << rung) + (static_cast<uint64_t>(it) << 2) + val);
-                            }
+
+                // Computed decoding
+                s.advance(abits);
+                for (auto& it : group) {
+                    if (sizeof(T) != 8) {
+                        auto p = q3d(s.peek(), rung);
+                        it = static_cast<T>(p.second);
+                        s.advance(p.first);
+                    }
+                    else {
+                        acc = s.peek();
+                        if (acc & (1ull << (rung - 1))) { // Starts with 1x
+                            it = acc & ((1ull << (rung - 1)) - 1);
+                            s.advance(rung);
                         }
-                        else {
+                        else if (acc & (1ull << (rung - 2))) { // Starts with 01
+                            it = ((acc << 1) & ((1ull << rung) - 1)) | ((acc >> rung) & 1);
+                            s.advance(rung + 1);
+                        }
+                        else { // starts with 00, rung + 2 overflows
                             if (sizeof(T) != 8) {
-                                auto p = q3d(s.peek(), rung);
-                                it = static_cast<T>(p.second);
-                                s.advance(p.first);
+                                it = static_cast<T>(1ull << rung) + ((acc & ((1ull << (rung - 1)) - 1)) << 2) + ((acc >> rung) & 0b11);
+                                s.advance(rung + 2);
                             }
-                            else {
-                                auto acc = s.peek();
-                                if (acc & (1ull << (rung - 1))) { // Starts with 1x
-                                    it = acc & ((1ull << (rung - 1)) - 1);
-                                    s.advance(rung);
+                            else { // Safe for overflow due to unit size
+                                if (rung != 63) {
+                                    it = static_cast<T>(1ull << rung) | ((acc & (1ull << (rung - 1)) - 1) << 2) | ((acc >> rung) & 0b11);
+                                    s.advance(rung + 2);
                                 }
-                                else if (acc & (1ull << (rung - 2))) { // Starts with 01
-                                    it = ((acc << 1) & ((1ull << rung) - 1)) | ((acc >> rung) & 1);
-                                    s.advance(rung + 1);
-                                }
-                                else { // starts with 00, rung + 2 overflows
-                                    if (sizeof(T) != 8) {
-                                        it = static_cast<T>(1ull << rung) + ((acc & ((1ull << (rung - 1)) - 1)) << 2) + ((acc >> rung) & 0b11);
-                                        s.advance(rung + 2);
-                                    }
-                                    else { // Safe for overflow due to unit size
-                                        if (rung != 63) {
-                                            it = static_cast<T>(1ull << rung) | ((acc & (1ull << (rung - 1)) - 1) << 2) | ((acc >> rung) & 0b11);
-                                            s.advance(rung + 2);
-                                        }
-                                        else { // Overflow, bit 1 is not in accumulator
-                                            it = static_cast<T>(1ull << rung) | ((acc & (1ull << (rung - 1)) - 1) << 2);
-                                            s.advance(63);
-                                            s.pull(acc, 2);
-                                            it += static_cast<T>(acc);
-                                        }
-                                    }
+                                else { // Overflow, bit 1 is not in accumulator
+                                    it = static_cast<T>(1ull << rung) | ((acc & (1ull << (rung - 1)) - 1) << 2);
+                                    s.advance(63);
+                                    s.pull(acc, 2);
+                                    it += static_cast<T>(acc);
                                 }
                             }
                         }
                     }
                 }
 
-                // Undo the step change
+GROUP_DONE:
+                // Undo the step shift
                 if (rung > 0 && (0 == (group[B2 - 1] >> rung))) {
                     auto p = stepright(group.data(), rung);
                     if (p < B2)
