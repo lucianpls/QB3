@@ -20,7 +20,7 @@ namespace QB3 {
 #pragma GCC target("sse4")
 #endif
 
-#if defined(_WIN32_)
+#if defined(_WIN32)
 // rank of top set bit, result is undefined for val == 0
 static size_t topbit(uint64_t val) {
     return 63 - __lzcnt64(val);
@@ -70,43 +70,22 @@ static size_t setbits16(uint64_t val) {
 }
 #endif
 
-// Looks for 1*0* in the rung bits of the input values, returns the position of last 1
-// Assumes at least one of the bits is set
+// If the rung bits of the input values match *1*0, returns the index of first 0, otherwise B2 + 1
 template<typename T>
-static size_t stepleft(const T * const v, size_t rung) {
-    const int B2 = 16;
+static size_t step(const T* const v, size_t rung) {
+    const size_t B2 = 16;
     // We are looking for 1*0* pattern on the B2 bits
     uint64_t acc = ~0ull;
-    // collect inverted rung bits, we are now looking for 0*1*
-    for (int i = 0; i < B2; i++)
+    for (size_t i = 0; i < B2; i++)
         acc = (acc << 1) | (1 & (v[i] >> rung));
     // Flip bits so the top ones are 0 and bottom ones are 1
     acc = ~acc;
-
-    // Can call topbit since acc != 0
-    if (topbit(acc) != setbits16(acc) - 1)
+    auto s = setbits16(acc);
+    if (0 == s) // don't call topbit if acc is empty
         return B2;
-    return B2 - 1 - setbits16(acc);
-}
-
-// Undo the stepdown shift
-// Looks for 1*0* in the rung bits of the input values, returns the position of first 0
-// If the group was stepdown left shifted, the last rung bit has to be 0
-template<typename T>
-static size_t stepright(const T* const v, size_t rung) {
-    const int B2 = 16;
-    // We are looking for 1*0* pattern on the B2 bits
-    uint64_t acc = ~0ull;
-    // collect inverted rung bits, we are now looking for 0*1*
-    for (int i = 0; i < B2; i++)
-        acc = (acc << 1) | (1 & (v[i] >> rung));
-    // Flip bits so the top ones are 0 and bottom ones are 1
-    acc = ~acc;
-
-    // Can call topbit since acc != 0
-    if (topbit(acc) != setbits16(acc) - 1)
-        return B2;
-    return B2 - setbits16(acc);
+    if (topbit(acc) != s - 1)
+        return B2 + 1;
+    return B2 - s;
 }
 
 // Greater common denominator
@@ -306,9 +285,10 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                 }
 
                 // If the rung bit sequence is a step down flip the last set bit, it saves one or two bits
-                auto p = stepleft(group, rung);
-                if (p < B2)
-                    group[p] ^= static_cast<T>(1ull << rung);
+                // At least one rung bit is set, so p can't be zero
+                auto p = step(group, rung);
+                if (p <= B2)
+                    group[p - 1] ^= static_cast<T>(1ull << rung);
 
                 if (6 > rung) { // Encoded data fits in 64 or 128 bits
                     auto t = CRG[rung];
@@ -407,22 +387,23 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                 }
                 const size_t rung = runbits[c];
 
-                if (0 == rung) { // 0 or 1, special case
-                    if (0 == ((acc >> abits++) & 1))
-                        memset(group, 0, sizeof(group));
-                    else {
+                if (0 == rung) { // single bits, special case
+                    if (0 != ((acc >> abits++) & 1)) {
                         acc >>= abits;
                         abits += B2;
                         for (auto& v : group) {
-                            v = 1 & acc;
+                            v = static_cast<T>(acc & 1);
                             acc >>= 1;
                         }
                     }
+                    else
+                        for (auto& v : group)
+                            v = static_cast<T>(0);
                     s.advance(abits);
                     goto GROUP_DONE;
                 }
 
-                if (rung < 6) { // Table decode, at least half the values fit in accumulator
+                if (rung < 6) { // Table decode, half of the values fit in accumulator
                     auto drg = DRG[rung];
                     auto m = (1ull << (rung + 2)) - 1;
                     for (int i = 0; i < B2 / 2; i++) {
@@ -471,9 +452,8 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                         s.advance(p.first);
                     }
                 }
-                else { // This code vanishes except for 64bit data
+                else { // Only for 64bit data
                     if (63 != rung) {
-                        // Same as before, no overflow possible
                         for (auto& it : group) {
                             auto p = q3d(s.peek(), rung);
                             it = static_cast<T>(p.second);
@@ -491,11 +471,11 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                         }
                     }
                 }
-
 GROUP_DONE:
-                // Undo the step shift
+                // Undo the step shift, MSB of last value has to be zero
                 if ((0 == (group[B2 - 1] >> rung)) && (rung > 0)) {
-                    auto p = stepright(group, rung);
+                    auto p = step(group, rung);
+                    assert(p != B2); // Can't occur, it's a signal
                     if (p < B2)
                         group[p] ^= static_cast<T>(1) << rung;
                 }
