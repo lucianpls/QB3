@@ -20,17 +20,9 @@ Contributors:  Lucian Plesea
 // which would need the lookup tables extended
 
 // block traversal order tables
-#if defined(LINEAR)
-static const int xlut[16] = { 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3 };
-static const int ylut[16] = { 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3 };
-#elif defined(DIAG)
-static const int xlut[16] = { 0, 1, 0, 2, 1, 0, 3, 2, 1, 0, 3, 2, 1, 3, 2, 3 };
-static const int ylut[16] = { 0, 0, 1, 0, 1, 2, 0, 1, 2, 3, 1, 2, 3, 2, 3, 3 };
-#else
-// Better in most cases
+// Best in most cases
 static const int xlut[16] = { 0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3 };
 static const int ylut[16] = { 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3 };
-#endif
 
 // Encoding tables for rungs 2 to 11, for speedup. Rung 0 and 1 are special
 // Storage is under 8K by using short int, or under 1K when only byte data is optimized

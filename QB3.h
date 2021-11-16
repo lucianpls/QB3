@@ -217,7 +217,7 @@ static T undsign(T *v, T pred) {
 // No conditionals, computes all three forms and chooses one by masking with the condition
 // It is faster than similar code with conditions because the calculations for the three lines get interleaved
 // The "(~0ull * (1 &" is to show the compiler that the multiplication is a mask operation
-static std::pair<size_t, uint64_t> q3csz(uint64_t val, size_t rung) {
+static std::pair<size_t, uint64_t> qb3csz(uint64_t val, size_t rung) {
     uint64_t nxt = (val >> (rung - 1)) & 1;
     uint64_t top = val >> rung;
     // <size, value>
@@ -227,28 +227,16 @@ static std::pair<size_t, uint64_t> q3csz(uint64_t val, size_t rung) {
         +((~0ull * (1 & (~top & nxt))) & (val >> 1 | ((val & 1) << rung))));                   // 0 1 MIDDLE  -> 01
 }
 
-// Computed decoding
-static std::pair<size_t, uint64_t> q3do(uint64_t acc, size_t rung) {
+// Computed decoding, seems faster with one test
+static std::pair<size_t, uint64_t> qb3dsz(uint64_t acc, size_t rung) {
     uint64_t ntop = (~(acc >> (rung - 1))) & 1;
-    uint64_t nnxt = (~(acc >> (rung - 2))) & 1;
     uint64_t rbit = 1ull << rung;
-    return std::make_pair(rung + (ntop & 1) + (ntop & nnxt & 1),
-        (1 & ~ntop) * (acc & ((rbit >> 1) - 1))
-        + (1 & ntop & ~nnxt) * (((acc << 1) & (rbit - 1)) | ((acc >> rung) & 1))
-        + (1 & ntop & nnxt) * (rbit + ((acc & ((rbit >> 1) - 1)) << 2) + ((acc >> rung) & 0b11))
-    );
-}
-
-// Computed decoding
-static std::pair<size_t, uint64_t> q3d(uint64_t acc, size_t rung) {
-    uint64_t rbit = 1ull << rung;
-    uint64_t ntop = (~(acc >> (rung - 1))) & 1;
     if (1 & ~ntop)
         return std::make_pair(rung, acc & ((rbit >> 1) - 1));
     uint64_t nnxt = (~(acc >> (rung - 2))) & 1;
     return std::make_pair(rung + 1 + (nnxt & 1),
-        + (1 & ~nnxt) * (((acc << 1) & (rbit - 1)) | ((acc >> rung) & 1))
-        + (1 & nnxt) * (rbit + ((acc & ((rbit >> 1) - 1)) << 2) + ((acc >> rung) & 0b11)));
+        +(((1 & ~nnxt) * ~0ull) & (((acc << 1) & (rbit - 1)) | ((acc >> rung) & 1)))
+        + (((1 & nnxt) * ~0ull) & (rbit + ((acc & ((rbit >> 1) - 1)) << 2) + ((acc >> rung) & 0b11))));
 }
 
 template <typename T = uint8_t>
@@ -360,13 +348,13 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                     s.push(acc, abits);
                     if (63 != rung) {
                         for (uint64_t val : group) {
-                            auto p = q3csz(val, rung);
+                            auto p = qb3csz(val, rung);
                             s.push(p.second, p.first);
                         }
                     }
                     else { // rung 63 may overflow 64 bits, push the second val bit explicitly
                         for (uint64_t val : group) {
-                            auto p = q3csz(val, rung);
+                            auto p = qb3csz(val, rung);
                             size_t ovf = p.first & (p.first >> 6); // overflow flag
                             s.push(p.second, p.first ^ ovf); // changes 65 in 64
                             s.push((val >> 1) & 1, ovf); // safe to call with 0 bits
@@ -430,12 +418,12 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                 }
 
                 if (rung < 6) { // Table decode, half of the values fit in accumulator
-                    auto drg = DRG[rung];
-                    auto m = (1ull << (rung + 2)) - 1;
+                    const auto drg = DRG[rung];
+                    const auto m = (1ull << (rung + 2)) - 1;
                     for (int i = 0; i < B2 / 2; i++) {
                         auto v = drg[(acc >> abits) & m];
                         abits += v >> 12;
-                        group[i] = static_cast<T>(v & (m >> 1));
+                        group[i] = static_cast<T>(v & TBLMASK);
                     }
                     // Skip the peek if we have enough bits in accumulator
                     if (!((rung == 1) || (rung == 2 && abits < 33))) {
@@ -446,21 +434,21 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                     for (int i = B2 / 2; i < B2; i++) {
                         auto v = drg[(acc >> abits) & m];
                         abits += v >> 12;
-                        group[i] = static_cast<T>(v & (m >> 1));
+                        group[i] = static_cast<T>(v & TBLMASK);
                     }
                     s.advance(abits);
                     goto GROUP_DONE;
                 }
 
-                // Last part of table decoding, can use the accumulator for every 4 values
+                // Last part of table decoding, use the accumulator for every 4 values
                 if ((sizeof(DRG) / sizeof(*DRG)) > rung) {
-                    auto drg = DRG[rung];
-                    auto m = (1ull << (rung + 2)) - 1;
+                    const auto drg = DRG[rung];
+                    const auto m = (1ull << (rung + 2)) - 1;
                     for (size_t j = 0; j < B2; j += B2 / 4) {
                         for (size_t i = 0; i < B2 / 4; i++) {
                             auto v = drg[(acc >> abits) & m];
                             abits += v >> 12;
-                            group[j + i] = static_cast<T>(v & (m >> 1));
+                            group[j + i] = static_cast<T>(v & TBLMASK);
                         }
                         s.advance(abits);
                         acc = s.peek();
@@ -473,7 +461,7 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                 s.advance(abits);
                 if (sizeof(T) != 8) {
                     for (auto& it : group) {
-                        auto p = q3d(s.peek(), rung);
+                        auto p = qb3dsz(s.peek(), rung);
                         it = static_cast<T>(p.second);
                         s.advance(p.first);
                     }
@@ -481,14 +469,14 @@ std::vector<T> decode(std::vector<uint8_t>& src, size_t xsize, size_t ysize,
                 else { // Only for 64bit data
                     if (63 != rung) {
                         for (auto& it : group) {
-                            auto p = q3d(s.peek(), rung);
+                            auto p = qb3dsz(s.peek(), rung);
                             it = static_cast<T>(p.second);
                             s.advance(p.first);
                         }
                     }
                     else { // Might overflow
                         for (auto& it : group) {
-                            auto p = q3d(s.peek(), rung);
+                            auto p = qb3dsz(s.peek(), rung);
                             auto ovf = p.first & (p.first >> 6);
                             it = static_cast<T>(p.second);
                             s.advance(p.first - ovf);
