@@ -31,6 +31,9 @@
     <ClInclude Include="qb3_tables.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="bitstream.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="README.md">

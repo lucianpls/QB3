@@ -21,8 +21,8 @@ Contributors:  Lucian Plesea
 // From https://github.com/lucianpls/libicd
 #include <icd_codecs.h>
 
-#include "bmap.h"
 #include "QB3.h"
+#include "bmap.h"
 
 using namespace std;
 using namespace chrono;
