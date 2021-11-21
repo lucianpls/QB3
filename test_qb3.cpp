@@ -77,29 +77,29 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
 }
 
 int test(string fname) {
-	FILE* f;
-	if (fopen_s(&f, fname.c_str(), "rb") || !f) {
-		cerr << "Can't open input file\n";
-		exit(errno);
-	}
-	fseek(f, 0, SEEK_END);
-	auto fsize = ftell(f);
-	fseek(f, 0, SEEK_SET);
-	std::vector<uint8_t> src(fsize);
-	storage_manager source = { src.data(), src.size() };
-	fread(source.buffer, fsize, 1, f);
-	fclose(f);
-	Raster raster;
-	auto error_message = image_peek(source, raster);
-	if (error_message) {
-		cerr << error_message << endl;
-		exit(1);
-	}
-	//cout << "Size is " << raster.size.x << "x" << raster.size.y << "@" << raster.size.c << endl;
+    FILE* f;
+    if (fopen_s(&f, fname.c_str(), "rb") || !f) {
+        cerr << "Can't open input file\n";
+        exit(errno);
+    }
+    fseek(f, 0, SEEK_END);
+    auto fsize = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    std::vector<uint8_t> src(fsize);
+    storage_manager source = { src.data(), src.size() };
+    fread(source.buffer, fsize, 1, f);
+    fclose(f);
+    Raster raster;
+    auto error_message = image_peek(source, raster);
+    if (error_message) {
+        cerr << error_message << endl;
+        exit(1);
+    }
+    //cout << "Size is " << raster.size.x << "x" << raster.size.y << "@" << raster.size.c << endl;
 
-	codec_params params(raster);
-	std::vector<uint8_t> image(params.get_buffer_size());
-	stride_decode(params, source, image.data());
+    codec_params params(raster);
+    std::vector<uint8_t> image(params.get_buffer_size());
+    stride_decode(params, source, image.data());
 
     check<uint8_t>(image, raster, 1, 1);
     return 0;

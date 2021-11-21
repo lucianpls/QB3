@@ -178,11 +178,11 @@ inline T revs(T val) {
     return (val >> 1) + (val & 1);
 }
 
-// Given mag-sign, divide by cf
+// Given mag-sign value, divide by cf
 template<typename T>
 inline T magsdiv(T val, T cf) {
-    T absv = revs(val) / cf;
-    return (absv << 1) * (1 & ~val) + (((absv - 1) << 1) | 1)* (1 & val);
+    T absv = revs(val) / cf; // Integer division
+    return (absv << 1) * (1 & ~val) + (((absv - 1) << 1) | 1) * (1 & val);
 }
 
 // return greatest common factor, using heaps
@@ -194,33 +194,26 @@ T gcode(const T* group) {
     T v[B2];
     int sz = 0;
     for (int i = 0; i < B2; i++) {
-        auto val = revs(group[i]);
-        // ignore the zeros
-        if (val == 0) continue;
+        auto val = group[i];
+        if (val == 0)
+            continue;
         // if a value is 1 or -1, the only common factor will be 1
-        if (val < 3) return 1;
-        v[sz++] = val;
-        push_heap(v, v + sz, std::greater<T>());
+        if (val < 3)
+            return 1;
+        v[sz++] = revs(val);
     }
-
-    //for (int i = 0; i < B2; i++)
-    //    printf("G[%d] = %d\n", i, int(group[i]));
-
-    //for (int i = 0; i < sz; i++)
-    //    printf("V[%d] = %d\n", i, int(v[i]));
-
-    if (sz == 0 || v[0] < 3)
+    if (sz == 0)
         return 1;
-
-    while (sz > 1 && *v > 1) {
+    // We don't really need a heap, only min value
+    make_heap(v, v + sz, std::greater<T>());
+    do {
         const T m = *v;
-        //        *v = 0;
         for (int i = 1; i < sz; i++)
             v[i] %= m;
         make_heap(v, v + sz, std::greater<T>());
-        while (sz && *v == 0) // Eliminate zeros, there is at least one
+        while (sz && *v == 0) // Eliminate zeros
             pop_heap(v, v + sz--, std::greater<T>());
-    }
+    } while (sz > 1 && *v > 1);
     return *v;
 }
 
@@ -232,11 +225,10 @@ T gcode(const T* group) {
 static std::pair<size_t, uint64_t> qb3csz(uint64_t val, size_t rung) {
     uint64_t nxt = (val >> (rung - 1)) & 1;
     uint64_t top = val >> rung;
-    // <size, value>
     return std::make_pair<size_t, uint64_t>(rung + top + (top | nxt),
-        +((~0ull * (1 & top)) & (((val ^ (1ull << rung)) >> 2) | ((val & 0b11ull) << rung)))   // 1 x BIG     -> 00
-        +((~0ull * (1 & ~(top | nxt))) & (val + (1ull << (rung - 1))))                         // 0 0 LITTLE  -> 1?
-        +((~0ull * (1 & (~top & nxt))) & (val >> 1 | ((val & 1) << rung))));                   // 0 1 MIDDLE  -> 01
+        +((~0ull * (1 & top)) & (((val ^ (1ull << rung)) >> 2) | ((val & 0b11ull) << rung))) // 1 x BIG     -> 00
+        +((~0ull * (1 & ~(top | nxt))) & (val + (1ull << (rung - 1))))                       // 0 0 LITTLE  -> 1?
+        +((~0ull * (1 & (~top & nxt))) & (val >> 1 | ((val & 1) << rung))));                 // 0 1 MIDDLE  -> 01
 }
 
 // Computed decoding, seems faster with one test
@@ -246,8 +238,8 @@ static std::pair<size_t, uint64_t> qb3dsz(uint64_t acc, size_t rung) {
     if (1 & ~ntop)
         return std::make_pair(rung, acc & ((rbit >> 1) - 1));
     uint64_t nnxt = (~(acc >> (rung - 2))) & 1;
-    return std::make_pair(rung + 1 + (nnxt & 1),
-        +(((1 & ~nnxt) * ~0ull) & (((acc << 1) & (rbit - 1)) | ((acc >> rung) & 1)))
+    return std::make_pair(rung + 1 + nnxt,
+        (((1 & ~nnxt) * ~0ull) & (((acc << 1) & (rbit - 1)) | ((acc >> rung) & 1)))
         + (((1 & nnxt) * ~0ull) & (rbit + ((acc & ((rbit >> 1) - 1)) << 2) + ((acc >> rung) & 0b11))));
 }
 
@@ -270,36 +262,40 @@ size_t trym(const T* group, size_t rung, size_t abits) {
         if (!found)
             g2.push_back(std::make_pair(1, group[i]));
     }
-    if (g2.size() == B2)
-        return 0;
-    sort(g2.rbegin(), g2.rend()); // High frequency first
-    // Index coding
-    size_t g2sz = abits + UBITS;  // in-band signal (UBITS) + actual rung switch
-    // Normal
+
+    // Normal encoding size
     size_t gsz = abits;
-    for (auto& p : g2)
-        g2sz += qb3csz(p.second, rung).first;
-    g2sz += qb3csz(B2 - g2.size(), 3).first; // number of entries saved at rung 3
-    size_t nrng = topbit(g2.size());
-    // And the indexes
-    for (int i = 0; i < B2; i++) {
+    for (int i = 0; i < B2; i++)
         gsz += qb3csz(group[i], rung).first;
-        for (int j = 0; j < g2.size(); j++)
-            if (group[i] == g2[j].second)
-                g2sz += qb3csz(j, nrng).first;
+
+    // Index coding size
+    size_t g2sz = abits + UBITS; // Signal + real code change
+    if (g2.size() != B2) {
+        sort(g2.rbegin(), g2.rend()); // High frequency first
+        for (auto& p : g2)
+            g2sz += qb3csz(p.second, rung).first;
+        g2sz += qb3csz(B2 - g2.size(), 3).first; // number of entries saved at rung 3
+        size_t nrng = topbit(g2.size());
+        // And the indexes
+        for (int i = 0; i < B2; i++)
+            for (int j = 0; j < g2.size(); j++)
+                if (group[i] == g2[j].second)
+                    g2sz += qb3csz(j, nrng).first;
     }
 
-    // Common factor. This isn't very good.
-    size_t g1sz = gsz;
+    // Common factor encoding, rung change is temporary
+    size_t g1sz = UBITS; // Signal
     auto cf = gcode(group);
     if (cf > 1) {
         T v[B2];
-        g1sz = UBITS + qb3csz(0, 3).first; // signal + cf flag
+        g1sz += qb3csz(0, 3).first; // cf flag
         for (int i = 0; i < B2; i++)
             v[i] = magsdiv(group[i], cf);
         auto maxval = *std::max_element(v, v + B2); // Can't be 0
         // Temporary rng
         auto vrng = topbit(maxval);
+        // Using a single rung could be wasteful when rung(cf - 2) > rung(maxval)
+        // But cf is usually small and we don't need two rungs
         vrng = std::max(vrng, topbit((cf - 2) | 1));
         g1sz += UBITS; // Push vrng as delta
         if (vrng) {

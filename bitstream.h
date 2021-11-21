@@ -1,5 +1,6 @@
 #pragma once
 #include <vector>
+#include <cinttypes>
 
 // bitstream in low endian format, up to 64 bits at a time
 struct Bitstream {
@@ -16,7 +17,7 @@ struct Bitstream {
     template<typename T>
     void push(T val, size_t bits) {
         static_assert(std::is_integral<T>::value && std::is_unsigned<T>::value,
-            "Only works for unsigned integral types");
+            "Only works with unsigned integral types");
 
         for (; bits;) {
             if (bitp)
