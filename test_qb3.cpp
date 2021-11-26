@@ -107,7 +107,7 @@ int test(string fname) {
 
 int main(int argc, char **argv)
 {
-    bool test_bitmap = false;
+    bool test_bitmap = true;
     bool test_RQ3 = true;
 
     if (test_bitmap) {
@@ -145,33 +145,34 @@ int main(int argc, char **argv)
                     bm.clear(x, y);
 
         vector<uint8_t> values;
-        Bitstream s(values);
-        cout << endl << bm.dsize() * 8 << endl;
+        oBits s(values);
+        cout << endl << "Raw " << bm.dsize() * 8 << endl;
         bm.pack(s);
-        cout << s.v.size() * 8 << endl;
+        cout << "Packed " << s.size() << endl;
 
         vector<uint8_t> v;
         RLE(values, v);
-        cout << v.size() * 8 << endl;
+        cout << "RLE " << v.size() * 8 << endl;
         vector<uint8_t> outv;
-        Bitstream outs(outv);
-        unRLE(v, outs.v);
-        cout << outs.v.size() * 8 << std::endl;
+        oBits outs(outv);
+        unRLE(v, outv);
+        cout << "UnRLE " << outs.size() << std::endl;
         if (memcmp(values.data(), outv.data(), outv.size()))
             cerr << "RLE error" << endl;
 
         BMap bm1(sx, sy);
-        // Reset s for reading
-        s.bitp = 0;
-        bm1.unpack(outs);
+        iBits ins(outv);
+        bm1.unpack(ins);
         if (!bm1.compare(bm))
             cerr << "Bitmap packing error" << endl;
+        else
+            cout << "Bitmap Success" << endl;
     }
 
     if (test_RQ3) {
         if (argc < 2) {
             string fname;
-            cout << "Provide input file name for testing\n";
+            cout << "Provide input file name for testing QB3\n";
             for (;;) {
                 getline(cin, fname);
                 if (fname.empty())

@@ -324,7 +324,7 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
 
     std::vector<uint8_t> result;
     result.reserve(image.size() * sizeof(T));
-    Bitstream s(result);
+    oBits s(result);
     const size_t bands = image.size() / xsize / ysize;
     assert(image.size() == xsize * ysize * bands);
     assert(0 == xsize % B && 0 == ysize % B);
@@ -375,7 +375,7 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                 if (step(group, rung) <= B2)
                     group[step(group, rung) - 1] ^= static_cast<T>(1ull << rung);
 
-                count += trym(group, rung, abits);
+//                count += trym(group, rung, abits);
 
                 if (6 > rung) { // Encoded data fits in 64 or 128 bits
                     auto t = CRG[rung];
@@ -445,7 +445,7 @@ std::vector<T> decode(std::vector<uint8_t>& src,
     size_t xsize, size_t ysize, size_t bands, int mb = 1)
 {
     std::vector<T> image(xsize * ysize * bands);
-    Bitstream s(src);
+    iBits s(src);
     std::vector<T> prev(bands, 0);
     constexpr size_t B2(B * B);
     T group[B2];

@@ -17,7 +17,9 @@ Contributors:  Lucian Plesea
 #include <cinttypes>
 #include <vector>
 #include <algorithm>
-#include "bitstream.h"
+
+class iBits;
+class oBits;
 
 class BMap {
 public:
@@ -34,8 +36,8 @@ public:
     }
     size_t dsize() { return v.size() * sizeof(uint64_t); }
     void getsize(int& x, int& y) { x = _x; y = _y; }
-    size_t pack(Bitstream& stream);
-    size_t unpack(Bitstream& streamm);
+    size_t pack(oBits& stream);
+    size_t unpack(iBits& streamm);
     bool compare(BMap& other) {
         if (v.size() != other.v.size())
             return false;

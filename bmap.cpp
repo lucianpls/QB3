@@ -17,18 +17,7 @@ Contributors:  Lucian Plesea
 #include <iostream>
 #include <algorithm>
 #include <cassert>
-
-const uint8_t Bitstream::mask[9] = {
-    0,
-    0b1,
-    0b11,
-    0b111,
-    0b1111,
-    0b11111,
-    0b111111,
-    0b1111111,
-    0b11111111
-};
+#include "bitstream.h"
 
 BMap::BMap(int x, int y) : _x(x), _y(y), _lw((x + 7) / 8) {
     v.assign(_lw * ((y + 7) / 8), ~0); // All data
@@ -102,7 +91,7 @@ void unRLE(std::vector<uint8_t>& v, std::vector<uint8_t>& result) {
     result.swap(tmp);
 }
 
-size_t BMap::unpack(Bitstream& s) {
+size_t BMap::unpack(iBits& s) {
     for (auto& it : v) {
         uint8_t code;
         it = 0;
@@ -151,7 +140,7 @@ size_t BMap::unpack(Bitstream& s) {
 }
 
 // 3-4 prefix bits tertiary packing
-size_t BMap::pack(Bitstream& s) {
+size_t BMap::pack(oBits& s) {
     for (auto it : v) {
         if (0 == it or ~(0ULL) == it) {
             s.push(it & 0b11u, 2);
@@ -238,5 +227,5 @@ size_t BMap::pack(Bitstream& s) {
         }
     }
 
-    return s.v.size();
+    return s.size();
 }
