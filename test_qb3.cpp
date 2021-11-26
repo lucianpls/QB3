@@ -170,6 +170,7 @@ int main(int argc, char **argv)
     }
 
     if (test_RQ3) {
+
         if (argc < 2) {
             string fname;
             cout << "Provide input file name for testing QB3\n";
@@ -183,13 +184,6 @@ int main(int argc, char **argv)
             }
             return 0;
         }
-
-        //const int B2 = 16;
-        //uint64_t v[B2];
-        //for (int i = 0; i < B2; i++)
-        //    v[i] = i < 1 ? 0xf : 0xf;
-        //v[5] = 0;
-        //return bitstep(v, 3);
 
         string fname = argv[1];
         FILE* f;

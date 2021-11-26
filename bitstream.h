@@ -1,11 +1,11 @@
 #pragma once
 #include <vector>
 #include <cinttypes>
+#include <cassert>
 
 class iBits {
 public:
-
-    iBits(std::vector<uint8_t>& data) : v(data), bitp(0) {}
+    iBits(const std::vector<uint8_t>& data) : v(data), bitp(0) {}
 
     // Single bit fetch
     uint64_t get() {
@@ -54,7 +54,7 @@ public:
 
 
 private:
-    std::vector<uint8_t>& v;
+    const std::vector<uint8_t>& v;
 
     // next bit to read
     size_t bitp;
@@ -63,9 +63,25 @@ private:
 class oBits {
 public:
     oBits(std::vector<uint8_t>& data) : v(data), bitp(0) {}
+    oBits(std::vector<uint8_t>& data, size_t bitsize) : v(data), bitp(0) {
+        assert((bitsize + 7) / 8 == data.size());
+        setSize(bitsize);
+    }
 
     size_t size() const {
         return v.size() * 8  - ((8 - bitp) & 7);
+    }
+
+    // Can only shrink the stream
+    size_t setSize(size_t newsize) {
+        // if the new size is identical, it just clears the last few bits
+        if (newsize <= size()) {
+            v.resize((newsize + 7) / 8);
+            bitp = newsize & 7;
+            if (bitp) // Clear the unused bits in last byte
+                v.back() &= 0xff >> (8 - bitp);
+        }
+        return size();
     }
 
     // Do not call with val having bits above "bits" set, the results will be corrupt
@@ -84,6 +100,46 @@ public:
             bitp = (bitp + used) & 7;
             val >>= used;
         }
+    }
+
+    // Append
+    oBits& operator+=(const oBits& other) {
+        assert(v != other.v);
+        v.reserve(v.size() + other.v.size());
+        if (bitp) { // unaligned
+            auto os = other.size();
+            iBits ins(other.v);
+            while (os >= 64) {
+                auto acc = ins.peek();
+                v.back() |= acc << bitp; // leftover bits
+                acc >>= 8 - bitp; // byte align
+                v.resize(v.size() + 8);
+                memcpy(&v[v.size() - 8], &acc, 8);
+                ins.advance(64);
+                os -= 64;
+            }
+
+            // Last part
+            if (os) {
+                auto acc = ins.peek(); // Last few bits
+                v.back() |= acc << bitp; // align
+                acc >>= 8 - bitp;
+                os -= std::min(os, 8 - bitp); // don't go under 0
+                while (os > 0) {
+                    v.push_back(static_cast<uint8_t>(acc));
+                    acc >>= 8;
+                    os -= std::min(os, size_t(8));
+                }
+            }
+            bitp = (bitp + other.size()) & 7;
+        }
+        else { // This stream is byte aligned, just copy the bytes
+            v.resize(v.size() + other.v.size());
+            memcpy(&v[v.size() - other.v.size()], other.v.data(), other.v.size());
+            bitp = other.bitp;
+        }
+        setSize(size()); // clears the last few bits, if needed
+        return *this;
     }
 
 private:
