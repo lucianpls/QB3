@@ -30,26 +30,18 @@ public:
         return val;
     }
 
-    template<typename T = uint64_t>
-    bool pull(T& val, size_t bits = 1) {
-        static_assert(std::is_integral<T>::value && std::is_unsigned<T>::value,
-            "Only works for unsigned integral types");
-        val = 0;
-        size_t accsz = 0; // bits in accumulator
-        while (bits && (bitp < v.size() * 8)) {
-            size_t used = std::min(8 - bitp % 8, bits); // 1 to 8
-            val |= static_cast<T>((v[bitp / 8] >> (bitp % 8)) & (0xff >> (8 - used))) << accsz;
-            bits -= used;
-            bitp += used;
-            accsz += used;
-        }
-        return bitp <= v.size() * 8;
+    // Not very efficient for small number of bits
+    uint64_t pull(size_t bits = 1) {
+        assert(bits && bits <= 64);
+
+        uint64_t val = peek() & (~0ull >> (64 - bits));
+        advance(bits);
+        return val;
     }
 
     // Advance read position by d bits
     void advance(size_t d) {
-        if (bitp + d < v.size() * 8)
-            bitp += d;
+        bitp = (bitp + d < v.size() * 8) ? (bitp + d) : (v.size() * 8);
     }
 
     // Get 64bits without changing the state
@@ -67,6 +59,7 @@ public:
         return val;
     }
 
+    bool empty() const { return v.size() * 8 == bitp; }
 
 private:
     const std::vector<uint8_t>& v;
@@ -144,9 +137,9 @@ public:
                     os -= std::min(os, size_t(8));
                 }
             }
-            bitp = (bitp + other.size()) & 7;
+            bitp = (bitp + other.size()) & 7ull;
         }
-        else { // This stream is byte aligned, just copy the bytes
+        else { // This stream is all byte aligned, just copy the bytes
             v.resize(v.size() + other.v.size());
             memcpy(&v[v.size() - other.v.size()], other.v.data(), other.v.size());
             bitp = other.bitp;
