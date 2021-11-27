@@ -1,3 +1,18 @@
+/*
+Copyright 2020-2021 Esri
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+Contributors:  Lucian Plesea
+*/
+
 #pragma once
 #include <vector>
 #include <cinttypes>
@@ -84,19 +99,19 @@ public:
         return size();
     }
 
-    // Do not call with val having bits above "bits" set, the results will be corrupt
+    // Do not call with val having bits above "nbits" set, the results will be corrupt
     template<typename T>
-    void push(T val, size_t bits) {
+    void push(T val, size_t nbits) {
         static_assert(std::is_integral<T>::value && std::is_unsigned<T>::value,
             "Only works with unsigned integral types");
 
-        for (; bits;) {
+        while (nbits != 0) {
             if (bitp)
                 v.back() |= static_cast<uint8_t>(val << bitp);
             else
                 v.push_back(static_cast<uint8_t>(val));
-            size_t used = std::min(8 - bitp, bits);
-            bits -= used;
+            size_t used = std::min(8 - bitp, nbits);
+            nbits -= used;
             bitp = (bitp + used) & 7;
             val >>= used;
         }
@@ -119,7 +134,7 @@ public:
                 os -= 64;
             }
 
-            // Last part
+            // Last part, under 64 bits
             if (os) {
                 auto acc = ins.peek(); // Last few bits
                 v.back() |= acc << bitp; // align

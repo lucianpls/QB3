@@ -1,5 +1,5 @@
 /*
-Copyright 2020 Esri
+Copyright 2020-2021 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -17,6 +17,7 @@ Contributors:  Lucian Plesea
 #include <vector>
 #include <cinttypes>
 #include <limits>
+#include <algorithm>
 #include <cassert>
 #include <utility>
 #include "bitstream.h"
@@ -106,28 +107,6 @@ static size_t step(const T* const v, size_t rung) {
     return B2 - s;
 }
 
-//// Greater common denominator, using sort
-//template<typename T>
-//T gcd(const std::vector<T>& vals) {
-//    if (vals.empty())
-//        return 0;
-//    auto v(vals); // Work on a copy
-//    auto vb(v.begin()), ve(v.end());
-//    for (;;) {
-//        sort(vb, ve);
-//        while (!*vb) // Skip the zeros
-//            if (++vb == ve)
-//                return 0;
-//        auto m(*vb); // smallest value
-//        if (vb + 1 == ve)
-//            return m; // Done
-//        for (auto vi(vb + 1); vi < ve; vi++)
-//            *vi %= m;
-//    }
-//    // Not reached
-//    return 0;
-//}
-
 //
 // Delta and sign reorder
 // All these templates work only for T unsigned, integer, 2s complement types
@@ -185,43 +164,50 @@ inline T magsdiv(T val, T cf) {
     return (absv << 1) * (1 & ~val) + (((absv - 1) << 1) | 1) * (1 & val);
 }
 
-// return greatest common factor, using heaps
+// return greatest common factor (absolute) of a B2 sized vector of mag-sign values
 // T is always unsigned
 template<typename T>
 T gcode(const T* group) {
     const int B2 = 16;
-    // Build heap of absolute values
+    // Work with absolute values
     T v[B2];
     int sz = 0;
     for (int i = 0; i < B2; i++) {
-        auto val = group[i];
-        if (val == 0)
+        // ignore the zeros, return early if 1 or -1 are encountered
+        if (group[i] > 2) {
+            v[sz++] = revs(group[i]);
             continue;
-        // if a value is 1 or -1, the only common factor will be 1
-        if (val < 3)
-            return 1;
-        v[sz++] = revs(val);
+        }
+        if (group[i] != 0)
+            return 1; // Not useful
     }
-    if (sz == 0)
+
+    if (0 == sz)
         return 1;
-    // We don't really need a heap, only min value
-    make_heap(v, v + sz, std::greater<T>());
-    do {
-        const T m = *v;
-        for (int i = 1; i < sz; i++)
-            v[i] %= m;
-        make_heap(v, v + sz, std::greater<T>());
-        while (sz && *v == 0) // Eliminate zeros
-            pop_heap(v, v + sz--, std::greater<T>());
-    } while (sz > 1 && *v > 1);
-    return *v;
+
+    while (sz > 1) {
+        std::swap(v[0], *std::min_element(v, v + sz));
+        int j = 1;
+        const T m = v[0];
+        for (int i = 1; i < sz; i++) { // Skips the zeros
+            if (1 < (v[i] % m)) {
+                v[j++] = v[i] % m;
+                continue;
+            }
+            if (1 == (v[i] % m))
+                return 1; // Not useful
+        }
+        sz = j; // Never zero
+    }
+
+    return v[0]; // 2 or higher, absolute value
 }
 
-// Encoding with three codeword lenghts, used for higher rungs, not for byte data
-// Yes, it's horrid, but it works. Bit fiddling!
-// No conditionals, computes all three forms and chooses one by masking with the condition
+// Computed encoding with three codeword lenghts, used for higher rungs
+// Yes, it's horrid, but it works fast. Bit fiddling!
+// No conditionals, computes all three values and picks one by masking with the condition
 // It is faster than similar code with conditions because the calculations for the three lines get interleaved
-// The "(~0ull * (1 &" is to show the compiler that the multiplication is a mask operation
+// The "(~0ull * (1 & <cond>))" is to show the compiler that it is a mask operation
 static std::pair<size_t, uint64_t> qb3csz(uint64_t val, size_t rung) {
     uint64_t nxt = (val >> (rung - 1)) & 1;
     uint64_t top = val >> rung;
@@ -231,18 +217,16 @@ static std::pair<size_t, uint64_t> qb3csz(uint64_t val, size_t rung) {
         +((~0ull * (1 & (~top & nxt))) & (val >> 1 | ((val & 1) << rung))));                 // 0 1 MIDDLE  -> 01
 }
 
-// Computed decoding, seems faster with one test
 static std::pair<size_t, uint64_t> qb3dsz(uint64_t acc, size_t rung) {
     uint64_t ntop = (~(acc >> (rung - 1))) & 1;
-    uint64_t rbit = 1ull << rung;
+    uint64_t rmsk = (1ull << rung) - 1;
     if (1 & ~ntop)
-        return std::make_pair(rung, acc & ((rbit >> 1) - 1));
+        return std::make_pair(rung, acc & (rmsk >> 1));
     uint64_t nnxt = (~(acc >> (rung - 2))) & 1;
     return std::make_pair(rung + 1 + nnxt,
-        (((1 & ~nnxt) * ~0ull) & (((acc << 1) & (rbit - 1)) | ((acc >> rung) & 1)))
-        + (((1 & nnxt) * ~0ull) & (rbit + ((acc & ((rbit >> 1) - 1)) << 2) + ((acc >> rung) & 0b11))));
+        (((1 & ~nnxt) * ~0ull) & (((acc << 1) & rmsk) | ((acc >> rung) & 1)))
+        + (((1 & nnxt) * ~0ull) & ((rmsk + 1) + ((acc & (rmsk >> 1)) << 2) + ((acc >> rung) & 0b11))));
 }
-
 
 // Try index encoding
 // Would save about 1.1% more space, at some speed loss
@@ -375,7 +359,7 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                 if (step(group, rung) <= B2)
                     group[step(group, rung) - 1] ^= static_cast<T>(1ull << rung);
 
-//                count += trym(group, rung, abits);
+                //count += trym(group, rung, abits);
 
                 if (6 > rung) { // Encoded data fits in 64 or 128 bits
                     auto t = CRG[rung];
@@ -531,6 +515,7 @@ std::vector<T> decode(std::vector<uint8_t>& src,
 
                 // Computed decoding, with single stream read
                 s.advance(abits);
+
                 if (sizeof(T) != 8) {
                     for (auto& it : group) {
                         auto p = qb3dsz(s.peek(), rung);
@@ -559,7 +544,7 @@ std::vector<T> decode(std::vector<uint8_t>& src,
                 }
 GROUP_DONE:
                 // Undo the step shift, MSB of last value has to be zero
-                if ((0 == (group[B2 - 1] >> rung)) && (rung > 0)) {
+                if ((0 == (group[B2 - 1] >> rung)) & (rung > 0)) {
                     auto p = step(group, rung);
                     assert(p != B2); // Can't occur, could be a signal
                     if (p < B2)
