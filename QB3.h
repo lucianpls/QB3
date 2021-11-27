@@ -89,10 +89,13 @@ static size_t setbits16(uint64_t val) {
 }
 #endif
 
+// Block is 4x4 pixels
+constexpr size_t B = 4;
+constexpr size_t B2(B* B);
+
 // If the rung bits of the input values match *1*0, returns the index of first 0, otherwise B2 + 1
 template<typename T>
 static size_t step(const T* const v, size_t rung) {
-    const size_t B2 = 16;
     // We are looking for 1*0* pattern on the B2 bits
     uint64_t acc = ~0ull;
     for (size_t i = 0; i < B2; i++)
@@ -132,11 +135,11 @@ static T smag(T v) {
 }
 
 // Convert a sequence to mag-sign delta
-template<typename T, size_t B2 = 16>
+template<typename T>
 static T dsign(T *v, T pred) {
     static_assert(std::is_integral<T>::value && std::is_unsigned<T>::value,
         "Only works for unsigned integral types");
-    for (int i = 0; i < B2; i++) {
+    for (size_t i = 0; i < B2; i++) {
         pred += v[i] -= pred; // or std::swap(v[i], pred); v[i] = pred - v[i] 
         v[i] = mags(v[i]);
     }
@@ -144,9 +147,9 @@ static T dsign(T *v, T pred) {
 }
 
 // Reverse mag-sign and delta
-template<typename T, size_t B2 = 16>
+template<typename T>
 static T undsign(T *v, T pred) {
-    for (int i = 0; i < B2; i++)
+    for (size_t i = 0; i < B2; i++)
         v[i] = pred += smag(v[i]);
     return pred;
 }
@@ -168,11 +171,10 @@ inline T magsdiv(T val, T cf) {
 // T is always unsigned
 template<typename T>
 T gcode(const T* group) {
-    const int B2 = 16;
     // Work with absolute values
     T v[B2];
-    int sz = 0;
-    for (int i = 0; i < B2; i++) {
+    size_t sz = 0;
+    for (size_t i = 0; i < B2; i++) {
         // ignore the zeros, return early if 1 or -1 are encountered
         if (group[i] > 2) {
             v[sz++] = revs(group[i]);
@@ -187,9 +189,9 @@ T gcode(const T* group) {
 
     while (sz > 1) {
         std::swap(v[0], *std::min_element(v, v + sz));
-        int j = 1;
+        size_t j = 1;
         const T m = v[0];
-        for (int i = 1; i < sz; i++) { // Skips the zeros
+        for (size_t i = 1; i < sz; i++) { // Skips the zeros
             if (1 < (v[i] % m)) {
                 v[j++] = v[i] % m;
                 continue;
@@ -232,11 +234,12 @@ static std::pair<size_t, uint64_t> qb3dsz(uint64_t acc, size_t rung) {
 // Would save about 1.1% more space, at some speed loss
 template<typename T>
 size_t trym(const T* group, size_t rung, size_t abits) {
-    const size_t B2 = 16;
+    // Unit size bit length
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+
     std::vector<std::pair<size_t, size_t>> g2(B2);
     g2.clear();
-    for (int i = 0; i < B2; i++) {
+    for (size_t i = 0; i < B2; i++) {
         bool found = false;
         for (auto& p : g2)
             if (p.second == group[i]) {
@@ -249,7 +252,7 @@ size_t trym(const T* group, size_t rung, size_t abits) {
 
     // Normal encoding size
     size_t gsz = abits;
-    for (int i = 0; i < B2; i++)
+    for (size_t i = 0; i < B2; i++)
         gsz += qb3csz(group[i], rung).first;
 
     // Index coding size
@@ -261,10 +264,15 @@ size_t trym(const T* group, size_t rung, size_t abits) {
         g2sz += qb3csz(B2 - g2.size(), 3).first; // number of entries saved at rung 3
         size_t nrng = topbit(g2.size());
         // And the indexes
-        for (int i = 0; i < B2; i++)
-            for (int j = 0; j < g2.size(); j++)
-                if (group[i] == g2[j].second)
-                    g2sz += qb3csz(j, nrng).first;
+        if (nrng > 0) {
+            for (size_t i = 0; i < B2; i++)
+                for (size_t j = 0; j < g2.size(); j++)
+                    if (group[i] == g2[j].second)
+                        g2sz += qb3csz(j, nrng).first;
+        }
+        else {
+            g2sz += B2; // qb3csz doesn't work for rung = 0
+        }
     }
 
     // Common factor encoding, rung change is temporary
@@ -273,7 +281,7 @@ size_t trym(const T* group, size_t rung, size_t abits) {
     if (cf > 1) {
         T v[B2];
         g1sz += qb3csz(0, 3).first; // cf flag
-        for (int i = 0; i < B2; i++)
+        for (size_t i = 0; i < B2; i++)
             v[i] = magsdiv(group[i], cf);
         auto maxval = *std::max_element(v, v + B2); // Can't be 0
         // Temporary rng
@@ -296,16 +304,135 @@ size_t trym(const T* group, size_t rung, size_t abits) {
     return (g2sz < gsz) ? (gsz - g2sz) : 0;
 }
 
+// Encode a single group, returns encoded size
+template <typename T = uint8_t> size_t group_encode(T group[B2], T maxval, size_t oldrung, oBits &s) {
+    constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+    // Encode rung switch using tables, works even with no rung change
+    const size_t rung = topbit(maxval | 1); // Force at least one bit set
+    uint64_t acc = CSW[UBITS][(rung - oldrung) & ((1ull << UBITS) - 1)];
+    size_t abits = acc >> 12;
+    acc &= 0xff; // Strip the size
+    size_t ssize = s.size();
+
+    if (0 == rung) { // only 1s and 0s, rung is -1 or 0
+        acc |= maxval << abits++;
+        if (0 != maxval)
+            for (int i = 0 ; i < B2; i++)
+                acc |= group[i] << abits++;
+        s.push(acc, abits);
+        return abits;
+    }
+
+    // Flip the last set rung bit if the rung bit sequence is a step down
+    // At least one rung bit has to be set, so it can't return 0
+    if (step(group, rung) <= B2)
+        group[step(group, rung) - 1] ^= static_cast<T>(1ull << rung);
+
+    if (6 > rung) { // Encoded data fits in 64 or 128 bits
+        auto t = CRG[rung];
+        for (size_t i = 0; i < B2 / 2; i++) {
+            acc |= (TBLMASK & t[group[i]]) << abits;
+            abits += t[group[i]] >> 12;
+        }
+        // At rung 1 and 2 this push can be skipped, if the accum has enough space
+        if (!((rung == 1) || (rung == 2 && abits < 33))) {
+            s.push(acc, abits);
+            acc = abits = 0;
+        }
+        for (size_t i = B2 / 2; i < B2; i++) {
+            acc |= (TBLMASK & t[group[i]]) << abits;
+            abits += t[group[i]] >> 12;
+        }
+        s.push(acc, abits);
+        return s.size() - ssize;
+    }
+
+    // Last part of table encoding, rung 6-7 or 6-10
+    // Encoded data fits in 256 bits, 4 way interleaved
+    if ((sizeof(CRG) / sizeof(*CRG)) > rung) {
+        auto t = CRG[rung];
+        uint64_t a[4] = { acc, 0, 0, 0 };
+        size_t asz[4] = { abits, 0, 0, 0 };
+        for (size_t i = 0; i < B; i++)
+            for (size_t j = 0; j < B; j++) {
+                uint16_t v = t[group[j * B + i]];
+                a[j] |= (TBLMASK & v) << asz[j];
+                asz[j] += v >> 12;
+            }
+        for (size_t i = 0; i < B; i++)
+            s.push(a[i], asz[i]);
+        return s.size() - ssize;
+    }
+
+    // Computed encoding, slower, works for rung > 1
+    if (1 < sizeof(T)) { // This vanishes in 8 bit mode
+        // Push the code switch for non-table encoding, not worth the hassle
+        s.push(acc, abits);
+        if (63 != rung) {
+            for (int i = 0; i < B2; i++) {
+                auto p = qb3csz(group[i], rung);
+                s.push(p.second, p.first);
+            }
+        }
+        else { // rung 63 may overflow 64 bits, push the second val bit explicitly
+            for (int i = 0; i < B2; i++) {
+                auto p = qb3csz(group[i], rung);
+                size_t ovf = p.first & (p.first >> 6); // overflow flag
+                s.push(p.second, p.first ^ ovf); // changes 65 in 64
+                if (ovf)
+                    s.push(1ull & (group[i] >> 1), ovf);
+            }
+        }
+    }
+    return s.size() - ssize;
+}
+
+template <typename T = uint8_t>
+std::vector<uint8_t> encode_new(const std::vector<T>& image,
+    size_t xsize, size_t ysize, int mb = 1)
+{
+    std::vector<uint8_t> result;
+    result.reserve(image.size() * sizeof(T));
+    oBits s(result);
+    const size_t bands = image.size() / xsize / ysize;
+    assert(image.size() == xsize * ysize * bands);
+    assert(0 == xsize % B && 0 == ysize % B);
+
+    // Running code length, start with nominal value
+    std::vector<size_t> runbits(bands, sizeof(T) * 8 - 1);
+    std::vector<T> prev(bands, 0u);      // Previous value, per band
+    T group[B2];  // Current 2D group to encode, as array
+    size_t offsets[B2];
+    for (size_t i = 0; i < B2; i++)
+        offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
+    for (size_t y = 0; y < ysize; y += B) {
+        for (size_t x = 0; x < xsize; x += B) {
+            size_t loc = (y * xsize + x) * bands; // Top-left pixel address
+            for (size_t c = 0; c < bands; c++) { // blocks are band interleaved
+                // Collect the block for this band
+                if (mb >= 0 && mb < bands && mb != c)
+                    for (size_t i = 0; i < B2; i++)
+                        group[i] = image[loc + offsets[i] + c] - image[loc + offsets[i] + mb];
+                else
+                    for (size_t i = 0; i < B2; i++)
+                        group[i] = image[loc + offsets[i] + c];
+
+                // Delta in low sign group encode
+                prev[c] = dsign(group, prev[c]);
+                const T maxval = *std::max_element(group, group + B2);
+                group_encode(group, maxval, runbits[c], s);
+                runbits[c] = topbit(1ull | maxval);
+            }
+        }
+    }
+    return result;
+}
+
 template <typename T = uint8_t>
 std::vector<uint8_t> encode(const std::vector<T>& image,
     size_t xsize, size_t ysize, int mb = 1)
 {
-    // Unit size bit length
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-    // Block is 4x4 pixels
-    constexpr size_t B = 4;
-    constexpr size_t B2(B * B);
-
     std::vector<uint8_t> result;
     result.reserve(image.size() * sizeof(T));
     oBits s(result);
@@ -355,7 +482,7 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                 }
 
                 // Flip the last set rung bit if the rung bit sequence is a step down
-                // One rung bit has to be set, so this doesn't ever return 0
+                // At least one rung bit has to be set, so it can't return 0
                 if (step(group, rung) <= B2)
                     group[step(group, rung) - 1] ^= static_cast<T>(1ull << rung);
 
@@ -363,7 +490,7 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
 
                 if (6 > rung) { // Encoded data fits in 64 or 128 bits
                     auto t = CRG[rung];
-                    for (int i = 0; i < B2 / 2; i++) {
+                    for (size_t i = 0; i < B2 / 2; i++) {
                         acc |= (TBLMASK & t[group[i]]) << abits;
                         abits += t[group[i]] >> 12;
                     }
@@ -372,7 +499,7 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                         s.push(acc, abits);
                         acc = abits = 0;
                     }
-                    for (int i = B2 / 2; i < B2; i++) {
+                    for (size_t i = B2 / 2; i < B2; i++) {
                         acc |= (TBLMASK & t[group[i]]) << abits;
                         abits += t[group[i]] >> 12;
                     }
@@ -386,14 +513,14 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                     auto t = CRG[rung];
                     uint64_t a[4] = { acc, 0, 0, 0 };
                     size_t asz[4] = { abits, 0, 0, 0 };
-                    for (int i = 0; i < B2 / 4; i++)
-                        for (int j = 0; j < 4; j++) {
-                            uint16_t v = t[group[j * 4 + i]];
+                    for (size_t i = 0; i < B ; i++)
+                        for (size_t j = 0; j < B; j++) {
+                            uint16_t v = t[group[j * B + i]];
                             a[j] |= (TBLMASK & v) << asz[j];
                             asz[j] += v >> 12;
                         }
-                    for (int j = 0; j < 4; j++)
-                        s.push(a[j], asz[j]);
+                    for (size_t i = 0; i < B; i++)
+                        s.push(a[i], asz[i]);
                     continue;
                 }
 
@@ -412,7 +539,7 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                             auto p = qb3csz(val, rung);
                             size_t ovf = p.first & (p.first >> 6); // overflow flag
                             s.push(p.second, p.first ^ ovf); // changes 65 in 64
-                            s.push((val >> 1) & 1, ovf); // safe to call with 0 bits
+                            s.push(ovf & (val >> 1), ovf); // If value is 0, fine to call with nbits == 0
                         }
                     }
                 }
@@ -424,18 +551,17 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
     return result;
 }
 
-template<typename T = uint8_t, size_t B = 4>
+template<typename T = uint8_t>
 std::vector<T> decode(std::vector<uint8_t>& src,
     size_t xsize, size_t ysize, size_t bands, int mb = 1)
 {
+    // Unit size bit length
+    constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+
     std::vector<T> image(xsize * ysize * bands);
     iBits s(src);
     std::vector<T> prev(bands, 0);
-    constexpr size_t B2(B * B);
     T group[B2];
-
-    // Unit size bit length
-    constexpr int UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     std::vector<size_t> runbits(bands, sizeof(T) * 8 - 1);
 
     std::vector<size_t> offsets(B2);
@@ -476,7 +602,7 @@ std::vector<T> decode(std::vector<uint8_t>& src,
                 if (rung < 6) { // Table decode, half of the values fit in accumulator
                     const auto drg = DRG[rung];
                     const auto m = (1ull << (rung + 2)) - 1;
-                    for (int i = 0; i < B2 / 2; i++) {
+                    for (size_t i = 0; i < B2 / 2; i++) {
                         auto v = drg[(acc >> abits) & m];
                         abits += v >> 12;
                         group[i] = static_cast<T>(v & TBLMASK);
@@ -487,7 +613,7 @@ std::vector<T> decode(std::vector<uint8_t>& src,
                         acc = s.peek();
                         abits = 0;
                     }
-                    for (int i = B2 / 2; i < B2; i++) {
+                    for (size_t i = B2 / 2; i < B2; i++) {
                         auto v = drg[(acc >> abits) & m];
                         abits += v >> 12;
                         group[i] = static_cast<T>(v & TBLMASK);
