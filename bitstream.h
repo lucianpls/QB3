@@ -105,16 +105,14 @@ public:
         static_assert(std::is_integral<T>::value && std::is_unsigned<T>::value,
             "Only works with unsigned integral types");
 
-        while (nbits != 0) {
-            if (bitp)
-                v.back() |= static_cast<uint8_t>(val << bitp);
-            else
-                v.push_back(static_cast<uint8_t>(val));
-            size_t used = std::min(8 - bitp, nbits);
-            nbits -= used;
-            bitp = (bitp + used) & 7;
-            val >>= used;
+        size_t used = 0;
+        if (bitp != 0) { // Partial byte
+            v.back() |= static_cast<uint8_t>(val << bitp);
+            used = 8ull - bitp;
         }
+        for (;nbits > used; used+=8)
+            v.push_back(static_cast<uint8_t>(val >> used));
+        bitp = (bitp + nbits) & 7ull;
     }
 
     // Append
