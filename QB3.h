@@ -311,7 +311,7 @@ template <typename T = uint8_t> size_t group_encode(T group[B2], T maxval, size_
     const size_t rung = topbit(maxval | 1); // Force at least one bit set
     uint64_t acc = CSW[UBITS][(rung - oldrung) & ((1ull << UBITS) - 1)];
     size_t abits = acc >> 12;
-    acc &= 0xff; // Strip the size
+    acc &= 0xffull; // Strip the size
     size_t ssize = s.size();
 
     if (0 == rung) { // only 1s and 0s, rung is -1 or 0
@@ -391,6 +391,8 @@ template <typename T = uint8_t>
 std::vector<uint8_t> encode_new(const std::vector<T>& image,
     size_t xsize, size_t ysize, int mb = 1)
 {
+    constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+
     std::vector<uint8_t> result;
     result.reserve(image.size() * sizeof(T));
     oBits s(result);
@@ -409,25 +411,52 @@ std::vector<uint8_t> encode_new(const std::vector<T>& image,
         for (size_t x = 0; x < xsize; x += B) {
             size_t loc = (y * xsize + x) * bands; // Top-left pixel address
             for (size_t c = 0; c < bands; c++) { // blocks are band interleaved
-                // Collect the block for this band
-                if (mb >= 0 && mb < bands && mb != c)
-                    for (size_t i = 0; i < B2; i++)
-                        group[i] = image[loc + offsets[i] + c] - image[loc + offsets[i] + mb];
-                else
-                    for (size_t i = 0; i < B2; i++)
-                        group[i] = image[loc + offsets[i] + c];
+                T maxval(0); // Maximum mag-sign value within this group
+                { // Collect the block for this band, convert to running delta mag-sign
+                    auto prv = prev[c];
+                    if (mb != c && mb >= 0 && mb < bands) {
+                        for (size_t i = 0; i < B2; i++) {
+                            group[i] = image[loc + c + offsets[i]] - image[loc + mb + offsets[i]];
+                            prv += group[i] -= prv;
+                            group[i] = mags(group[i]);
+                            maxval = std::max(maxval, group[i]);
+                        }
+                    }
+                    else {
+                        for (size_t i = 0; i < B2; i++) {
+                            group[i] = image[loc + c + offsets[i]];
+                            prv += group[i] -= prv;
+                            group[i] = mags(group[i]);
+                            maxval = std::max(maxval, group[i]);
+                        }
+                    }
+                    prev[c] = prv;
+                }
 
-                // Delta in low sign group encode
-                prev[c] = dsign(group, prev[c]);
-                const T maxval = *std::max_element(group, group + B2);
+                const size_t rung = topbit(maxval | 1); // Force at least one bit set
+                if (0 == rung) { // only 1s and 0s, rung is -1 or 0
+                    // Encode this directly, no point in trying other modes
+                    uint64_t acc = CSW[UBITS][(rung - runbits[c]) & ((1ull << UBITS) - 1)];
+                    runbits[c] = rung;
+                    size_t abits = acc >> 12;
+                    acc &= 0xff;
+                    acc |= static_cast<uint64_t>(maxval) << abits++; // Add the all zero flag
+                    if (0 != maxval)
+                        for (size_t i = 0; i < B2; i++)
+                            acc |= static_cast<uint64_t>(group[i]) << abits++;
+                    s.push(acc, abits);
+                    continue;
+                }
+
                 group_encode(group, maxval, runbits[c], s);
-                runbits[c] = topbit(1ull | maxval);
+                runbits[c] = rung;
             }
         }
     }
     return result;
 }
 
+// fast basic encoding
 template <typename T = uint8_t>
 std::vector<uint8_t> encode(const std::vector<T>& image,
     size_t xsize, size_t ysize, int mb = 1)
@@ -452,18 +481,40 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
         for (size_t x = 0; x < xsize; x += B) {
             size_t loc = (y * xsize + x) * bands; // Top-left pixel address
             for (size_t c = 0; c < bands; c++) { // blocks are band interleaved
+                T maxval(0); // Maximum mag-sign value within this group
+                { // Collect the block for this band, convert to running delta mag-sign
+                    auto prv = prev[c];
+                    if (mb != c && mb >= 0 && mb < bands) {
+                        for (size_t i = 0; i < B2; i++) {
+                            group[i] = image[loc + c + offsets[i]] - image[loc + mb + offsets[i]];
+                            prv += group[i] -= prv;
+                            group[i] = mags(group[i]);
+                            maxval = std::max(maxval, group[i]);
+                        }
+                    }
+                    else {
+                        for (size_t i = 0; i < B2; i++) {
+                            group[i] = image[loc + c + offsets[i]];
+                            prv += group[i] -= prv;
+                            group[i] = mags(group[i]);
+                            maxval = std::max(maxval, group[i]);
+                        }
+                    }
+                    prev[c] = prv;
+                }
 
-                // Collect the block for this band
-                if (mb >= 0 && mb < bands && mb != c)
-                    for (size_t i = 0; i < B2; i++)
-                        group[i] = image[loc + offsets[i] + c] - image[loc + offsets[i] + mb];
-                else
-                    for (size_t i = 0; i < B2; i++)
-                        group[i] = image[loc + offsets[i] + c];
+                //// Collect the block for this band
+                //if (mb >= 0 && mb < bands && mb != c)
+                //    for (size_t i = 0; i < B2; i++)
+                //        group[i] = image[loc + offsets[i] + c] - image[loc + offsets[i] + mb];
+                //else
+                //    for (size_t i = 0; i < B2; i++)
+                //        group[i] = image[loc + offsets[i] + c];
 
-                // Delta in low sign group encode
-                prev[c] = dsign(group, prev[c]);
-                const uint64_t maxval = *std::max_element(group, group + B2);
+                //// Delta in low sign group encode
+                //prev[c] = dsign(group, prev[c]);
+                //const uint64_t maxval = *std::max_element(group, group + B2);
+
                 const size_t rung = topbit(maxval | 1); // Force at least one bit set
 
                 // Encode rung switch using tables, works even with no rung change

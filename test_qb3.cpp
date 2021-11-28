@@ -107,7 +107,7 @@ int test(string fname) {
 
 int main(int argc, char **argv)
 {
-    bool test_bitmap = true;
+    bool test_bitmap = false;
     bool test_RQ3 = true;
 
     if (test_bitmap) {

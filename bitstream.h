@@ -18,13 +18,15 @@ Contributors:  Lucian Plesea
 #include <cinttypes>
 #include <cassert>
 
+// TODO: Write these with c arrays instead of vector
+
 class iBits {
 public:
     iBits(const std::vector<uint8_t>& data) : v(data), bitp(0) {}
 
     // Single bit fetch
     uint64_t get() {
-        if (bitp >= 8 * v.size()) return 0; // Don't go past the end
+        if (empty()) return 0; // Don't go past the end
         uint64_t val = static_cast<uint64_t>((v[bitp / 8] >> (bitp % 8)) & 1);
         bitp++;
         return val;
@@ -32,7 +34,7 @@ public:
 
     // Not very efficient for small number of bits
     uint64_t pull(size_t bits = 1) {
-        assert(bits && bits <= 64);
+        assert(bits && bits <= 64 && !empty());
 
         uint64_t val = peek() & (~0ull >> (64 - bits));
         advance(bits);
@@ -46,6 +48,8 @@ public:
 
     // Get 64bits without changing the state
     uint64_t peek() const {
+        assert(!empty()); // Fine to call past the end, but at least one bit should be available
+
         uint64_t val = 0;
         size_t bits = 0;
         if (bitp % 8) { // partial bits
@@ -59,7 +63,9 @@ public:
         return val;
     }
 
-    bool empty() const { return v.size() * 8 == bitp; }
+    // informational
+    size_t avail() const { return v.size() * 8 - bitp; }
+    bool empty() const { return v.size() * 8 <= bitp; }
 
 private:
     const std::vector<uint8_t>& v;
