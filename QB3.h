@@ -416,18 +416,18 @@ std::vector<uint8_t> encode_new(const std::vector<T>& image,
                     auto prv = prev[c];
                     if (mb != c && mb >= 0 && mb < bands) {
                         for (size_t i = 0; i < B2; i++) {
-                            group[i] = image[loc + c + offsets[i]] - image[loc + mb + offsets[i]];
-                            prv += group[i] -= prv;
-                            group[i] = mags(group[i]);
-                            maxval = std::max(maxval, group[i]);
+                            T g = image[loc + c + offsets[i]] - image[loc + mb + offsets[i]];
+                            prv += g -= prv;
+                            group[i] = mags(g);
+                            maxval = std::max(maxval, mags(g));
                         }
                     }
                     else {
                         for (size_t i = 0; i < B2; i++) {
-                            group[i] = image[loc + c + offsets[i]];
-                            prv += group[i] -= prv;
-                            group[i] = mags(group[i]);
-                            maxval = std::max(maxval, group[i]);
+                            T g = image[loc + c + offsets[i]];
+                            prv += g -= prv;
+                            group[i] = mags(g);
+                            maxval = std::max(maxval, mags(g));
                         }
                     }
                     prev[c] = prv;
@@ -486,34 +486,22 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                     auto prv = prev[c];
                     if (mb != c && mb >= 0 && mb < bands) {
                         for (size_t i = 0; i < B2; i++) {
-                            group[i] = image[loc + c + offsets[i]] - image[loc + mb + offsets[i]];
-                            prv += group[i] -= prv;
-                            group[i] = mags(group[i]);
-                            maxval = std::max(maxval, group[i]);
+                            T g = image[loc + c + offsets[i]] - image[loc + mb + offsets[i]];
+                            prv += g -= prv;
+                            group[i] = mags(g);
+                            maxval = std::max(maxval, mags(g));
                         }
                     }
                     else {
                         for (size_t i = 0; i < B2; i++) {
-                            group[i] = image[loc + c + offsets[i]];
-                            prv += group[i] -= prv;
-                            group[i] = mags(group[i]);
-                            maxval = std::max(maxval, group[i]);
+                            T g = image[loc + c + offsets[i]];
+                            prv += g -= prv;
+                            group[i] = mags(g);
+                            maxval = std::max(maxval, mags(g));
                         }
                     }
                     prev[c] = prv;
                 }
-
-                //// Collect the block for this band
-                //if (mb >= 0 && mb < bands && mb != c)
-                //    for (size_t i = 0; i < B2; i++)
-                //        group[i] = image[loc + offsets[i] + c] - image[loc + offsets[i] + mb];
-                //else
-                //    for (size_t i = 0; i < B2; i++)
-                //        group[i] = image[loc + offsets[i] + c];
-
-                //// Delta in low sign group encode
-                //prev[c] = dsign(group, prev[c]);
-                //const uint64_t maxval = *std::max_element(group, group + B2);
 
                 const size_t rung = topbit(maxval | 1); // Force at least one bit set
 
@@ -536,8 +524,6 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                 // At least one rung bit has to be set, so it can't return 0
                 if (step(group, rung) <= B2)
                     group[step(group, rung) - 1] ^= static_cast<T>(1ull << rung);
-
-                //count += trym(group, rung, abits);
 
                 if (6 > rung) { // Encoded data fits in 64 or 128 bits
                     auto t = CRG[rung];
