@@ -387,6 +387,7 @@ template <typename T = uint8_t> size_t group_encode(T group[B2], T maxval, size_
     return s.size() - ssize;
 }
 
+
 template <typename T = uint8_t>
 std::vector<uint8_t> encode_new(const std::vector<T>& image,
     size_t xsize, size_t ysize, int mb = 1)
@@ -439,7 +440,7 @@ std::vector<uint8_t> encode_new(const std::vector<T>& image,
                     uint64_t acc = CSW[UBITS][(rung - runbits[c]) & ((1ull << UBITS) - 1)];
                     runbits[c] = rung;
                     size_t abits = acc >> 12;
-                    acc &= 0xff;
+                    acc &= 0xffull;
                     acc |= static_cast<uint64_t>(maxval) << abits++; // Add the all zero flag
                     if (0 != maxval)
                         for (size_t i = 0; i < B2; i++)
@@ -455,6 +456,7 @@ std::vector<uint8_t> encode_new(const std::vector<T>& image,
     }
     return result;
 }
+
 
 // fast basic encoding
 template <typename T = uint8_t>
@@ -484,6 +486,7 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                 T maxval(0); // Maximum mag-sign value within this group
                 { // Collect the block for this band, convert to running delta mag-sign
                     auto prv = prev[c];
+                    // Use separate loops to avoid a test inside the loop
                     if (mb != c && mb >= 0 && mb < bands) {
                         for (size_t i = 0; i < B2; i++) {
                             T g = image[loc + c + offsets[i]] - image[loc + mb + offsets[i]];
@@ -502,15 +505,13 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
                     }
                     prev[c] = prv;
                 }
-
                 const size_t rung = topbit(maxval | 1); // Force at least one bit set
 
                 // Encode rung switch using tables, works even with no rung change
                 uint64_t acc = CSW[UBITS][(rung - runbits[c]) & ((1ull << UBITS) - 1)];
                 size_t abits = acc >> 12;
-                acc &= 0xff; // Strip the size
+                acc &= 0xffull; // Strip the size
                 runbits[c] = rung;
-
                 if (0 == rung) { // only 1s and 0s, rung is -1 or 0
                     acc |= maxval << abits++;
                     if (0 != maxval)
@@ -713,9 +714,11 @@ GROUP_DONE:
                     if (p < B2)
                         group[p] ^= static_cast<T>(1) << rung;
                 }
-                prev[c] = undsign(group, prev[c]);
+
+                auto prv = prev[c];
                 for (size_t i = 0; i < B2; i++)
-                    image[loc + c + offsets[i]] = group[i];
+                    image[loc + c + offsets[i]] = prv += smag(group[i]);
+                prev[c] = prv;
             }
             for (int c = 0; c < bands; c++)
                 if (mb >= 0 && mb != c)
