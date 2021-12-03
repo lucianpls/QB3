@@ -220,6 +220,19 @@ static std::pair<size_t, uint64_t> qb3csz(uint64_t val, size_t rung) {
         +((~0ull * (1 & (~top & nxt))) & (val >> 1 | ((val & 1) << rung))));                 // 0 1 MIDDLE  -> 01
 }
 
+// TODO: See if it makes any difference
+//// Encode a single value, using tables if needed, at any rung between 1 and 63
+//// Faster than qb3csz for small values, likely not worth the effort
+//static std::pair<size_t, uint64_t> qb3code(uint64_t val, size_t rung) {
+//    assert(rung != 0); // Don't use for rung 0
+//    // Use tables
+//    if ((sizeof(CRG) / sizeof(*CRG)) > rung) {
+//        auto code = CRG[rung][val];
+//        return std::make_pair<size_t, uint64_t>(code >> 12, code & TBLMASK);
+//    }
+//    return qb3csz(val, rung);
+//}
+
 static std::pair<size_t, uint64_t> qb3dsz(uint64_t acc, size_t rung) {
     uint64_t ntop = (~(acc >> (rung - 1))) & 1;
     uint64_t rmsk = (1ull << rung) - 1;
@@ -309,7 +322,7 @@ size_t trym(const T* group, size_t rung, size_t abits) {
 // maxval is used to choose the rung for encoding
 // If abits > 0, the accumulator is also pushed into the stream
 template <typename T> size_t gencode(T group[B2], T maxval, oBits &s, 
-    uint64_t acc = 0, size_t abits = 0, bool stepdown = true)
+    uint64_t acc = 0, size_t abits = 0)
 {
     size_t ssize = s.size();
     assert(abits <= 64);
@@ -330,8 +343,8 @@ template <typename T> size_t gencode(T group[B2], T maxval, oBits &s,
 
     // Flip the last set rung bit if the rung bit sequence is a step down
     // At least one rung bit has to be set, so it can't return 0
-    if (stepdown && step(group, rung) <= B2) {
-        assert(step(group, rung) != 0);
+    if (step(group, rung) <= B2) {
+        assert(step(group, rung) > 0); // At least one rung bit should be set
         group[step(group, rung) - 1] ^= static_cast<T>(1ull << rung);
     }
 
@@ -487,53 +500,83 @@ bool encode(oBits s, const std::vector<T>& image, size_t xsize, size_t ysize, in
                     abits = SIGNAL[UBITS] >> 12;
                     runbits[c] = rung; // The actual rung for this group
                     // divide group values by CF
-                    maxval = cf - 2; // CF is coded at same rung
+                    maxval = 0; // CF is coded at same rung
                     for (size_t i = 0; i < B2; i++) {
                         auto val = magsdiv(group[i], cf);
                         maxval = std::max(maxval, val);
                         group[i] = val;
                     }
 
+                    // Need to encode two rungs, since CF can be larger than the data
+                    // Maybe with a switch when the cf is smaller, then we can use the switch?
+
                     cf -= 2; // Bias down, 0 and 1 are not used
                     // cf mode rung
                     auto trung = topbit(maxval | 1);
-                    // Push the encoded trung to accumulator
-                    // TODO: it's always a code switch, should use direct encoding
-                    auto cs = CSW[UBITS][(trung - oldrung) & ((1ull << UBITS) - 1)];
-                    acc |= (static_cast<uint64_t>(cs) & 0xffull) << abits;
-                    abits += cs >> 12;
+                    if (trung >= topbit(cf | 1)) {
+                        // Use the codeswitch encoding, encode everything with same rung
+                        // But use the wrong way switch for in-band
+                        auto cs = CSW[UBITS][(trung - oldrung) & ((1ull << UBITS) - 1)];
+                        if ((cs >> 12) == 1) // Would be no-switch
+                            cs = SIGNAL[UBITS];
+                        acc |= (static_cast<uint64_t>(cs) & 0xffull) << abits;
+                        abits += cs >> 12;
 
-                    if (trung == 0) { // Special encoding for single bit
-                        // maxval can't be zero, so we don't use the all-zeros flag
-                        // But we do need to save the CF bit
-                        acc |= cf << abits++;
-                        // And the group bits
-                        for (int i = 0; i < B2; i++)
-                            acc |= group[i] << abits++;
-                        s.push(acc, abits);
-                        continue;
-                    }
-
-                    s.push(acc, abits);
-                    acc = abits = 0;
-
-                    // Push the CF
-                    auto p = qb3csz(cf, trung);
-                    if (sizeof(T) != 8) {
-                        s.push(p.second, p.first);
-                    }
-                    else {
-                        if (p.first < 65) { // no overflow
+                        if (trung == 0) { // Special encoding for single bit
+                            // maxval can't be zero, so we don't use the all-zeros flag
+                            // But we do need to save the CF bit
+                            acc |= cf << abits++;
+                            // And the group bits
+                            for (int i = 0; i < B2; i++)
+                                acc |= group[i] << abits++;
+                            s.push(acc, abits);
+                            continue;
+                        }
+                        
+                        // encode the CF, can't overflow because trung is at most 63
+                        auto p = qb3csz(cf, trung);
+                        if (p.first + abits <= 64) {
+                            acc |= p.second << abits;
+                            abits += p.first;
+                            s.push(acc, abits);
+                        }
+                        else {
+                            s.push(acc, abits);
                             s.push(p.second, p.first);
                         }
-                        else { // overflow
-                            s.push(p.second, 64);
-                            s.push(1u & (cf >> 1), 1);
+                        acc = abits = 0;
+                    }
+                    else { // CF needs a higher rung than the group
+                        // First, encode trung using code-switch with the change bit cleared
+                        auto cs = CSW[UBITS][(trung - oldrung) & ((1ull << UBITS) - 1)];
+                        if ((cs >> 12) == 1) // Would be no-switch
+                            cs = SIGNAL[UBITS];
+                        cs &= 0xfffe; // clear the bit to signal separate cf encoding
+
+                        // Then encode cfrung, using code-switch from trung, but without the
+                        // change bit, it will always be different
+                        auto cfrung = topbit(cf | 1); // CF can't be zero here anyhow
+                        cs = CSW[UBITS][(cfrung - trung) & ((1ull << UBITS) - 1)];
+                        // trim the change bit
+                        acc |= (cs & (TBLMASK - 1)) << (abits - 1);
+                        abits += (cs >> 12) - 1;
+
+                        // encode cf at cfrung
+                        auto p = qb3csz(cf, cfrung);
+                        if (p.first + abits <= 64) {
+                            acc |= p.second << abits;
+                            abits += p.first;
+                            s.push(acc, abits);
                         }
+                        else {
+                            s.push(acc, abits);
+                            s.push(p.second, p.first);
+                        }
+                        acc = abits = 0;
                     }
 
-                    // The reduced group, encoded without step bit flip
-                    gencode(group, maxval, s, acc, abits, false);
+                    // The reduced group
+                    gencode(group, maxval, s, acc, abits);
                     continue;
                 }
 
