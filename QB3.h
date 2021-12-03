@@ -19,6 +19,7 @@ Contributors:  Lucian Plesea
 #include <limits>
 #include <algorithm>
 #include <cassert>
+#include <map>
 #include <utility>
 #include "bitstream.h"
 #if defined(_WIN32)
@@ -175,7 +176,7 @@ T gcode(const T* group) {
     T v[B2];
     size_t sz = 0;
     for (size_t i = 0; i < B2; i++) {
-        // ignore the zeros, return early if 1 or -1 are encountered
+        // skip the zeros, return early if 1 or -1 are encountered
         if (group[i] > 2) {
             v[sz++] = revs(group[i]);
             continue;
@@ -304,20 +305,24 @@ size_t trym(const T* group, size_t rung, size_t abits) {
     return (g2sz < gsz) ? (gsz - g2sz) : 0;
 }
 
-// Encode a single group, returns encoded size
-template <typename T = uint8_t> size_t group_encode(T group[B2], T maxval, size_t oldrung, oBits &s) {
-    constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-    // Encode rung switch using tables, works even with no rung change
-    const size_t rung = topbit(maxval | 1); // Force at least one bit set
-    uint64_t acc = CSW[UBITS][(rung - oldrung) & ((1ull << UBITS) - 1)];
-    size_t abits = acc >> 12;
-    acc &= 0xffull; // Strip the size
+// only encode the group entries, not the rung switch
+// maxval is used to choose the rung for encoding
+// If abits > 0, the accumulator is also pushed into the stream
+template <typename T> size_t gencode(T group[B2], T maxval, oBits &s, 
+    uint64_t acc = 0, size_t abits = 0, bool stepdown = true)
+{
     size_t ssize = s.size();
+    assert(abits <= 64);
+    if (abits > 8) { // Just in case, a rung switch is 8 bits at most
+        s.push(acc, abits);
+        acc = abits = 0;
+    }
 
+    const size_t rung = topbit(maxval | 1); // Force at least one bit set
     if (0 == rung) { // only 1s and 0s, rung is -1 or 0
         acc |= maxval << abits++;
         if (0 != maxval)
-            for (int i = 0 ; i < B2; i++)
+            for (int i = 0; i < B2; i++)
                 acc |= group[i] << abits++;
         s.push(acc, abits);
         return abits;
@@ -325,8 +330,10 @@ template <typename T = uint8_t> size_t group_encode(T group[B2], T maxval, size_
 
     // Flip the last set rung bit if the rung bit sequence is a step down
     // At least one rung bit has to be set, so it can't return 0
-    if (step(group, rung) <= B2)
+    if (stepdown && step(group, rung) <= B2) {
+        assert(step(group, rung) != 0);
         group[step(group, rung) - 1] ^= static_cast<T>(1ull << rung);
+    }
 
     if (6 > rung) { // Encoded data fits in 64 or 128 bits
         auto t = CRG[rung];
@@ -384,35 +391,54 @@ template <typename T = uint8_t> size_t group_encode(T group[B2], T maxval, size_
             }
         }
     }
+
     return s.size() - ssize;
+}
+
+// Base QB3 group encode with code switch, returns encoded size
+template <typename T = uint8_t> size_t groupencode(T group[B2], T maxval, size_t oldrung, oBits &s) {
+    constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+    // Encode rung switch using tables, works even with no rung change
+    const size_t rung = topbit(maxval | 1); // Force at least one bit set
+    uint64_t acc = CSW[UBITS][(rung - oldrung) & ((1ull << UBITS) - 1)];
+    return gencode(group, maxval, s, acc & 0xffull, static_cast<size_t>(acc >> 12));
 }
 
 
 template <typename T = uint8_t>
-std::vector<uint8_t> encode_new(const std::vector<T>& image,
-    size_t xsize, size_t ysize, int mb = 1)
+bool encode(oBits s, const std::vector<T>& image, size_t xsize, size_t ysize, int mb = 1)
 {
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-
-    std::vector<uint8_t> result;
-    result.reserve(image.size() * sizeof(T));
-    oBits s(result);
     const size_t bands = image.size() / xsize / ysize;
     assert(image.size() == xsize * ysize * bands);
     assert(0 == xsize % B && 0 == ysize % B);
+
+    size_t ssize; // Size of bitstream, if needed
+#if defined(HISTOGRAM)
+    // A histogram of encoded group sizes
+    std::map<size_t, size_t> group_sizes;
+#endif
+    size_t count = 0;
 
     // Running code length, start with nominal value
     std::vector<size_t> runbits(bands, sizeof(T) * 8 - 1);
     std::vector<T> prev(bands, 0u);      // Previous value, per band
     T group[B2];  // Current 2D group to encode, as array
     size_t offsets[B2];
+    uint64_t acc;
+    size_t abits = 0;
     for (size_t i = 0; i < B2; i++)
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
+
     for (size_t y = 0; y < ysize; y += B) {
+        //printf("y %d\n", int(y));
         for (size_t x = 0; x < xsize; x += B) {
+            //if (y == 2516)
+            //    printf("y %d x %d\n", int(y), int(x));
             size_t loc = (y * xsize + x) * bands; // Top-left pixel address
             for (size_t c = 0; c < bands; c++) { // blocks are band interleaved
                 T maxval(0); // Maximum mag-sign value within this group
+                auto oldrung = runbits[c];
                 { // Collect the block for this band, convert to running delta mag-sign
                     auto prv = prev[c];
                     if (mb != c && mb >= 0 && mb < bands) {
@@ -434,39 +460,109 @@ std::vector<uint8_t> encode_new(const std::vector<T>& image,
                     prev[c] = prv;
                 }
 
+                ssize = s.size();
                 const size_t rung = topbit(maxval | 1); // Force at least one bit set
                 if (0 == rung) { // only 1s and 0s, rung is -1 or 0
                     // Encode this directly, no point in trying other modes
-                    uint64_t acc = CSW[UBITS][(rung - runbits[c]) & ((1ull << UBITS) - 1)];
+                    acc = CSW[UBITS][(rung - oldrung) & ((1ull << UBITS) - 1)];
                     runbits[c] = rung;
-                    size_t abits = acc >> 12;
+                    abits = acc >> 12;
                     acc &= 0xffull;
-                    acc |= static_cast<uint64_t>(maxval) << abits++; // Add the all zero flag
+                    acc |= static_cast<uint64_t>(maxval) << abits++; // Add the all-zero flag
                     if (0 != maxval)
                         for (size_t i = 0; i < B2; i++)
                             acc |= static_cast<uint64_t>(group[i]) << abits++;
                     s.push(acc, abits);
+
+#if defined(HISTOGRAM)
+                    group_sizes[abits]++;
+#endif
                     continue;
                 }
 
-                group_encode(group, maxval, runbits[c], s);
+                // Try the common factor
+                auto cf = gcode(group);
+                if (cf > 1) { // CF encoding
+                    acc = SIGNAL[UBITS] & 0xff;
+                    abits = SIGNAL[UBITS] >> 12;
+                    runbits[c] = rung; // The actual rung for this group
+                    // divide group values by CF
+                    maxval = cf - 2; // CF is coded at same rung
+                    for (size_t i = 0; i < B2; i++) {
+                        auto val = magsdiv(group[i], cf);
+                        maxval = std::max(maxval, val);
+                        group[i] = val;
+                    }
+
+                    cf -= 2; // Bias down, 0 and 1 are not used
+                    // cf mode rung
+                    auto trung = topbit(maxval | 1);
+                    // Push the encoded trung to accumulator
+                    // TODO: it's always a code switch, should use direct encoding
+                    auto cs = CSW[UBITS][(trung - oldrung) & ((1ull << UBITS) - 1)];
+                    acc |= (static_cast<uint64_t>(cs) & 0xffull) << abits;
+                    abits += cs >> 12;
+
+                    if (trung == 0) { // Special encoding for single bit
+                        // maxval can't be zero, so we don't use the all-zeros flag
+                        // But we do need to save the CF bit
+                        acc |= cf << abits++;
+                        // And the group bits
+                        for (int i = 0; i < B2; i++)
+                            acc |= group[i] << abits++;
+                        s.push(acc, abits);
+                        continue;
+                    }
+
+                    s.push(acc, abits);
+                    acc = abits = 0;
+
+                    // Push the CF
+                    auto p = qb3csz(cf, trung);
+                    if (sizeof(T) != 8) {
+                        s.push(p.second, p.first);
+                    }
+                    else {
+                        if (p.first < 65) { // no overflow
+                            s.push(p.second, p.first);
+                        }
+                        else { // overflow
+                            s.push(p.second, 64);
+                            s.push(1u & (cf >> 1), 1);
+                        }
+                    }
+
+                    // The reduced group, encoded without step bit flip
+                    gencode(group, maxval, s, acc, abits, false);
+                    continue;
+                }
+
+#if defined(HISTOGRAM)
+                group_sizes[groupencode(group, maxval, runbits[c], s)]++;
+#else
+                groupencode(group, maxval, runbits[c], s);
+#endif
                 runbits[c] = rung;
             }
         }
     }
-    return result;
+
+#if defined(HISTOGRAM)
+    for (auto it : group_sizes)
+        printf("%d, %d\n", int(it.first), int(it.second));
+#endif
+    if (count)
+        printf("Count is %d\n", int(count));
+    return true;
 }
 
 
 // fast basic encoding
 template <typename T = uint8_t>
-std::vector<uint8_t> encode(const std::vector<T>& image,
+bool encode_fast(oBits &s, const std::vector<T>& image,
     size_t xsize, size_t ysize, int mb = 1)
 {
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-    std::vector<uint8_t> result;
-    result.reserve(image.size() * sizeof(T));
-    oBits s(result);
     const size_t bands = image.size() / xsize / ysize;
     assert(image.size() == xsize * ysize * bands);
     assert(0 == xsize % B && 0 == ysize % B);
@@ -586,7 +682,7 @@ std::vector<uint8_t> encode(const std::vector<T>& image,
     }
     if (count)
         printf("Saved %d bytes\n", int(count / 8));
-    return result;
+    return true;
 }
 
 template<typename T = uint8_t>
@@ -616,6 +712,9 @@ std::vector<T> decode(std::vector<uint8_t>& src,
                 abits = 1; // Used bits
                 if (acc & 1) {
                     auto cs = DSW[UBITS][(acc >> 1) & ((1ull << (UBITS + 1)) - 1)];
+                    if (0 == (cs & 0xff)) { // Encoding type signal detection, long-no-switch
+//                        printf("Signal\n");
+                    }
                     runbits[c] = (runbits[c] + cs) & ((1ull << UBITS) - 1);
                     abits = static_cast<size_t>(cs >> 12);
                 }
@@ -677,32 +776,33 @@ std::vector<T> decode(std::vector<uint8_t>& src,
                     goto GROUP_DONE;
                 }
 
-                // Computed decoding, with single stream read
-                s.advance(abits);
-
-                if (sizeof(T) != 8) {
-                    for (auto& it : group) {
-                        auto p = qb3dsz(s.peek(), rung);
-                        it = static_cast<T>(p.second);
-                        s.advance(p.first);
-                    }
-                }
-                else { // Only for 64bit data
-                    if (63 != rung) {
+                // Computed decoding, single stream read
+                if (sizeof(T) > 1) {
+                    s.advance(abits);
+                    if (sizeof(T) != 8) {
                         for (auto& it : group) {
                             auto p = qb3dsz(s.peek(), rung);
                             it = static_cast<T>(p.second);
                             s.advance(p.first);
                         }
                     }
-                    else { // Might overflow
-                        for (auto& it : group) {
-                            auto p = qb3dsz(s.peek(), rung);
-                            auto ovf = p.first & (p.first >> 6);
-                            it = static_cast<T>(p.second);
-                            s.advance(p.first - ovf);
-                            if (ovf)
-                                it |= s.get() << 1;
+                    else { // Only for 64bit data
+                        if (63 != rung) {
+                            for (auto& it : group) {
+                                auto p = qb3dsz(s.peek(), rung);
+                                it = static_cast<T>(p.second);
+                                s.advance(p.first);
+                            }
+                        }
+                        else { // Might overflow
+                            for (auto& it : group) {
+                                auto p = qb3dsz(s.peek(), rung);
+                                auto ovf = p.first & (p.first >> 6);
+                                it = static_cast<T>(p.second);
+                                s.advance(p.first - ovf);
+                                if (ovf)
+                                    it |= s.get() << 1;
+                            }
                         }
                     }
                 }

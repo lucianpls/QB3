@@ -103,7 +103,7 @@ public:
     void push(T val, size_t nbits) {
         static_assert(std::is_integral<T>::value && std::is_unsigned<T>::value,
             "Only works with unsigned integral types");
-
+        assert(nbits && nbits < 65);
         size_t used = 0;
         if (bitp != 0) { // Partial byte
             v.back() |= static_cast<uint8_t>(val << bitp);

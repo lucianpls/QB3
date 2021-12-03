@@ -47,8 +47,11 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
     double time_span;
 
     auto img = to(image, static_cast<T>(m));
+    vector<uint8_t> outvec;
+    outvec.reserve(image.size() * sizeof(T));
+    oBits outbits(outvec);
     t1 = high_resolution_clock::now();
-    auto v(QB3::encode(img, xsize, ysize, main_band));
+    QB3::encode(outbits, img, xsize, ysize, main_band);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
 
@@ -56,12 +59,12 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
     //    << "\tCompressed to " << float(v.size()) * 100 / image.size() / sizeof(T)
     //    << "\tTook " << time_span << " seconds.";
 
-    cout << sizeof(T) << '\t' << v.size() << "\t"
-        << float(v.size()) * 100 / image.size() / sizeof(T) << "\t" 
+    cout << sizeof(T) << '\t' << outvec.size() << "\t"
+        << float(outvec.size()) * 100 / image.size() / sizeof(T) << "\t" 
         << time_span << "\t";
 
     t1 = high_resolution_clock::now();
-    auto re = QB3::decode<T>(v, xsize, ysize, bands, main_band);
+    auto re = QB3::decode<T>(outvec, xsize, ysize, bands, main_band);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
     cout << time_span;
@@ -219,26 +222,26 @@ int main(int argc, char **argv)
             << "Decode" << "\t" << endl << endl;
 
         // From here on, test the algorithm for different data types
-        check<uint64_t>(image, raster, 5);
-        cout << endl;
-        check<uint64_t>(image, raster, (1ull << 56) + 11);
-        cout << endl;
-        check<uint32_t>(image, raster, 5);
-        cout << endl;
-        check<uint32_t>(image, raster, 1ull << 24);
-        cout << endl;
-        check<uint16_t>(image, raster, 5);
-        cout << endl;
-        check<uint16_t>(image, raster, 1ull << 8);
-        cout << endl;
+        //check<uint64_t>(image, raster, 5);
+        //cout << endl;
+        //check<uint64_t>(image, raster, (1ull << 56) + 11);
+        //cout << endl;
+        //check<uint32_t>(image, raster, 5);
+        //cout << endl;
+        //check<uint32_t>(image, raster, 1ull << 24);
+        //cout << endl;
+        //check<uint16_t>(image, raster, 5);
+        //cout << endl;
+        //check<uint16_t>(image, raster, 1ull << 8);
+        //cout << endl;
 
-        cout << "Data type\n";
-        check<uint64_t>(image, raster, 1, 1);
-        cout << endl;
-        check<uint32_t>(image, raster, 1, 1);
-        cout << endl;
-        check<uint16_t>(image, raster, 1, 1);
-        cout << endl;
+        //cout << "Data type\n";
+        //check<uint64_t>(image, raster, 1, 1);
+        //cout << endl;
+        //check<uint32_t>(image, raster, 1, 1);
+        //cout << endl;
+        //check<uint16_t>(image, raster, 1, 1);
+        //cout << endl;
         check<uint8_t>(image, raster, 1, 1);
         cout << endl;
     }
