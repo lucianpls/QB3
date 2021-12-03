@@ -169,12 +169,16 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="bmap.cpp" />
+    <ClCompile Include="QB3tables.cpp" />
     <ClCompile Include="test_qb3.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="bitstream.h" />
     <ClInclude Include="bmap.h" />
     <ClInclude Include="QB3.h" />
+    <ClInclude Include="QB3common.h" />
+    <ClInclude Include="QB3decode.h" />
+    <ClInclude Include="QB3encode.h" />
     <ClInclude Include="qb3_tables.h" />
   </ItemGroup>
   <ItemGroup>
