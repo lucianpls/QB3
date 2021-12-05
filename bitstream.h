@@ -11,6 +11,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 Contributors:  Lucian Plesea
+
+Content: Bit streams, in low endian format
+
 */
 
 #pragma once
@@ -20,6 +23,7 @@ Contributors:  Lucian Plesea
 
 // TODO: Write these with c arrays instead of vector
 
+// Input bitstream
 class iBits {
 public:
     iBits(const std::vector<uint8_t>& data) : v(data), bitp(0) {}
@@ -74,6 +78,7 @@ private:
     size_t bitp;
 };
 
+// Output bitstream
 class oBits {
 public:
     oBits(std::vector<uint8_t>& data) : v(data), bitp(0) {}

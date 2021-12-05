@@ -18,18 +18,11 @@ Contributors:  Lucian Plesea
 #pragma once
 #include <cinttypes>
 #include <vector>
+#include <utility>
 #include "bitstream.h"
 
 namespace QB3 {
 #include "QB3common.h"
-
-// Reverse mag-sign and delta
-template<typename T>
-static T undsign(T* v, T pred) {
-    for (size_t i = 0; i < B2; i++)
-        v[i] = pred += smag(v[i]);
-    return pred;
-}
 
 static std::pair<size_t, uint64_t> qb3dsz(uint64_t acc, size_t rung) {
     uint64_t ntop = (~(acc >> (rung - 1))) & 1;
@@ -67,15 +60,61 @@ std::vector<T> decode(std::vector<uint8_t>& src,
             for (int c = 0; c < bands; c++) {
                 acc = s.peek();
                 abits = 1; // Used bits
+
+                auto rung = runbits[c];
+
                 if (acc & 1) {
+                    // rung change
                     auto cs = DSW[UBITS][(acc >> 1) & ((1ull << (UBITS + 1)) - 1)];
                     if (0 == (cs & 0xff)) { // Encoding type signal detection, long-no-switch
-//                        printf("Signal\n");
+                        T cf;
+                        // CF encoding
+                        abits = cs >> 12;
+                        // Another rung switch
+                        if ((acc >> abits) & 1) { // normal switch, same rung for cf and values
+                            cs = DSW[UBITS][(acc >> (abits + 1)) & ((1ull << (UBITS + 1)) - 1)];
+                            // long-in-rung is fine here
+                            auto trung = (runbits[c] + cs) & ((1ull << UBITS) - 1);
+                            abits += static_cast<size_t>(cs >> 12);
+
+                            if (0 == trung) { // single bit encoding
+                                cf = static_cast<T>(acc >> abits++);
+                                // and the rest, cf is 0-1, which means 2 or 3
+                                // while the value can only be 0 or -1
+                                // This table is pre-multiplied
+                                static const uint8_t tbl[] = { 0, 0b11, 0, 0b101 };
+                                for (int i = 0; i < B2; i++)
+                                    group[i] = static_cast<T>(tbl[cf * 2 + ((acc >> abits++) & 1)]);
+
+                                // actual rung is 1 or 2 respectively
+                                runbits[c] = 1 + cf;
+                                goto DONE;
+                            }
+
+                            // higher rung can use qb3dsz,
+                            // check accumulator before reading cf
+                            if (trung + 1 + abits > 64) {
+                                s.advance(abits);
+                                acc = s.peek();
+                                abits = 0;
+                            }
+                            // There is no overflow possible here, trung is < 64
+                            auto p = qb3dsz(acc >> abits, trung);
+                            cf = static_cast<T>(p.second);
+                            abits += p.first;
+
+                            // Need a function to read the group as encoded and do the step
+
+                        }
+                        else { // cf is encoded with it's own rung
+
+                        }
                     }
-                    runbits[c] = (runbits[c] + cs) & ((1ull << UBITS) - 1);
+
+                    rung = (rung + cs) & ((1ull << UBITS) - 1);
+                    runbits[c] = rung;
                     abits = static_cast<size_t>(cs >> 12);
                 }
-                const size_t rung = runbits[c];
 
                 if (0 == rung) { // single bits, special case
                     if (0 != ((acc >> abits++) & 1)) {
@@ -173,6 +212,7 @@ std::vector<T> decode(std::vector<uint8_t>& src,
                         group[p] ^= static_cast<T>(1) << rung;
                 }
 
+            DONE: // Directly to undoing the delta - sign conversion
                 auto prv = prev[c];
                 for (size_t i = 0; i < B2; i++)
                     image[loc + c + offsets[i]] = prv += smag(group[i]);

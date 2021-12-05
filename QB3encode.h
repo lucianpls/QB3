@@ -10,12 +10,13 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
+Content: QB3 encoding
+
 Contributors:  Lucian Plesea
 */
 
 #pragma once
 #include <vector>
-
 #include "bitstream.h"
 
 namespace QB3 {
@@ -27,23 +28,18 @@ static inline T revs(T val) {
     return (val >> 1) + (val & 1);
 }
 
-// Given mag-sign value, divide by cf
+// integer divide val(in magsign) by cf(normal)
 template<typename T>
 static inline T magsdiv(T val, T cf) {
     T absv = revs(val) / cf; // Integer division
-    return (absv << 1) * (1 & ~val) + (((absv - 1) << 1) | 1) * (1 & val);
+    return ((absv << 1) & (~T(0) * (~val & 1))) + ((((absv - 1) << 1) | 1) & (~T(0) * (val & 1)));
 }
 
-// Convert a sequence to mag-sign delta
+// integer multiply val(in magsign) by cf(normal)
 template<typename T>
-static T dsign(T* v, T pred) {
-    static_assert(std::is_integral<T>::value && std::is_unsigned<T>::value,
-        "Only works for unsigned integral types");
-    for (size_t i = 0; i < B2; i++) {
-        pred += v[i] -= pred; // or std::swap(v[i], pred); v[i] = pred - v[i] 
-        v[i] = mags(v[i]);
-    }
-    return pred;
+static inline T magsmul(T val, T cf) {
+    T absv = revs(val) * cf;
+    return (absv << 1) * (~val & 1) + (((absv - 1) << 1) | 1) * (val & 1);
 }
 
 // return greatest common factor (absolute) of a B2 sized vector of mag-sign values
@@ -111,79 +107,77 @@ static std::pair<size_t, uint64_t> qb3csz(uint64_t val, size_t rung) {
 //    return qb3csz(val, rung);
 //}
 
-// Try index encoding
-// Would save about 1.1% more space, at some speed loss
-template<typename T>
-size_t trym(const T* group, size_t rung, size_t abits) {
-    // Unit size bit length
-    constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-
-    std::vector<std::pair<size_t, size_t>> g2(B2);
-    g2.clear();
-    for (size_t i = 0; i < B2; i++) {
-        bool found = false;
-        for (auto& p : g2)
-            if (p.second == group[i]) {
-                p.first++;
-                found = true;
-            }
-        if (!found)
-            g2.push_back(std::make_pair(1, group[i]));
-    }
-
-    // Normal encoding size
-    size_t gsz = abits;
-    for (size_t i = 0; i < B2; i++)
-        gsz += qb3csz(group[i], rung).first;
-
-    // Index coding size
-    size_t g2sz = abits + UBITS; // Signal + real code change
-    if (g2.size() != B2) {
-        sort(g2.rbegin(), g2.rend()); // High frequency first
-        for (auto& p : g2)
-            g2sz += qb3csz(p.second, rung).first;
-        g2sz += qb3csz(B2 - g2.size(), 3).first; // number of entries saved at rung 3
-        size_t nrng = topbit(g2.size());
-        // And the indexes
-        if (nrng > 0) {
-            for (size_t i = 0; i < B2; i++)
-                for (size_t j = 0; j < g2.size(); j++)
-                    if (group[i] == g2[j].second)
-                        g2sz += qb3csz(j, nrng).first;
-        }
-        else {
-            g2sz += B2; // qb3csz doesn't work for rung = 0
-        }
-    }
-
-    // Common factor encoding, rung change is temporary
-    size_t g1sz = UBITS; // Signal
-    auto cf = gcode(group);
-    if (cf > 1) {
-        T v[B2];
-        g1sz += qb3csz(0, 3).first; // cf flag
-        for (size_t i = 0; i < B2; i++)
-            v[i] = magsdiv(group[i], cf);
-        auto maxval = *std::max_element(v, v + B2); // Can't be 0
-        // Temporary rng
-        auto vrng = topbit(maxval);
-        // Using a single rung could be wasteful when rung(cf - 2) > rung(maxval)
-        // But cf is usually small and we don't need two rungs
-        vrng = std::max(vrng, topbit((cf - 2) | 1));
-        g1sz += UBITS; // Push vrng as delta
-        if (vrng) {
-            g1sz += qb3csz(cf - 2, vrng).first;
-            for (int i = 0; i < B2; i++)
-                g1sz += qb3csz(v[i], vrng).first;
-        }
-        else { // single bits, cf == 2 or 3
-            g1sz += B2 + 2;
-        }
-        if ((g1sz < gsz) && (g1sz < g2sz))
-            return gsz - g1sz;
-    }
-    return (g2sz < gsz) ? (gsz - g2sz) : 0;
-}
+//template<typename T>
+//size_t trym(const T* group, size_t rung, size_t abits) {
+//    // Unit size bit length
+//    constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+//
+//    std::vector<std::pair<size_t, size_t>> g2(B2);
+//    g2.clear();
+//    for (size_t i = 0; i < B2; i++) {
+//        bool found = false;
+//        for (auto& p : g2)
+//            if (p.second == group[i]) {
+//                p.first++;
+//                found = true;
+//            }
+//        if (!found)
+//            g2.push_back(std::make_pair(1, group[i]));
+//    }
+//
+//    // Normal encoding size
+//    size_t gsz = abits;
+//    for (size_t i = 0; i < B2; i++)
+//        gsz += qb3csz(group[i], rung).first;
+//
+//    // Index coding size
+//    size_t g2sz = abits + UBITS; // Signal + real code change
+//    if (g2.size() != B2) {
+//        sort(g2.rbegin(), g2.rend()); // High frequency first
+//        for (auto& p : g2)
+//            g2sz += qb3csz(p.second, rung).first;
+//        g2sz += qb3csz(B2 - g2.size(), 3).first; // number of entries saved at rung 3
+//        size_t nrng = topbit(g2.size());
+//        // And the indexes
+//        if (nrng > 0) {
+//            for (size_t i = 0; i < B2; i++)
+//                for (size_t j = 0; j < g2.size(); j++)
+//                    if (group[i] == g2[j].second)
+//                        g2sz += qb3csz(j, nrng).first;
+//        }
+//        else {
+//            g2sz += B2; // qb3csz doesn't work for rung = 0
+//        }
+//    }
+//
+//    // Common factor encoding, rung change is temporary
+//    size_t g1sz = UBITS; // Signal
+//    auto cf = gcode(group);
+//    if (cf > 1) {
+//        T v[B2];
+//        g1sz += qb3csz(0, 3).first; // cf flag
+//        for (size_t i = 0; i < B2; i++)
+//            v[i] = magsdiv(group[i], cf);
+//        auto maxval = *std::max_element(v, v + B2); // Can't be 0
+//        // Temporary rng
+//        auto vrng = topbit(maxval);
+//        // Using a single rung could be wasteful when rung(cf - 2) > rung(maxval)
+//        // But cf is usually small and we don't need two rungs
+//        vrng = std::max(vrng, topbit((cf - 2) | 1));
+//        g1sz += UBITS; // Push vrng as delta
+//        if (vrng) {
+//            g1sz += qb3csz(cf - 2, vrng).first;
+//            for (int i = 0; i < B2; i++)
+//                g1sz += qb3csz(v[i], vrng).first;
+//        }
+//        else { // single bits, cf == 2 or 3
+//            g1sz += B2 + 2;
+//        }
+//        if ((g1sz < gsz) && (g1sz < g2sz))
+//            return gsz - g1sz;
+//    }
+//    return (g2sz < gsz) ? (gsz - g2sz) : 0;
+//}
 
 // only encode the group entries, not the rung switch
 // maxval is used to choose the rung for encoding
@@ -310,10 +304,7 @@ bool encode_new(oBits s, const std::vector<T>& image, size_t xsize, size_t ysize
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
 
     for (size_t y = 0; y < ysize; y += B) {
-        //printf("y %d\n", int(y));
         for (size_t x = 0; x < xsize; x += B) {
-            //if (y == 2516)
-            //    printf("y %d x %d\n", int(y), int(x));
             size_t loc = (y * xsize + x) * bands; // Top-left pixel address
             for (size_t c = 0; c < bands; c++) { // blocks are band interleaved
                 T maxval(0); // Maximum mag-sign value within this group
@@ -341,10 +332,10 @@ bool encode_new(oBits s, const std::vector<T>& image, size_t xsize, size_t ysize
 
                 ssize = s.size();
                 const size_t rung = topbit(maxval | 1); // Force at least one bit set
+                runbits[c] = rung;
                 if (0 == rung) { // only 1s and 0s, rung is -1 or 0
                     // Encode this directly, no point in trying other modes
                     acc = CSW[UBITS][(rung - oldrung) & ((1ull << UBITS) - 1)];
-                    runbits[c] = rung;
                     abits = acc >> 12;
                     acc &= 0xffull;
                     acc |= static_cast<uint64_t>(maxval) << abits++; // Add the all-zero flag
@@ -361,27 +352,27 @@ bool encode_new(oBits s, const std::vector<T>& image, size_t xsize, size_t ysize
 
                 // Try the common factor
                 auto cf = gcode(group);
-                if (cf > 1) { // CF encoding
+                // The extra stream takes a lot of time
+                std::vector<uint8_t> cfsvec;
+                oBits cfs(cfsvec); // output stream for cf encoding
+                if (cf > 1) { // CF encoding might be better
                     acc = SIGNAL[UBITS] & 0xff;
                     abits = SIGNAL[UBITS] >> 12;
-                    runbits[c] = rung; // The actual rung for this group
-                    // divide group values by CF
-                    maxval = 0; // CF is coded at same rung
+                    // divide group values by CF and find the new maxvalue
+                    T cfmaxval = 0;
+                    T cfgroup[B2];
                     for (size_t i = 0; i < B2; i++) {
                         auto val = magsdiv(group[i], cf);
-                        maxval = std::max(maxval, val);
-                        group[i] = val;
+                        cfmaxval = std::max(cfmaxval, val);
+                        cfgroup[i] = val;
                     }
 
-                    // Need to encode two rungs, since CF can be larger than the data
-                    // Maybe with a switch when the cf is smaller, then we can use the switch?
-
                     cf -= 2; // Bias down, 0 and 1 are not used
-                    // cf mode rung
-                    auto trung = topbit(maxval | 1);
-                    if (trung >= topbit(cf | 1)) {
-                        // Use the codeswitch encoding, encode everything with same rung
-                        // But use the wrong way switch for in-band
+                    auto trung = topbit(cfmaxval | 1); // cf mode rung
+                    auto cfrung = topbit(cf | 1); // rung for cf value
+                    if (trung >= cfrung) {
+                        // Use the codeswitch encoding, encode cf at same rung
+                        // Use the wrong way switch for in-band
                         auto cs = CSW[UBITS][(trung - oldrung) & ((1ull << UBITS) - 1)];
                         if ((cs >> 12) == 1) // Would be no-switch
                             cs = SIGNAL[UBITS];
@@ -394,64 +385,69 @@ bool encode_new(oBits s, const std::vector<T>& image, size_t xsize, size_t ysize
                             acc |= cf << abits++;
                             // And the group bits
                             for (int i = 0; i < B2; i++)
-                                acc |= group[i] << abits++;
+                                acc |= cfgroup[i] << abits++;
+                            // store it directly in the main output stream
                             s.push(acc, abits);
-                            continue;
+                            continue; // next group
                         }
 
-                        // encode the CF, can't overflow because trung is at most 63
-                        auto p = qb3csz(cf, trung);
-                        if (p.first + abits <= 64) {
-                            acc |= p.second << abits;
-                            abits += p.first;
-                            s.push(acc, abits);
-                        }
-                        else {
-                            s.push(acc, abits);
-                            s.push(p.second, p.first);
-                        }
-                        acc = abits = 0;
+                        cfrung = trung; // Encode cf value with trung
                     }
                     else { // CF needs a higher rung than the group
                         // First, encode trung using code-switch with the change bit cleared
                         auto cs = CSW[UBITS][(trung - oldrung) & ((1ull << UBITS) - 1)];
-                        if ((cs >> 12) == 1) // Would be no-switch
+                        if ((cs >> 12) == 1) // Would be no-switch, use signal
                             cs = SIGNAL[UBITS];
-                        cs &= 0xfffe; // clear the bit to signal separate cf encoding
+                        acc |= cs & 0xfeul << abits;
+                        abits += cs >> 12;
 
                         // Then encode cfrung, using code-switch from trung, but without the
                         // change bit, it will always be different
-                        auto cfrung = topbit(cf | 1); // CF can't be zero here anyhow
                         cs = CSW[UBITS][(cfrung - trung) & ((1ull << UBITS) - 1)];
-                        // trim the change bit
+                        // cfrung can't be the same as trung, so we don't check for in-rung change
+                        // trim the change bit, not needed
                         acc |= (cs & (TBLMASK - 1)) << (abits - 1);
-                        abits += (cs >> 12) - 1;
-
-                        // encode cf at cfrung
-                        auto p = qb3csz(cf, cfrung);
-                        if (p.first + abits <= 64) {
-                            acc |= p.second << abits;
-                            abits += p.first;
-                            s.push(acc, abits);
-                        }
-                        else {
-                            s.push(acc, abits);
-                            s.push(p.second, p.first);
-                        }
-                        acc = abits = 0;
+                        abits += static_cast<size_t>(cs >> 12) - 1;
                     }
 
-                    // The reduced group
-                    gencode(group, maxval, s, acc, abits);
-                    continue;
+                    // Push the accumulator and the cf encoding
+                    // cfrung can't be zero
+                    // Could use the accumulator and let gencode deal with last part
+                    assert(cfrung > 0 && cfrung < 65);
+                    auto p = qb3csz(cf, cfrung);
+                    if (p.first + abits <= 64) {
+                        acc |= p.second << abits;
+                        abits += p.first;
+                        cfs.push(acc, abits);
+                    }
+                    else {
+                        cfs.push(acc, abits);
+                        // cf could require 65 bits
+                        if (sizeof(T) != 8 || p.second < 65) {
+                            cfs.push(p.second, p.first);
+                        }
+                        else {
+                            cfs.push(p.second, 64);
+                            cfs.push((cf >> 1) & 1u, 1);
+                        }
+                    }
+                    
+                    // And the reduced group
+                    gencode(cfgroup, cfmaxval, cfs);
                 }
 
-#if defined(HISTOGRAM)
-                group_sizes[groupencode(group, maxval, runbits[c], s)]++;
-#else
-                groupencode(group, maxval, runbits[c], s);
-#endif
-                runbits[c] = rung;
+                // TODO:
+                // CF encoding is almost always better
+                // The exception is at UBITS 5 and 6 when cf is small (2,3,4)
+                // In those cases, the full encoding should be done and size difference tested
+                // Sort this out once the index encoding is also done
+                if (0 != cfs.size()) {
+                    s += cfs;
+                    //count++;
+                }
+                else {
+                    groupencode(group, maxval, oldrung, s);
+                }
             }
         }
     }
@@ -461,7 +457,8 @@ bool encode_new(oBits s, const std::vector<T>& image, size_t xsize, size_t ysize
         printf("%d, %d\n", int(it.first), int(it.second));
 #endif
     if (count)
-        printf("Count is %d\n", int(count));
+        printf("Count is %d, %f\n", int(count), 
+            (count * 100.0) / (double(xsize) * ysize * bands / B2));
     return true;
 }
 

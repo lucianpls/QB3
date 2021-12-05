@@ -216,7 +216,8 @@ int main(int argc, char **argv)
         auto time_span = duration_cast<duration<double>>(high_resolution_clock::now() - t).count();
         cout << "Decode time " << time_span << endl;
 
-        cout << "Type" << '\t' << "Compressed" << "\t"
+        cout << "Type" << '\t' 
+            << "Compressed" << "\t"
             << "Ratio" << "\t"
             << "Encode" << "\t"
             << "Decode" << "\t" << endl << endl;
