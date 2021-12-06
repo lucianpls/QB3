@@ -278,8 +278,98 @@ template <typename T = uint8_t> size_t groupencode(T group[B2], T maxval, size_t
     return gencode(group, maxval, s, acc & 0xffull, static_cast<size_t>(acc >> 12));
 }
 
+
+// Group encode with cf
 template <typename T = uint8_t>
-bool encode_new(oBits s, const std::vector<T>& image, size_t xsize, size_t ysize, int mb = 1)
+void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung)
+{
+    constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+    uint64_t acc = SIGNAL[UBITS] & 0xff;
+    size_t abits = SIGNAL[UBITS] >> 12;
+    // divide group values by CF and find the new maxvalue
+    T cfmaxval = 0;
+    T cfgroup[B2];
+    for (size_t i = 0; i < B2; i++) {
+        auto val = magsdiv(group[i], cf);
+        cfmaxval = std::max(cfmaxval, val);
+        cfgroup[i] = val;
+    }
+
+    cf -= 2; // Bias down, 0 and 1 are not used
+    auto trung = topbit(cfmaxval | 1); // cf mode rung
+    auto cfrung = topbit(cf | 1); // rung for cf value
+    if (trung >= cfrung) {
+        // Use the codeswitch encoding, encode cf at same rung as data
+        // Use the wrong way switch for in-band
+        auto cs = CSW[UBITS][(trung - oldrung) & ((1ull << UBITS) - 1)];
+        if ((cs >> 12) == 1) // Would be no-switch
+            cs = SIGNAL[UBITS];
+        acc |= (static_cast<uint64_t>(cs) & 0xffull) << abits;
+        abits += cs >> 12;
+
+        if (trung == 0) { // Special encoding for single bit
+            // maxval can't be zero, so we don't use the all-zeros flag
+            // But we do need to save the CF bit
+            acc |= cf << abits++;
+            // And the group bits
+            for (int i = 0; i < B2; i++)
+                acc |= cfgroup[i] << abits++;
+            // store it directly in the main output stream
+            bits.push(acc, abits);
+            return; // done
+        }
+
+        cfrung = trung; // Encode cf value with trung
+    }
+    else { // CF needs a higher rung than the group
+        // First, encode trung using code-switch with the change bit cleared
+        auto cs = CSW[UBITS][(trung - oldrung) & ((1ull << UBITS) - 1)];
+        if ((cs >> 12) == 1) // Would be no-switch, use signal
+            cs = SIGNAL[UBITS];
+        acc |= cs & 0xfeul << abits;
+        abits += cs >> 12;
+
+        // Then encode cfrung, using code-switch from trung, but without the
+        // change bit, it will always be different
+        cs = CSW[UBITS][(cfrung - trung) & ((1ull << UBITS) - 1)];
+        // cfrung can't be the same as trung, so we don't check for in-rung change
+        // trim the change bit, not needed
+        acc |= (cs & (TBLMASK - 1)) << (abits - 1);
+        abits += static_cast<size_t>(cs >> 12) - 1;
+    }
+
+    // Push the accumulator and the cf encoding
+    // cfrung can't be zero
+    // Could use the accumulator and let gencode deal with last part
+    assert(cfrung > 0 && cfrung < 65);
+    auto p = qb3csz(cf, cfrung);
+    if (p.first + abits <= 64) {
+        acc |= p.second << abits;
+        abits += p.first;
+    }
+    else {
+        bits.push(acc, abits);
+        // cf may require 65 bits
+        if (sizeof(T) != 8 || p.second < 65) {
+            acc = p.second;
+            abits = p.first;
+        }
+        else {
+            bits.push(p.second, 64);
+            acc = (cf >> 1) & 1;
+            abits = 1;
+        }
+    }
+    // Leave something in the accumulator
+    assert(abits != 0 && abits < 65);
+    bits.push(acc, abits);
+
+    // And the reduced group
+    gencode(cfgroup, cfmaxval, bits);
+}
+
+template <typename T = uint8_t>
+bool encode_cf(oBits s, const std::vector<T>& image, size_t xsize, size_t ysize, int mb = 1)
 {
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     const size_t bands = image.size() / xsize / ysize;
@@ -352,102 +442,11 @@ bool encode_new(oBits s, const std::vector<T>& image, size_t xsize, size_t ysize
 
                 // Try the common factor
                 auto cf = gcode(group);
-                // The extra stream takes a lot of time
-                std::vector<uint8_t> cfsvec;
-                oBits cfs(cfsvec); // output stream for cf encoding
-                if (cf > 1) { // CF encoding might be better
-                    acc = SIGNAL[UBITS] & 0xff;
-                    abits = SIGNAL[UBITS] >> 12;
-                    // divide group values by CF and find the new maxvalue
-                    T cfmaxval = 0;
-                    T cfgroup[B2];
-                    for (size_t i = 0; i < B2; i++) {
-                        auto val = magsdiv(group[i], cf);
-                        cfmaxval = std::max(cfmaxval, val);
-                        cfgroup[i] = val;
-                    }
-
-                    cf -= 2; // Bias down, 0 and 1 are not used
-                    auto trung = topbit(cfmaxval | 1); // cf mode rung
-                    auto cfrung = topbit(cf | 1); // rung for cf value
-                    if (trung >= cfrung) {
-                        // Use the codeswitch encoding, encode cf at same rung
-                        // Use the wrong way switch for in-band
-                        auto cs = CSW[UBITS][(trung - oldrung) & ((1ull << UBITS) - 1)];
-                        if ((cs >> 12) == 1) // Would be no-switch
-                            cs = SIGNAL[UBITS];
-                        acc |= (static_cast<uint64_t>(cs) & 0xffull) << abits;
-                        abits += cs >> 12;
-
-                        if (trung == 0) { // Special encoding for single bit
-                            // maxval can't be zero, so we don't use the all-zeros flag
-                            // But we do need to save the CF bit
-                            acc |= cf << abits++;
-                            // And the group bits
-                            for (int i = 0; i < B2; i++)
-                                acc |= cfgroup[i] << abits++;
-                            // store it directly in the main output stream
-                            s.push(acc, abits);
-                            continue; // next group
-                        }
-
-                        cfrung = trung; // Encode cf value with trung
-                    }
-                    else { // CF needs a higher rung than the group
-                        // First, encode trung using code-switch with the change bit cleared
-                        auto cs = CSW[UBITS][(trung - oldrung) & ((1ull << UBITS) - 1)];
-                        if ((cs >> 12) == 1) // Would be no-switch, use signal
-                            cs = SIGNAL[UBITS];
-                        acc |= cs & 0xfeul << abits;
-                        abits += cs >> 12;
-
-                        // Then encode cfrung, using code-switch from trung, but without the
-                        // change bit, it will always be different
-                        cs = CSW[UBITS][(cfrung - trung) & ((1ull << UBITS) - 1)];
-                        // cfrung can't be the same as trung, so we don't check for in-rung change
-                        // trim the change bit, not needed
-                        acc |= (cs & (TBLMASK - 1)) << (abits - 1);
-                        abits += static_cast<size_t>(cs >> 12) - 1;
-                    }
-
-                    // Push the accumulator and the cf encoding
-                    // cfrung can't be zero
-                    // Could use the accumulator and let gencode deal with last part
-                    assert(cfrung > 0 && cfrung < 65);
-                    auto p = qb3csz(cf, cfrung);
-                    if (p.first + abits <= 64) {
-                        acc |= p.second << abits;
-                        abits += p.first;
-                        cfs.push(acc, abits);
-                    }
-                    else {
-                        cfs.push(acc, abits);
-                        // cf could require 65 bits
-                        if (sizeof(T) != 8 || p.second < 65) {
-                            cfs.push(p.second, p.first);
-                        }
-                        else {
-                            cfs.push(p.second, 64);
-                            cfs.push((cf >> 1) & 1u, 1);
-                        }
-                    }
-                    
-                    // And the reduced group
-                    gencode(cfgroup, cfmaxval, cfs);
-                }
-
-                // TODO:
-                // CF encoding is almost always better
-                // The exception is at UBITS 5 and 6 when cf is small (2,3,4)
-                // In those cases, the full encoding should be done and size difference tested
-                // Sort this out once the index encoding is also done
-                if (0 != cfs.size()) {
-                    s += cfs;
-                    //count++;
-                }
-                else {
+                if (cf > 1)
+                    cfgenc(s, group, cf, oldrung);
+                else
                     groupencode(group, maxval, oldrung, s);
-                }
+
             }
         }
     }
@@ -465,7 +464,7 @@ bool encode_new(oBits s, const std::vector<T>& image, size_t xsize, size_t ysize
 
 // fast basic encoding
 template <typename T = uint8_t>
-bool encode(oBits& s, const std::vector<T>& image,
+bool encode_fast(oBits& s, const std::vector<T>& image,
     size_t xsize, size_t ysize, int mb = 1)
 {
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
