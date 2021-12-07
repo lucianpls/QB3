@@ -1,5 +1,5 @@
 /*
-Copyright 2020 Esri
+Copyright 2020-2021 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -21,8 +21,8 @@ Contributors:  Lucian Plesea
 // From https://github.com/lucianpls/libicd
 #include <icd_codecs.h>
 
-#include "bmap.h"
 #include "QB3.h"
+#include "bmap.h"
 
 using namespace std;
 using namespace chrono;
@@ -47,8 +47,11 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
     double time_span;
 
     auto img = to(image, static_cast<T>(m));
+    vector<uint8_t> outvec;
+    outvec.reserve(image.size() * sizeof(T));
+    oBits outbits(outvec);
     t1 = high_resolution_clock::now();
-    auto v(QB3::encode(img, xsize, ysize, main_band));
+    QB3::encode_fast(outbits, img, xsize, ysize, main_band);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
 
@@ -56,12 +59,12 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
     //    << "\tCompressed to " << float(v.size()) * 100 / image.size() / sizeof(T)
     //    << "\tTook " << time_span << " seconds.";
 
-    cout << sizeof(T) << '\t' << v.size() << "\t"
-        << float(v.size()) * 100 / image.size() / sizeof(T) << "\t" 
+    cout << sizeof(T) << '\t' << outvec.size() << "\t"
+        << float(outvec.size()) * 100 / image.size() / sizeof(T) << "\t" 
         << time_span << "\t";
 
     t1 = high_resolution_clock::now();
-    auto re = QB3::decode<T>(v, xsize, ysize, bands, main_band);
+    auto re = QB3::decode<T>(outvec, xsize, ysize, bands, main_band);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
     cout << time_span;
@@ -71,35 +74,38 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
             if (img[i] != re[i]) {
                 cout << endl << "Difference at " << i << " "
                     << img[i] << " " << re[i];
+                cout << endl << "y = " << i / (xsize * bands) <<
+                    " x = " << (i / bands) % xsize <<
+                    " c = " << i % bands;
                 break;
             }
     }
 }
 
 int test(string fname) {
-	FILE* f;
-	if (fopen_s(&f, fname.c_str(), "rb") || !f) {
-		cerr << "Can't open input file\n";
-		exit(errno);
-	}
-	fseek(f, 0, SEEK_END);
-	auto fsize = ftell(f);
-	fseek(f, 0, SEEK_SET);
-	std::vector<uint8_t> src(fsize);
-	storage_manager source = { src.data(), src.size() };
-	fread(source.buffer, fsize, 1, f);
-	fclose(f);
-	Raster raster;
-	auto error_message = image_peek(source, raster);
-	if (error_message) {
-		cerr << error_message << endl;
-		exit(1);
-	}
-	//cout << "Size is " << raster.size.x << "x" << raster.size.y << "@" << raster.size.c << endl;
+    FILE* f;
+    if (fopen_s(&f, fname.c_str(), "rb") || !f) {
+        cerr << "Can't open input file\n";
+        exit(errno);
+    }
+    fseek(f, 0, SEEK_END);
+    auto fsize = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    std::vector<uint8_t> src(fsize);
+    storage_manager source = { src.data(), src.size() };
+    fread(source.buffer, fsize, 1, f);
+    fclose(f);
+    Raster raster;
+    auto error_message = image_peek(source, raster);
+    if (error_message) {
+        cerr << error_message << endl;
+        exit(1);
+    }
+    //cout << "Size is " << raster.size.x << "x" << raster.size.y << "@" << raster.size.c << endl;
 
-	codec_params params(raster);
-	std::vector<uint8_t> image(params.get_buffer_size());
-	stride_decode(params, source, image.data());
+    codec_params params(raster);
+    std::vector<uint8_t> image(params.get_buffer_size());
+    stride_decode(params, source, image.data());
 
     check<uint8_t>(image, raster, 1, 1);
     return 0;
@@ -108,7 +114,7 @@ int test(string fname) {
 int main(int argc, char **argv)
 {
     bool test_bitmap = false;
-    bool test_RQ3 = true;
+    bool test_QB3 = true;
 
     if (test_bitmap) {
         int sx = 200, sy = 299;
@@ -145,33 +151,34 @@ int main(int argc, char **argv)
                     bm.clear(x, y);
 
         vector<uint8_t> values;
-        Bitstream s(values);
-        cout << endl << bm.dsize() * 8 << endl;
+        oBits s(values);
+        cout << endl << "Raw " << bm.dsize() * 8 << endl;
         bm.pack(s);
-        cout << s.v.size() * 8 << endl;
+        cout << "Packed " << s.size() << endl;
 
         vector<uint8_t> v;
         RLE(values, v);
-        cout << v.size() * 8 << endl;
+        cout << "RLE " << v.size() * 8 << endl;
         vector<uint8_t> outv;
-        Bitstream outs(outv);
-        unRLE(v, outs.v);
-        cout << outs.v.size() * 8 << std::endl;
+        oBits outs(outv);
+        unRLE(v, outv);
+        cout << "UnRLE " << outs.size() << std::endl;
         if (memcmp(values.data(), outv.data(), outv.size()))
             cerr << "RLE error" << endl;
 
         BMap bm1(sx, sy);
-        // Reset s for reading
-        s.bitp = 0;
-        bm1.unpack(outs);
+        iBits ins(outv);
+        bm1.unpack(ins);
         if (!bm1.compare(bm))
             cerr << "Bitmap packing error" << endl;
+        else
+            cout << "Bitmap Success" << endl;
     }
 
-    if (test_RQ3) {
+    if (test_QB3) {
         if (argc < 2) {
             string fname;
-            cout << "Provide input file name for testing\n";
+            cout << "Provide input file name for testing QB3\n";
             for (;;) {
                 getline(cin, fname);
                 if (fname.empty())
@@ -182,13 +189,6 @@ int main(int argc, char **argv)
             }
             return 0;
         }
-
-        //const int B2 = 16;
-        //uint64_t v[B2];
-        //for (int i = 0; i < B2; i++)
-        //    v[i] = i < 1 ? 0xf : 0xf;
-        //v[5] = 0;
-        //return bitstep(v, 3);
 
         string fname = argv[1];
         FILE* f;
@@ -218,7 +218,8 @@ int main(int argc, char **argv)
         auto time_span = duration_cast<duration<double>>(high_resolution_clock::now() - t).count();
         cout << "Decode time " << time_span << endl;
 
-        cout << "Type" << '\t' << "Compressed" << "\t"
+        cout << "Type" << '\t' 
+            << "Compressed" << "\t"
             << "Ratio" << "\t"
             << "Encode" << "\t"
             << "Decode" << "\t" << endl << endl;

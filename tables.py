@@ -104,6 +104,8 @@ def showcodeswitch():
                 s = ""
         print(s[:-2] + "};")
 
+# does not contain the change bit
+# Need special encoding for middle value
 def showdecodeswitch():
     for ubits in (3, 4, 5, 6):
         s = f"static const uint16_t dsw{ubits}[] = {{ "
@@ -113,11 +115,11 @@ def showdecodeswitch():
             sz = 1 + (v >> 12)
             v = smag(v & 0xff)
             if v >= 0:
-                v = v + 1
+                # Roll back to zero for max positive v, as a signal
+                v = (v + 1) & ((1 << (ubits - 1)) - 1)
             else:
                 v = v & ((1 << ubits) -1)
             v |= sz << 12
-            # All even values are no rung change, one bit
             s += f"0x{v:04x}, "
             if len(s) > 120:
                 print(s)
@@ -148,10 +150,21 @@ def trycs(ubits):
     for d in range(1 << ubits):
         print(f"{d} {enct[d]:04x} {dect[0xff & (enct[d] >> 1)]:04x}")
 
+# signal code-switch value by ubits
+def showsame():
+    s = f"static const uint16_t SAME[] = {{ 0, 0, 0, "
+    for ubits in range(3,7):
+        v = cs(0, ubits)
+        v = encode(v, ubits - 1)
+        # Add the change bit, change code and length
+        v =  ((v + 0x1000) & 0xf000) | ((v << 1) & 0xff) | 1
+        s += f"0x{v:04x}, "
+    print(s[:-2] + "};")
+
 if __name__ == "__main__":
     # showencode8()
     # showencode16()
     # showcodeswitch()
-    # showdecodeswitch()
-    showdecode()
-
+    showdecodeswitch()
+    # showdecode()
+    # showsame()

@@ -1,5 +1,5 @@
 /*
-Copyright 2020 Esri
+Copyright 2020-2021 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -17,18 +17,7 @@ Contributors:  Lucian Plesea
 #include <iostream>
 #include <algorithm>
 #include <cassert>
-
-const uint8_t Bitstream::mask[9] = {
-    0,
-    0b1,
-    0b11,
-    0b111,
-    0b1111,
-    0b11111,
-    0b111111,
-    0b1111111,
-    0b11111111
-};
+#include "bitstream.h"
 
 BMap::BMap(int x, int y) : _x(x), _y(y), _lw((x + 7) / 8) {
     v.assign(_lw * ((y + 7) / 8), ~0); // All data
@@ -102,36 +91,35 @@ void unRLE(std::vector<uint8_t>& v, std::vector<uint8_t>& result) {
     result.swap(tmp);
 }
 
-size_t BMap::unpack(Bitstream& s) {
+size_t BMap::unpack(iBits& s) {
     for (auto& it : v) {
         uint8_t code;
         it = 0;
-        s.pull(code, 2);
+        code = static_cast<uint8_t>(s.pull(2));
         switch (code) {
         case 0b11:
             it = ~it;
         case 0b00:
             continue;
         case 0b01:
-            s.pull(it, 64);
+            it = s.pull(64);
             continue;
         }
         // code 10, secondary encoding, 4 quads
         for (int i = 0; i < 64; i += 16) {
-            uint16_t q;
-            s.pull(q, 2); // 0 is a NOP
+            auto q = static_cast<uint16_t>(s.pull(2));
             if (0b11 == q)
                 q = 0xffff;
             else if (0b01 == q) // Secondary, as such
-                s.pull(q, 16);
+                q = static_cast<uint16_t>(s.pull(16));
             else if (0b10 == q) { // Tertiary, need to read the code for this quart
-                s.pull(code, 3); // three bits
+                code = static_cast<uint8_t>(s.pull(3));
                 if (2 > code)
                     q = code ? 0xff00 : 0x00ff;
                 else {
                     if (5 < code) // Need one more code bit
                         code = static_cast<uint8_t>(s.get() | (static_cast<uint64_t>(code) << 1));
-                    s.pull(q, 7); // Need 7 bits
+                    q = static_cast<uint16_t>(s.pull(7)); // Need 7 bits
                     switch (code) { // Combo with one mixed byte
                     case 0b010:                         break; // 0b0010
                     case 0b011:  q = q << 8;            break; // 0b1000
@@ -151,7 +139,7 @@ size_t BMap::unpack(Bitstream& s) {
 }
 
 // 3-4 prefix bits tertiary packing
-size_t BMap::pack(Bitstream& s) {
+size_t BMap::pack(oBits& s) {
     for (auto it : v) {
         if (0 == it or ~(0ULL) == it) {
             s.push(it & 0b11u, 2);
@@ -238,5 +226,5 @@ size_t BMap::pack(Bitstream& s) {
         }
     }
 
-    return s.v.size();
+    return s.size();
 }
