@@ -19,6 +19,9 @@ Contributors:  Lucian Plesea
 #include <vector>
 #include "bitstream.h"
 
+#define HISTOGRAM
+#include <map>
+
 namespace QB3 {
 #include "QB3common.h"
 
@@ -86,12 +89,23 @@ T gcode(const T* group) {
 // It is faster than similar code with conditions because the calculations for the three lines get interleaved
 // The "(~0ull * (1 & <cond>))" is to show the compiler that it is a mask operation
 static std::pair<size_t, uint64_t> qb3csz(uint64_t val, size_t rung) {
+    assert(rung > 1); // Does not work for rungs 0 or 1
     uint64_t nxt = (val >> (rung - 1)) & 1;
     uint64_t top = val >> rung;
     return std::make_pair<size_t, uint64_t>(rung + top + (top | nxt),
         +((~0ull * (1 & top)) & (((val ^ (1ull << rung)) >> 2) | ((val & 0b11ull) << rung))) // 1 x BIG     -> 00
         + ((~0ull * (1 & ~(top | nxt))) & (val + (1ull << (rung - 1))))                       // 0 0 LITTLE  -> 1?
         + ((~0ull * (1 & (~top & nxt))) & (val >> 1 | ((val & 1) << rung))));                 // 0 1 MIDDLE  -> 01
+}
+
+// Single value QB3 encode, works for rungs 1 and above
+static std::pair<size_t, uint64_t> qb3csztbl(uint64_t val, size_t rung) {
+    assert(rung);
+    if ((sizeof(CRG) / sizeof(*CRG)) > rung) {
+        auto cs = CRG[rung][val];
+        return std::make_pair<size_t, uint64_t>(cs >> 12, cs & TBLMASK);
+    }
+    return qb3csz(val, rung);
 }
 
 // TODO: See if it makes any difference
@@ -194,10 +208,10 @@ template <typename T> size_t gencode(T group[B2], T maxval, oBits& s,
 
     const size_t rung = topbit(maxval | 1); // Force at least one bit set
     if (0 == rung) { // only 1s and 0s, rung is -1 or 0
-        acc |= maxval << abits++;
+        acc |= static_cast<uint64_t>(maxval) << abits++;
         if (0 != maxval)
             for (int i = 0; i < B2; i++)
-                acc |= group[i] << abits++;
+                acc |= static_cast<uint64_t>(group[i]) << abits++;
         s.push(acc, abits);
         return abits;
     }
@@ -287,33 +301,34 @@ void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung)
     uint64_t acc = SIGNAL[UBITS] & 0xff;
     size_t abits = SIGNAL[UBITS] >> 12;
     // divide group values by CF and find the new maxvalue
-    T cfmaxval = 0;
+    T maxval = 0;
     T cfgroup[B2];
     for (size_t i = 0; i < B2; i++) {
         auto val = magsdiv(group[i], cf);
-        cfmaxval = std::max(cfmaxval, val);
+        maxval = std::max(maxval, val);
         cfgroup[i] = val;
     }
 
     cf -= 2; // Bias down, 0 and 1 are not used
-    auto trung = topbit(cfmaxval | 1); // cf mode rung
+    auto trung = topbit(maxval | 1); // cf mode rung
     auto cfrung = topbit(cf | 1); // rung for cf value
+    // Encode the trung, with or without switch
+    // Use the wrong way switch for in-band
+    auto cs = CSW[UBITS][(trung - oldrung) & ((1ull << UBITS) - 1)];
+    if ((cs >> 12) == 1) // Would be no-switch, use signal instead, it decodes to delta of zero
+        cs = SIGNAL[UBITS];
     if (trung >= cfrung) {
         // Use the codeswitch encoding, encode cf at same rung as data
-        // Use the wrong way switch for in-band
-        auto cs = CSW[UBITS][(trung - oldrung) & ((1ull << UBITS) - 1)];
-        if ((cs >> 12) == 1) // Would be no-switch
-            cs = SIGNAL[UBITS];
         acc |= (static_cast<uint64_t>(cs) & 0xffull) << abits;
         abits += cs >> 12;
 
         if (trung == 0) { // Special encoding for single bit
             // maxval can't be zero, so we don't use the all-zeros flag
             // But we do need to save the CF bit
-            acc |= cf << abits++;
+            acc |= static_cast<uint64_t>(cf) << abits++;
             // And the group bits
             for (int i = 0; i < B2; i++)
-                acc |= cfgroup[i] << abits++;
+                acc |= static_cast<uint64_t>(cfgroup[i]) << abits++;
             // store it directly in the main output stream
             bits.push(acc, abits);
             return; // done
@@ -321,19 +336,15 @@ void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung)
 
         cfrung = trung; // Encode cf value with trung
     }
-    else { // CF needs a higher rung than the group
+    else { // CF needs a higher rung than the group, so it's never 0
         // First, encode trung using code-switch with the change bit cleared
-        auto cs = CSW[UBITS][(trung - oldrung) & ((1ull << UBITS) - 1)];
-        if ((cs >> 12) == 1) // Would be no-switch, use signal
-            cs = SIGNAL[UBITS];
-        acc |= cs & 0xfeul << abits;
+        acc |= (cs & 0xfeull) << abits;
         abits += cs >> 12;
 
-        // Then encode cfrung, using code-switch from trung, but without the
-        // change bit, it will always be different
+        // Then encode cfrung, using code-switch from trung, 
+        // skip the change bit, since rung will always be different
+        // cfrung - trung is never 0, since cfrung > trung
         cs = CSW[UBITS][(cfrung - trung) & ((1ull << UBITS) - 1)];
-        // cfrung can't be the same as trung, so we don't check for in-rung change
-        // trim the change bit, not needed
         acc |= (cs & (TBLMASK - 1)) << (abits - 1);
         abits += static_cast<size_t>(cs >> 12) - 1;
     }
@@ -342,7 +353,8 @@ void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung)
     // cfrung can't be zero
     // Could use the accumulator and let gencode deal with last part
     assert(cfrung > 0 && cfrung < 65);
-    auto p = qb3csz(cf, cfrung);
+    // Use the table version, since cfrung may be 1
+    auto p = qb3csztbl(cf, cfrung);
     if (p.first + abits <= 64) {
         acc |= p.second << abits;
         abits += p.first;
@@ -350,7 +362,7 @@ void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung)
     else {
         bits.push(acc, abits);
         // cf may require 65 bits
-        if (sizeof(T) != 8 || p.second < 65) {
+        if (sizeof(T) != 8 || p.first < 65) {
             acc = p.second;
             abits = p.first;
         }
@@ -365,7 +377,7 @@ void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung)
     bits.push(acc, abits);
 
     // And the reduced group
-    gencode(cfgroup, cfmaxval, bits);
+    gencode(cfgroup, maxval, bits);
 }
 
 template <typename T = uint8_t>
@@ -423,6 +435,16 @@ bool encode_cf(oBits s, const std::vector<T>& image, size_t xsize, size_t ysize,
                 ssize = s.size();
                 const size_t rung = topbit(maxval | 1); // Force at least one bit set
                 runbits[c] = rung;
+
+#if defined(_DEBUG)
+                if (x == 0 * B && y == 0 * B) {
+                    printf("\nLen %04llx", s.size());
+                    printf("\nCOMP x %u y %u c %u, rung %u\t", int(x/B), int(y/B), int(c), int(rung));
+                    for (int i = 0; i < B2; i++)
+                        printf("%u\t", int(group[i]));
+                }
+#endif
+
                 if (0 == rung) { // only 1s and 0s, rung is -1 or 0
                     // Encode this directly, no point in trying other modes
                     acc = CSW[UBITS][(rung - oldrung) & ((1ull << UBITS) - 1)];
@@ -446,6 +468,10 @@ bool encode_cf(oBits s, const std::vector<T>& image, size_t xsize, size_t ysize,
                     cfgenc(s, group, cf, oldrung);
                 else
                     groupencode(group, maxval, oldrung, s);
+
+#if defined(HISTOGRAM)
+                group_sizes[s.size() - ssize]++;
+#endif
 
             }
         }
@@ -477,6 +503,13 @@ bool encode_fast(oBits& s, const std::vector<T>& image,
     std::vector<T> prev(bands, 0u);      // Previous value, per band
     T group[B2];  // Current 2D group to encode, as array
     size_t offsets[B2];
+
+#if defined(HISTOGRAM)
+    // A histogram of encoded group sizes
+    size_t ssize = 0;
+    std::map<size_t, size_t> group_sizes;
+#endif
+
     size_t count = 0;
     for (size_t i = 0; i < B2; i++)
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
@@ -484,6 +517,12 @@ bool encode_fast(oBits& s, const std::vector<T>& image,
         for (size_t x = 0; x < xsize; x += B) {
             size_t loc = (y * xsize + x) * bands; // Top-left pixel address
             for (size_t c = 0; c < bands; c++) { // blocks are band interleaved
+
+#if defined(HISTOGRAM)
+                if (s.size() - ssize)
+                    group_sizes[s.size() - ssize]++;
+                ssize = s.size();
+#endif
                 T maxval(0); // Maximum mag-sign value within this group
                 { // Collect the block for this band, convert to running delta mag-sign
                     auto prv = prev[c];
@@ -513,8 +552,9 @@ bool encode_fast(oBits& s, const std::vector<T>& image,
                 size_t abits = acc >> 12;
                 acc &= 0xffull; // Strip the size
                 runbits[c] = rung;
+
                 if (0 == rung) { // only 1s and 0s, rung is -1 or 0
-                    acc |= maxval << abits++;
+                    acc |= uint64_t(maxval) << abits++;
                     if (0 != maxval)
                         for (uint64_t v : group)
                             acc |= v << abits++;
@@ -587,6 +627,12 @@ bool encode_fast(oBits& s, const std::vector<T>& image,
     }
     if (count)
         printf("Saved %d bytes\n", int(count / 8));
+
+#if defined(HISTOGRAM)
+    for (auto it : group_sizes)
+        printf("%d, %d\n", int(it.first), int(it.second));
+#endif
+
     return true;
 }
 

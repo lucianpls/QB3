@@ -52,7 +52,7 @@ public:
 
     // Get 64bits without changing the state
     uint64_t peek() const {
-        assert(!empty()); // Fine to call past the end, but at least one bit should be available
+//        assert(!empty()); // Fine to call past the end, but at least one bit should be available
 
         uint64_t val = 0;
         size_t bits = 0;
@@ -70,6 +70,10 @@ public:
     // informational
     size_t avail() const { return v.size() * 8 - bitp; }
     bool empty() const { return v.size() * 8 <= bitp; }
+
+    size_t position() const {
+        return bitp;
+    }
 
 private:
     const std::vector<uint8_t>& v;
@@ -108,7 +112,7 @@ public:
     void push(T val, size_t nbits) {
         static_assert(std::is_integral<T>::value && std::is_unsigned<T>::value,
             "Only works with unsigned integral types");
-        assert(nbits && nbits < 65);
+        assert(nbits < 65);
         size_t used = 0;
         if (bitp != 0) { // Partial byte
             v.back() |= static_cast<uint8_t>(val << bitp);

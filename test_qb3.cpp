@@ -74,6 +74,9 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
             if (img[i] != re[i]) {
                 cout << endl << "Difference at " << i << " "
                     << img[i] << " " << re[i];
+                cout << endl << "y = " << i / (xsize * bands) <<
+                    " x = " << (i / bands) % xsize <<
+                    " c = " << i % bands;
                 break;
             }
     }
@@ -111,7 +114,7 @@ int test(string fname) {
 int main(int argc, char **argv)
 {
     bool test_bitmap = false;
-    bool test_RQ3 = true;
+    bool test_QB3 = true;
 
     if (test_bitmap) {
         int sx = 200, sy = 299;
@@ -172,8 +175,7 @@ int main(int argc, char **argv)
             cout << "Bitmap Success" << endl;
     }
 
-    if (test_RQ3) {
-
+    if (test_QB3) {
         if (argc < 2) {
             string fname;
             cout << "Provide input file name for testing QB3\n";

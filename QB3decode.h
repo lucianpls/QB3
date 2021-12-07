@@ -24,21 +24,39 @@ Contributors:  Lucian Plesea
 namespace QB3 {
 #include "QB3common.h"
 
-static std::pair<size_t, uint64_t> qb3dsz(uint64_t acc, size_t rung) {
-    uint64_t ntop = (~(acc >> (rung - 1))) & 1;
+// Does not work for rung 0 or 1
+static std::pair<size_t, uint64_t> qb3dsz(uint64_t val, size_t rung) {
+    assert(rung > 1);
+    uint64_t ntop = (~(val >> (rung - 1))) & 1;
     uint64_t rmsk = (1ull << rung) - 1;
     if (1 & ~ntop)
-        return std::make_pair(rung, acc & (rmsk >> 1));
-    uint64_t nnxt = (~(acc >> (rung - 2))) & 1;
+        return std::make_pair(rung, val & (rmsk >> 1));
+    uint64_t nnxt = (~(val >> (rung - 2))) & 1;
     return std::make_pair(rung + 1 + nnxt,
-        (((1 & ~nnxt) * ~0ull) & (((acc << 1) & rmsk) | ((acc >> rung) & 1)))
-        + (((1 & nnxt) * ~0ull) & ((rmsk + 1) + ((acc & (rmsk >> 1)) << 2) + ((acc >> rung) & 0b11))));
+        (((1 & ~nnxt) * ~0ull) & (((val << 1) & rmsk) | ((val >> rung) & 1)))
+        + (((1 & nnxt) * ~0ull) & ((rmsk + 1) + ((val & (rmsk >> 1)) << 2) + ((val >> rung) & 0b11))));
 }
 
+// Potentially faster by using tables, also works for rungs 1+
+static std::pair<size_t, uint64_t> qb3dsztbl(uint64_t val, size_t rung) {
+    assert(rung);
+    if ((sizeof(DRG) / sizeof(*DRG)) > rung) {
+        auto cs = DRG[rung][val & ((1ull << (rung + 2)) - 1) ];
+        return std::make_pair<size_t, uint64_t>(cs >> 12, cs & TBLMASK);
+    }
+    return qb3dsz(val, rung);
+}
+
+// Decode a B2 sized group of QB3 values from s and acc
+// Accumulator should be valid and almost full
 template<typename T>
 void gdecode(iBits &s, size_t rung, T group[B2], uint64_t acc, size_t abits) {
-    assert(abits < 8); // Assumes some bits are available in the accumulator
-    if (0 == rung) { // single bits, special case
+    if (abits > 8) { // Make sure we have sufficient bits in accumulator
+        s.advance(abits);
+        acc = s.peek();
+        abits = 0;
+    }
+    if (0 == rung) { // single bits, special case, need at least 17bits in accumulator
         if (0 != ((acc >> abits++) & 1)) {
             for (int i = 0; i < B2; i++)
                 group[i] = static_cast<T>((acc >> abits++) & 1);
@@ -152,72 +170,104 @@ std::vector<T> decode(std::vector<uint8_t>& src,
     for (size_t i = 0; i < B2; i++)
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
 
-    uint64_t acc;
-    size_t abits = 0;
     for (size_t y = 0; (y + B) <= ysize; y += B) {
+        if (failure) 
+            break;
         for (size_t x = 0; (x + B) <= xsize; x += B) {
+            if (failure) 
+                break;
             size_t loc = (y * xsize + x) * bands;
             for (int c = 0; c < bands; c++) {
-                acc = s.peek();
-                abits = 1; // Used bits
-                auto rung = runbits[c];
+#if defined(_DEBUG)
+                if (x == 0 * B && y == 0 * B)
+                    printf("\nLen %04llx", s.position());
+#endif
 
-                if (acc & 1) { // rung change
+                uint64_t acc = s.peek();
+                if ((acc & 1) == 0) { // Same rung
+                    gdecode(s, runbits[c], group, acc, 1);
+                }
+                else { // rung change
                     auto cs = DSW[UBITS][(acc >> 1) & ((1ull << (UBITS + 1)) - 1)];
-                    // Detect CF encoding
-                    //if (0 == (cs & 0xff)) { // Encoding type signal detection, long-no-switch
-                    //    T cf;
-                    //    // CF encoding
-                    //    abits = cs >> 12;
-                    //    // Another rung switch
-                    //    if ((acc >> abits) & 1) { // normal switch, same rung for cf and values
-                    //        cs = DSW[UBITS][(acc >> (abits + 1)) & ((1ull << (UBITS + 1)) - 1)];
-                    //        // long-in-rung is fine here
-                    //        auto trung = (runbits[c] + cs) & ((1ull << UBITS) - 1);
-                    //        abits += static_cast<size_t>(cs >> 12);
+                    size_t abits = static_cast<size_t>(cs >> 12);
+                    if (0 != (cs & 0xff)) { // Normal QB3 rung switch
+                        auto rung = (runbits[c] + cs) & ((1ull << UBITS) - 1);
+                        runbits[c] = rung;
+                        gdecode(s, rung, group, acc, abits);
+                    }
+                    else { // CF encoding
+                        T cf;
+                        size_t cfrung;
 
-                    //        if (0 == trung) { // single bit encoding
-                    //            cf = static_cast<T>(acc >> abits++);
-                    //            // and the rest, cf is 0-1, which means 2 or 3
-                    //            // while the value can only be 0 or -1
-                    //            // This table is pre-multiplied
-                    //            static const uint8_t tbl[] = { 0, 0b11, 0, 0b101 };
-                    //            for (int i = 0; i < B2; i++)
-                    //                group[i] = static_cast<T>(tbl[cf * 2 + ((acc >> abits++) & 1)]);
+                        // The rung switch for the values and the cfrung
+                        cs = DSW[UBITS][(acc >> (abits + 1)) & ((1ull << (UBITS + 1)) - 1)];
+                        // long-in-rung is fine here
+                        auto rung = (runbits[c] + cs) & ((1ull << UBITS) - 1);
+                        failure |= (rung == 63);
+//                        assert(!failure); // can't be 63 since CF encoding looses at least one rung
 
-                    //            // actual rung is 1 or 2 respectively
-                    //            runbits[c] = 1 + cf;
-                    //            //goto CF_DONE;
-                    //        }
+                        if ((acc >> abits) & 1) { // same rung for cf and values
+                            abits += static_cast<size_t>(cs >> 12);
+                            cfrung = rung;
+                        }
+                        else { // cfrung is separate, it doesn't include the code switch
+                            abits += static_cast<size_t>(cs >> 12);
+                            cs = DSW[UBITS][(acc >> abits) & ((1ull << (UBITS + 1)) - 1)];
+                            abits += static_cast<size_t>(cs >> 12) - 1;
+                            cfrung = (rung + cs) & ((1ull << UBITS) - 1);
+                            // cfrung has to be larger than trung here
+                            failure |= (rung >= cfrung);
+                            assert(!failure);
+                        }
 
-                    //        // higher rung can use qb3dsz,
-                    //        // check accumulator before reading cf
-                    //        if (trung + 1 + abits > 64) {
-                    //            s.advance(abits);
-                    //            acc = s.peek();
-                    //            abits = 0;
-                    //        }
-                    //        // There is no overflow possible here, trung is < 64
-                    //        auto p = qb3dsz(acc >> abits, trung);
-                    //        cf = static_cast<T>(p.second);
-                    //        abits += p.first;
-                    //        // Need a function to read the group as encoded and do the step
+                        if (0 == (rung | cfrung)) { // single bit encoding for everything
+                            cf = static_cast<T>((acc >> abits++) & 1);
+                            // cf is 0 or 1, which means 2 or 3 encoded as mags
+                            // while the value can only be 0 or -1, encoded as mags 
+                            static const uint8_t tbl[] = { 0, 0b11, 0, 0b101 };
+                            for (int i = 0; i < B2; i++)
+                                group[i] = static_cast<T>(tbl[cf * 2ull + ((acc >> abits++) & 1)]);
 
-                    //    }
-                    //    else { // cf is encoded with it's own rung
+                            // actual rung is 1 or 2 respectively
+                            runbits[c] = 1ull + cf;
+                            s.advance(abits);
+                        }
+                        else {
+                            // check and refill accumulator before reading cf
+                            if (cfrung + 2 + abits > 64) {
+                                s.advance(abits);
+                                abits = 0;
+                                acc = s.peek();
+                            }
+                            // There is no overflow possible here, trung is < 64 and > 0
+                            auto p = qb3dsztbl(acc >> abits, cfrung);
+                            cf = static_cast<T>(p.second);
 
-                    //    }
-                    ////CF_DONE:
-                    //}
-
-                    rung = (rung + cs) & ((1ull << UBITS) - 1);
-                    runbits[c] = rung;
-                    abits = static_cast<size_t>(cs >> 12);
+                            // Read the group, refresh the accumulator since we read a longer sequence
+                            s.advance(abits + p.first);
+                            gdecode(s, rung, group, s.peek(), 0);
+                            // Multiply with CF and get the maxval for the actual group rung
+                            cf += 2;
+                            T maxval = 0;
+                            for (int i = 0; i < B2; i++) {
+                                auto v = magsmul(group[i], cf);
+                                maxval = std::max(maxval, v);
+                                group[i] = v;
+                            }
+                            failure |= (2 > maxval);
+                            //                            assert(!failure); // maxval at this point has to be at least 2
+                            runbits[c] = topbit(maxval | 1); // Still, don't call topbit with 0
+                        }
+                    }
                 }
 
-                gdecode(s, rung, group, acc, abits);
-
-            UNLOAD_BLOCK:
+#if defined(_DEBUG)
+                if (x == 0 * B && y == 0 * B) {
+                    printf("\nDECO x %u y %u c %u, rung %u\t", int(x / B), int(y / B), int(c), int(runbits[c]));
+                    for (int i = 0; i < B2; i++)
+                        printf("%u\t", int(group[i]));
+                }
+#endif
                 auto prv = prev[c];
                 for (int i = 0; i < B2; i++)
                     image[loc + c + offsets[i]] = prv += smag(group[i]);
