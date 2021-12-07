@@ -19,8 +19,8 @@ Contributors:  Lucian Plesea
 #include <vector>
 #include "bitstream.h"
 
-#define HISTOGRAM
-#include <map>
+//#define HISTOGRAM
+//#include <map>
 
 namespace QB3 {
 #include "QB3common.h"
@@ -196,7 +196,7 @@ static std::pair<size_t, uint64_t> qb3csztbl(uint64_t val, size_t rung) {
 // only encode the group entries, not the rung switch
 // maxval is used to choose the rung for encoding
 // If abits > 0, the accumulator is also pushed into the stream
-template <typename T> size_t gencode(T group[B2], T maxval, oBits& s,
+template <typename T> size_t groupencode(T group[B2], T maxval, oBits& s,
     uint64_t acc = 0, size_t abits = 0)
 {
     size_t ssize = s.size();
@@ -289,7 +289,7 @@ template <typename T = uint8_t> size_t groupencode(T group[B2], T maxval, size_t
     // Encode rung switch using tables, works even with no rung change
     const size_t rung = topbit(maxval | 1); // Force at least one bit set
     uint64_t acc = CSW[UBITS][(rung - oldrung) & ((1ull << UBITS) - 1)];
-    return gencode(group, maxval, s, acc & 0xffull, static_cast<size_t>(acc >> 12));
+    return groupencode(group, maxval, s, acc & 0xffull, static_cast<size_t>(acc >> 12));
 }
 
 
@@ -311,7 +311,7 @@ void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung)
 
     cf -= 2; // Bias down, 0 and 1 are not used
     auto trung = topbit(maxval | 1); // cf mode rung
-    auto cfrung = topbit(cf | 1); // rung for cf value
+    auto cfrung = topbit(cf | 1); // rung for cf-2 value
     // Encode the trung, with or without switch
     // Use the wrong way switch for in-band
     auto cs = CSW[UBITS][(trung - oldrung) & ((1ull << UBITS) - 1)];
@@ -335,6 +335,22 @@ void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung)
         }
 
         cfrung = trung; // Encode cf value with trung
+        // Push the accumulator and the cf encoding
+
+        // cfrung can't be zero or 63
+        assert(cfrung > 0 && cfrung < 63);
+        // Use the table version, since cfrung may be 1
+        auto p = qb3csztbl(cf, cfrung);
+        if (p.first + abits <= 64) {
+            acc |= p.second << abits;
+            abits += p.first;
+        }
+        else { // can't oveflow since cfrung can't be 63
+            bits.push(acc, abits);
+            acc = p.second;
+            abits = p.first;
+        }
+        bits.push(acc, abits);
     }
     else { // CF needs a higher rung than the group, so it's never 0
         // First, encode trung using code-switch with the change bit cleared
@@ -343,41 +359,37 @@ void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung)
 
         // Then encode cfrung, using code-switch from trung, 
         // skip the change bit, since rung will always be different
-        // cfrung - trung is never 0, since cfrung > trung
+        // cfrung - trung is never 0
         cs = CSW[UBITS][(cfrung - trung) & ((1ull << UBITS) - 1)];
         acc |= (cs & (TBLMASK - 1)) << (abits - 1);
         abits += static_cast<size_t>(cs >> 12) - 1;
-    }
 
-    // Push the accumulator and the cf encoding
-    // cfrung can't be zero
-    // Could use the accumulator and let gencode deal with last part
-    assert(cfrung > 0 && cfrung < 65);
-    // Use the table version, since cfrung may be 1
-    auto p = qb3csztbl(cf, cfrung);
-    if (p.first + abits <= 64) {
-        acc |= p.second << abits;
-        abits += p.first;
-    }
-    else {
+        // Push the accumulator and the cf encoding
+        // cfrung can't be zero
+        // Could use the accumulator and let groupencode deal with last part
+        assert(cfrung > 0 && cfrung < 65);
+        // Use the table version, since cfrung may be 1
+
+        assert(cf >> cfrung); // Value is in the long group
+
+        if (cfrung > 1) {
+            auto p = qb3csztbl(cf ^ (1ull << cfrung), cfrung - 1);
+            if (p.first + abits > 64) {
+                bits.push(acc, abits);
+                acc = abits = 0;
+            }
+            acc |= p.second << abits;
+            abits += p.first;
+        }
+        else { // single bit, cfrung 0 or 1
+            cf -= static_cast<T>(cfrung * 2); // flip the top bit for cfrung 1
+            acc |= static_cast<uint64_t>(cf) << abits++;
+        }
         bits.push(acc, abits);
-        // cf may require 65 bits
-        if (sizeof(T) != 8 || p.first < 65) {
-            acc = p.second;
-            abits = p.first;
-        }
-        else {
-            bits.push(p.second, 64);
-            acc = (cf >> 1) & 1;
-            abits = 1;
-        }
     }
-    // Leave something in the accumulator
-    assert(abits != 0 && abits < 65);
-    bits.push(acc, abits);
 
     // And the reduced group
-    gencode(cfgroup, maxval, bits);
+    groupencode(cfgroup, maxval, bits);
 }
 
 template <typename T = uint8_t>
@@ -446,7 +458,7 @@ bool encode_cf(oBits s, const std::vector<T>& image, size_t xsize, size_t ysize,
 #endif
 
                 if (0 == rung) { // only 1s and 0s, rung is -1 or 0
-                    // Encode this directly, no point in trying other modes
+                    // Encode as QB3 group, no point in trying other modes
                     acc = CSW[UBITS][(rung - oldrung) & ((1ull << UBITS) - 1)];
                     abits = acc >> 12;
                     acc &= 0xffull;
