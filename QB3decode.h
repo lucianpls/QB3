@@ -78,7 +78,8 @@ void gdecode(iBits &s, size_t rung, T group[B2], uint64_t acc, size_t abits) {
             group[i] = static_cast<T>(v & TBLMASK);
         }
         // Skip the peek if we have enough bits in accumulator
-        if (!((rung == 1) || (rung == 2 && abits < 33))) {
+        // At rung 3, only for abits = 24 is possible to skip the load
+        if (!((rung == 1) || (rung == 2 && abits < 33) || (rung == 3 && abits < 25) )) {
             s.advance(abits);
             acc = s.peek();
             abits = 0;
@@ -201,10 +202,9 @@ std::vector<T> decode(std::vector<uint8_t>& src,
 
                         // The rung switch for the values and the cfrung
                         cs = DSW[UBITS][(acc >> (abits + 1)) & ((1ull << (UBITS + 1)) - 1)];
-                        // long-in-rung is fine here
                         auto rung = (runbits[c] + cs) & ((1ull << UBITS) - 1);
                         failure |= (rung == 63);
-//                        assert(!failure); // can't be 63 since CF encoding looses at least one rung
+                        assert(!failure); // can't be 63 since CF encoding looses at least one rung
 
                         if ((acc >> abits) & 1) { // same rung for cf and values
                             abits += static_cast<size_t>(cs >> 12);
@@ -239,12 +239,26 @@ std::vector<T> decode(std::vector<uint8_t>& src,
                                 abits = 0;
                                 acc = s.peek();
                             }
+
                             // There is no overflow possible here, trung is < 64 and > 0
-                            auto p = qb3dsztbl(acc >> abits, cfrung);
-                            cf = static_cast<T>(p.second);
+                            if (cfrung == rung) { // standard encoding
+                                auto p = qb3dsztbl(acc >> abits, cfrung);
+                                cf = static_cast<T>(p.second);
+                                abits += p.first;
+                            }
+                            else { // cfrung is different, thus the encoded value is always in long range
+                                if (cfrung > 1) {
+                                    auto p = qb3dsztbl(acc >> abits, cfrung - 1);
+                                    cf = static_cast<T>(p.second + (1ull << cfrung));
+                                    abits += p.first;
+                                }
+                                else { // single bit
+                                    cf = static_cast<T>(((acc >> abits++) & 1) + cfrung * 2) ;
+                                }
+                            }
+                            s.advance(abits);
 
                             // Read the group, refresh the accumulator since we read a longer sequence
-                            s.advance(abits + p.first);
                             gdecode(s, rung, group, s.peek(), 0);
                             // Multiply with CF and get the maxval for the actual group rung
                             cf += 2;

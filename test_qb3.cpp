@@ -51,7 +51,7 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
     outvec.reserve(image.size() * sizeof(T));
     oBits outbits(outvec);
     t1 = high_resolution_clock::now();
-    QB3::encode_fast(outbits, img, xsize, ysize, main_band);
+    QB3::encode_cf(outbits, img, xsize, ysize, main_band);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
 
