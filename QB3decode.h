@@ -151,6 +151,12 @@ UNDO_STEP:
     }
 }
 
+// integer multiply val(in magsign) by cf(normal)
+template<typename T>
+static inline T magsmul(T val, T cf) {
+    return ((magsabs(val) * cf) << 1) - (val & 1);
+}
+
 template<typename T>
 std::vector<T> decode(std::vector<uint8_t>& src,
     size_t xsize, size_t ysize, size_t bands, int mb = 1)

@@ -102,6 +102,12 @@ static T smag(T v) {
     return (std::numeric_limits<T>::max() * (v & 1)) ^ (v >> 1);
 }
 
+// Convert from mag-sign to absolute
+template<typename T>
+static inline T magsabs(T val) {
+    return (val >> 1) + (val & 1);
+}
+
 // If the rung bits of the input values match *1*0, returns the index of first 0, otherwise B2 + 1
 template<typename T>
 static size_t step(const T* const v, size_t rung) {

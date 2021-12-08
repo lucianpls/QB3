@@ -25,24 +25,10 @@ Contributors:  Lucian Plesea
 namespace QB3 {
 #include "QB3common.h"
 
-// Convert from mag-sign to absolute
-template<typename T>
-static inline T revs(T val) {
-    return (val >> 1) + (val & 1);
-}
-
 // integer divide val(in magsign) by cf(normal)
 template<typename T>
 static inline T magsdiv(T val, T cf) {
-    T absv = revs(val) / cf; // Integer division
-    return ((absv << 1) & (~T(0) * (~val & 1))) + ((((absv - 1) << 1) | 1) & (~T(0) * (val & 1)));
-}
-
-// integer multiply val(in magsign) by cf(normal)
-template<typename T>
-static inline T magsmul(T val, T cf) {
-    T absv = revs(val) * cf;
-    return (absv << 1) * (~val & 1) + (((absv - 1) << 1) | 1) * (val & 1);
+    return ((magsabs(val) / cf) << 1) - (val & 1);
 }
 
 // return greatest common factor (absolute) of a B2 sized vector of mag-sign values
@@ -55,7 +41,7 @@ T gcode(const T* group) {
     for (size_t i = 0; i < B2; i++) {
         // skip the zeros, return early if 1 or -1 are encountered
         if (group[i] > 2) {
-            v[sz++] = revs(group[i]);
+            v[sz++] = magsabs(group[i]);
             continue;
         }
         if (group[i] != 0)
