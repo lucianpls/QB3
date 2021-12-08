@@ -215,8 +215,8 @@ std::vector<T> decode(std::vector<uint8_t>& src,
                             cs = DSW[UBITS][(acc >> abits) & ((1ull << (UBITS + 1)) - 1)];
                             abits += static_cast<size_t>(cs >> 12) - 1;
                             cfrung = (rung + cs) & ((1ull << UBITS) - 1);
-                            // cfrung has to be larger than trung here
-                            failure |= (rung >= cfrung);
+                            // cfrung has to be different than rung here, either larger or much smaller
+                            failure |= (rung == cfrung);
                             assert(!failure);
                         }
 
