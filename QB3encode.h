@@ -34,7 +34,7 @@ static inline T magsdiv(T val, T cf) {
 // return greatest common factor (absolute) of a B2 sized vector of mag-sign values
 // T is always unsigned
 template<typename T>
-T gcode(const T* group) {
+T gcf(const T* group) {
     // Work with absolute values
     T v[B2];
     size_t sz = 0;
@@ -70,7 +70,7 @@ T gcode(const T* group) {
 }
 
 // Computed encoding with three codeword lenghts, used for higher rungs
-// Yes, it's horrid, but it works fast. Bit fiddling!
+// Yes, it looks bad, but it works fast. Bit fiddling!
 // No conditionals, computes all three values and picks one by masking with the condition
 // It is faster than similar code with conditions because the calculations for the three lines get interleaved
 // The "(~0ull * (1 & <cond>))" is to show the compiler that it is a mask operation
@@ -84,7 +84,7 @@ static std::pair<size_t, uint64_t> qb3csz(uint64_t val, size_t rung) {
         + ((~0ull * (1 & (~top & nxt))) & (val >> 1 | ((val & 1) << rung))));                 // 0 1 MIDDLE  -> 01
 }
 
-// Single value QB3 encode, works for rungs 1 and above
+// Single value QB3 encode, possibly using tables, works for rungs 1 and above
 static std::pair<size_t, uint64_t> qb3csztbl(uint64_t val, size_t rung) {
     assert(rung);
     if ((sizeof(CRG) / sizeof(*CRG)) > rung) {
@@ -152,7 +152,7 @@ static std::pair<size_t, uint64_t> qb3csztbl(uint64_t val, size_t rung) {
 //
 //    // Common factor encoding, rung change is temporary
 //    size_t g1sz = UBITS; // Signal
-//    auto cf = gcode(group);
+//    auto cf = gcf(group);
 //    if (cf > 1) {
 //        T v[B2];
 //        g1sz += qb3csz(0, 3).first; // cf flag
@@ -462,7 +462,7 @@ bool encode_cf(oBits s, const std::vector<T>& image, size_t xsize, size_t ysize,
                 }
 
                 // Try the common factor
-                auto cf = gcode(group);
+                auto cf = gcf(group);
                 if (cf > 1)
                     cfgenc(s, group, cf, oldrung);
                 else
