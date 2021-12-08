@@ -324,7 +324,8 @@ by the CF-2 bit, followed by the 16bits of the cf group. The short group 0 never
 group is non-zero. The step-down optimization could be used here to reduce one sequence, but it would be extremely rare 
 and would expand all other rung 0 sequences by one bit, most likely having a negative effect overall.
 - Since the CF group rung is reduced by division with CF, the CF group rung has the be at least one less than the maximum rung
-for the datatype, since CF is at least 2. For byte data for example, CF group rung can't be 7.
+for the datatype, since CF is at least 2. For byte data for example, CF group rung can't be 7.  
+TODO: use this to add index encoding, the code-switch flag bit is available.
 - The separate CF rung encoding is used when CF-2 is in a larger rung than the rung for the CF group or when the CF-2 rung
 is much smaller than the group rung (this is an edge case, happens mostly for high byte count data). When CF is encoded with 
 its own rung, CF is always in the top rung, so we can save one or more bits by enconding CF at the next lower rung.
