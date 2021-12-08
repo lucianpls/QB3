@@ -79,7 +79,7 @@ void gdecode(iBits &s, size_t rung, T group[B2], uint64_t acc, size_t abits) {
         }
         // Skip the peek if we have enough bits in accumulator
         // At rung 3, only for abits = 24 is possible to skip the load
-        if (!((rung == 1) || (rung == 2 && abits < 33) || (rung == 3 && abits < 25) )) {
+        if (!((rung == 1) || (rung == 2 && abits < 33))) {
             s.advance(abits);
             acc = s.peek();
             abits = 0;

@@ -38,15 +38,13 @@ template<typename T>
 T gcf(const T* group) {
     // Work with absolute values
     T v[B2];
-    size_t sz = 0;
-    for (size_t i = 0; i < B2; i++) {
+    int sz = 0;
+    for (int i = 0; i < B2; i++) {
         // skip the zeros, return early if 1 or -1 are encountered
-        if (group[i] > 2) {
+        if (group[i] > 2)
             v[sz++] = magsabs(group[i]);
-            continue;
-        }
-        if (group[i] != 0)
-            return 1; // Not useful
+        else if (group[i] != 0) // 0b01 and 0b10 in mags are + or - 1
+            return 1; // No common factor
     }
 
     if (0 == sz)
@@ -54,15 +52,13 @@ T gcf(const T* group) {
 
     while (sz > 1) {
         std::swap(v[0], *std::min_element(v, v + sz));
-        size_t j = 1;
+        int j = 1;
         const T m = v[0];
-        for (size_t i = 1; i < sz; i++) { // Skips the zeros
-            if (1 < (v[i] % m)) {
+        for (int i = 1; i < sz; i++) { // Skips the zeros
+            if (1 < v[i] % m)
                 v[j++] = v[i] % m;
-                continue;
-            }
-            if (1 == (v[i] % m))
-                return 1; // Not useful
+            else if (1 == v[i] % m)
+                return 1; // No common factor
         }
         sz = j; // Never zero
     }
@@ -80,9 +76,9 @@ static std::pair<size_t, uint64_t> qb3csz(uint64_t val, size_t rung) {
     uint64_t nxt = (val >> (rung - 1)) & 1;
     uint64_t top = val >> rung;
     return std::make_pair<size_t, uint64_t>(rung + top + (top | nxt),
-        +((~0ull * (1 & top)) & (((val ^ (1ull << rung)) >> 2) | ((val & 0b11ull) << rung))) // 1 x BIG     -> 00
-        + ((~0ull * (1 & ~(top | nxt))) & (val + (1ull << (rung - 1))))                       // 0 0 LITTLE  -> 1?
-        + ((~0ull * (1 & (~top & nxt))) & (val >> 1 | ((val & 1) << rung))));                 // 0 1 MIDDLE  -> 01
+        + ((~0ull * (1 & top)) & (((val ^ (1ull << rung)) >> 2) | ((val & 0b11ull) << rung))) // 1 x LONG     -> 00
+        + ((~0ull * (1 & ~(top | nxt))) & (val + (1ull << (rung - 1))))                       // 0 0 SHORT    -> 1x
+        + ((~0ull * (1 & (~top & nxt))) & (val >> 1 | ((val & 1) << rung))));                 // 0 1 NOMINAL  -> 01
 }
 
 // Single value QB3 encode, possibly using tables, works for rungs 1 and above
@@ -210,13 +206,13 @@ template <typename T> size_t groupencode(T group[B2], T maxval, oBits& s,
         group[step(group, rung) - 1] ^= static_cast<T>(1ull << rung);
     }
 
-    if (6 > rung) { // Encoded data fits in 64 or 128 bits
+    if (6 > rung) { // Half of the group fits in 64 bits
         auto t = CRG[rung];
         for (size_t i = 0; i < B2 / 2; i++) {
             acc |= (TBLMASK & t[group[i]]) << abits;
             abits += t[group[i]] >> 12;
         }
-        // At rung 1 and 2 this push can be skipped, if the accum has enough space
+        // At rung 1, 2 and 3 this push can be skipped, if the accum has enough space
         if (!((rung == 1) || (rung == 2 && abits < 33))) {
             s.push(acc, abits);
             acc = abits = 0;
@@ -508,19 +504,12 @@ bool encode_fast(oBits& s, const std::vector<T>& image,
     std::map<size_t, size_t> group_sizes;
 #endif
 
-    size_t count = 0;
     for (size_t i = 0; i < B2; i++)
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
     for (size_t y = 0; y < ysize; y += B) {
         for (size_t x = 0; x < xsize; x += B) {
             size_t loc = (y * xsize + x) * bands; // Top-left pixel address
             for (size_t c = 0; c < bands; c++) { // blocks are band interleaved
-
-#if defined(HISTOGRAM)
-                if (s.size() - ssize)
-                    group_sizes[s.size() - ssize]++;
-                ssize = s.size();
-#endif
                 T maxval(0); // Maximum mag-sign value within this group
                 { // Collect the block for this band, convert to running delta mag-sign
                     auto prv = prev[c];
@@ -543,88 +532,17 @@ bool encode_fast(oBits& s, const std::vector<T>& image,
                     }
                     prev[c] = prv;
                 }
-                const size_t rung = topbit(maxval | 1); // Force at least one bit set
 
-                // Encode rung switch using tables, works even with no rung change
-                uint64_t acc = CSW[UBITS][(rung - runbits[c]) & ((1ull << UBITS) - 1)];
-                size_t abits = acc >> 12;
-                acc &= 0xffull; // Strip the size
-                runbits[c] = rung;
+                groupencode(group, maxval, runbits[c], s);
+                runbits[c] = topbit(maxval | 1);
 
-                if (0 == rung) { // only 1s and 0s, rung is -1 or 0
-                    acc |= uint64_t(maxval) << abits++;
-                    if (0 != maxval)
-                        for (uint64_t v : group)
-                            acc |= v << abits++;
-                    s.push(acc, abits);
-                    continue;
-                }
-
-                // Flip the last set rung bit if the rung bit sequence is a step down
-                // At least one rung bit has to be set, so it can't return 0
-                if (step(group, rung) <= B2)
-                    group[step(group, rung) - 1] ^= static_cast<T>(1ull << rung);
-
-                if (6 > rung) { // Encoded data fits in 64 or 128 bits
-                    auto t = CRG[rung];
-                    for (size_t i = 0; i < B2 / 2; i++) {
-                        acc |= (TBLMASK & t[group[i]]) << abits;
-                        abits += t[group[i]] >> 12;
-                    }
-                    // At rung 1 and 2 this push can be skipped, if the accum has enough space
-                    if (!((rung == 1) || (rung == 2 && abits < 33))) {
-                        s.push(acc, abits);
-                        acc = abits = 0;
-                    }
-                    for (size_t i = B2 / 2; i < B2; i++) {
-                        acc |= (TBLMASK & t[group[i]]) << abits;
-                        abits += t[group[i]] >> 12;
-                    }
-                    s.push(acc, abits);
-                    continue;
-                }
-
-                // Last part of table encoding, rung 6-7 or 6-10
-                // Encoded data fits in 256 bits, 4 way interleaved
-                if ((sizeof(CRG) / sizeof(*CRG)) > rung) {
-                    auto t = CRG[rung];
-                    uint64_t a[4] = { acc, 0, 0, 0 };
-                    size_t asz[4] = { abits, 0, 0, 0 };
-                    for (size_t i = 0; i < B; i++)
-                        for (size_t j = 0; j < B; j++) {
-                            uint16_t v = t[group[j * B + i]];
-                            a[j] |= (TBLMASK & v) << asz[j];
-                            asz[j] += v >> 12;
-                        }
-                    for (size_t i = 0; i < B; i++)
-                        s.push(a[i], asz[i]);
-                    continue;
-                }
-
-                // Computed encoding, slower, works for rung > 1
-                if (1 < sizeof(T)) { // This vanishes in 8 bit mode
-                    // Push the code switch for non-table encoding, not worth the hassle
-                    s.push(acc, abits);
-                    if (63 != rung) {
-                        for (uint64_t val : group) {
-                            auto p = qb3csz(val, rung);
-                            s.push(p.second, p.first);
-                        }
-                    }
-                    else { // rung 63 may overflow 64 bits, push the second val bit explicitly
-                        for (uint64_t val : group) {
-                            auto p = qb3csz(val, rung);
-                            size_t ovf = p.first & (p.first >> 6); // overflow flag
-                            s.push(p.second, p.first ^ ovf); // changes 65 in 64
-                            s.push(ovf & (val >> 1), ovf); // If value is 0, fine to call with nbits == 0
-                        }
-                    }
-                }
+#if defined(HISTOGRAM)
+                group_sizes[s.size() - ssize]++;
+                ssize = s.size();
+#endif
             }
         }
     }
-    if (count)
-        printf("Saved %d bytes\n", int(count / 8));
 
 #if defined(HISTOGRAM)
     for (auto it : group_sizes)
