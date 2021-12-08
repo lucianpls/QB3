@@ -26,6 +26,7 @@ namespace QB3 {
 #include "QB3common.h"
 
 // integer divide val(in magsign) by cf(normal)
+// if cf == 2, it assumes abs(val) % 2 == 0, otherwise results are wrong
 template<typename T>
 static inline T magsdiv(T val, T cf) {
     return ((magsabs(val) / cf) << 1) - (val & 1);
@@ -352,12 +353,10 @@ void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung)
         abits += static_cast<size_t>(cs >> 12) - 1;
 
         // Push the accumulator and the cf encoding
-        // cfrung can't be zero
         // Could use the accumulator and let groupencode deal with last part
-        assert(cfrung > 0 && cfrung < 65);
+        assert(cfrung < 65);
         // Use the table version, since cfrung may be 1
-
-        assert(cf >> cfrung); // Value is in the long group
+        assert(0 != (cf >> cfrung)); // CF value is in the long group
 
         if (cfrung > 1) {
             auto p = qb3csztbl(cf ^ (1ull << cfrung), cfrung - 1);
