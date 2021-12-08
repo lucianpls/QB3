@@ -317,8 +317,9 @@ void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung)
     auto cs = CSW[UBITS][(trung - oldrung) & ((1ull << UBITS) - 1)];
     if ((cs >> 12) == 1) // Would be no-switch, use signal instead, it decodes to delta of zero
         cs = SIGNAL[UBITS];
-    if (trung >= cfrung) {
-        // Use the codeswitch encoding, encode cf at same rung as data
+    // When trung is only somewhat larger than cfrung encode cf at same rung as data
+    // TODO: The second part of this condition may increase the size in some cases. Why?
+    if (trung >= cfrung && trung < (cfrung + UBITS)) {
         acc |= (static_cast<uint64_t>(cs) & 0xffull) << abits;
         abits += cs >> 12;
 
@@ -352,7 +353,7 @@ void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung)
         }
         bits.push(acc, abits);
     }
-    else { // CF needs a higher rung than the group, so it's never 0
+    else { // CF needs a different rung than the group, so the change is never 0
         // First, encode trung using code-switch with the change bit cleared
         acc |= (cs & 0xfeull) << abits;
         abits += cs >> 12;
