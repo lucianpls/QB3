@@ -17,6 +17,7 @@ Contributors:  Lucian Plesea
 #include <cmath>
 #include <algorithm>
 #include <chrono>
+#include <string>
 
 // From https://github.com/lucianpls/libicd
 #include <icd_codecs.h>
@@ -225,28 +226,28 @@ int main(int argc, char **argv)
             << "Decode" << "\t" << endl << endl;
 
         // From here on, test the algorithm for different data types
-        //check<uint64_t>(image, raster, 5);
-        //cout << endl;
-        //check<uint64_t>(image, raster, (1ull << 56) + 11);
-        //cout << endl;
-        //check<uint32_t>(image, raster, 5);
-        //cout << endl;
-        //check<uint32_t>(image, raster, 1ull << 24);
-        //cout << endl;
-        //check<uint16_t>(image, raster, 5);
-        //cout << endl;
-        //check<uint16_t>(image, raster, 1ull << 8);
-        //cout << endl;
+        check<uint64_t>(image, raster, 5);
+        cout << endl;
+        check<uint64_t>(image, raster, (1ull << 56) + 11);
+        cout << endl;
+        check<uint32_t>(image, raster, 5);
+        cout << endl;
+        check<uint32_t>(image, raster, 1ull << 24);
+        cout << endl;
+        check<uint16_t>(image, raster, 5);
+        cout << endl;
+        check<uint16_t>(image, raster, 1ull << 8);
+        cout << endl;
 
-        //cout << "Data type\n";
+        cout << "Data type\n";
         check<uint64_t>(image, raster, 1, 1);
         cout << endl;
-        //check<uint32_t>(image, raster, 1, 1);
-        //cout << endl;
-        //check<uint16_t>(image, raster, 1, 1);
-        //cout << endl;
-        //check<uint8_t>(image, raster, 1, 1);
-        //cout << endl;
+        check<uint32_t>(image, raster, 1, 1);
+        cout << endl;
+        check<uint16_t>(image, raster, 1, 1);
+        cout << endl;
+        check<uint8_t>(image, raster, 1, 1);
+        cout << endl;
     }
 
     return 0;
