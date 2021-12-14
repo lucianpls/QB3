@@ -295,7 +295,7 @@ std::vector<T> decode(std::vector<uint8_t>& src,
             }
 
             for (int c = 0; c < bands; c++)
-                if (mb >= 0 && mb != c)
+                if (mb != c && mb >= 0 && mb < bands)
                     for (size_t i = 0; i < B2; i++)
                         image[loc + c + offsets[i]] += image[loc + mb + offsets[i]];
         }

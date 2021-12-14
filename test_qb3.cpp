@@ -225,7 +225,8 @@ int main(int argc, char **argv)
             << "Encode" << "\t"
             << "Decode" << "\t" << endl << endl;
 
-        // From here on, test the algorithm for different data types
+        // From here on, test the algorithm for different data types, with 
+        // multiplied data so it covers most of the range
         check<uint64_t>(image, raster, 5);
         cout << endl;
         check<uint64_t>(image, raster, (1ull << 56) + 11);
