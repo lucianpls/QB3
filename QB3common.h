@@ -24,7 +24,7 @@ Content: QB3 parts used by both the encoder and the decoder
 
 // Block is 4x4 pixels
 constexpr size_t B(4);
-constexpr size_t B2(B* B);
+constexpr size_t B2(B * B);
 
 #include "qb3_tables.h"
 

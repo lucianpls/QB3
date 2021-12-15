@@ -17,12 +17,19 @@ Contributors:  Lucian Plesea
 
 #pragma once
 #include <vector>
-#include "bitstream.h"
 #include <utility>
 #include <functional>
+#include <algorithm>
+#include "bitstream.h"
 
 //#define HISTOGRAM
 //#include <map>
+
+#if defined(_WIN32) && defined(QB3_EXPORTS)
+#define DLLEXPORT __declspec(dllexport)
+#else
+#define DLLEXPORT
+#endif
 
 namespace QB3 {
 #include "QB3common.h"
@@ -387,7 +394,7 @@ bool encode_cf(oBits s, const std::vector<T>& image, size_t xsize, size_t ysize,
 }
 
 template <typename T = uint8_t>
-bool encode_best(oBits s, const std::vector<T>&image, size_t xsize, size_t ysize, int mb = 1)
+bool encode_best(const std::vector<T>& image, oBits& s, size_t xsize, size_t ysize, int mb = 1)
 {
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     const size_t bands = image.size() / xsize / ysize;
@@ -486,10 +493,14 @@ bool encode_best(oBits s, const std::vector<T>&image, size_t xsize, size_t ysize
     return true;
 }
 
+template DLLEXPORT bool encode_best(const std::vector<uint8_t>&  image, oBits& s, size_t xsize, size_t ysize, int mb);
+template DLLEXPORT bool encode_best(const std::vector<uint16_t>& image, oBits& s, size_t xsize, size_t ysize, int mb);
+template DLLEXPORT bool encode_best(const std::vector<uint32_t>& image, oBits& s, size_t xsize, size_t ysize, int mb);
+template DLLEXPORT bool encode_best(const std::vector<uint64_t>& image, oBits& s, size_t xsize, size_t ysize, int mb);
+
 // Only basic encoding
-template <typename T>
-bool encode_fast(oBits& s, const std::vector<T>& image,
-    size_t xsize, size_t ysize, int mb = 1)
+template<typename T>
+bool encode_fast(const std::vector<T>& image, oBits& s, size_t xsize, size_t ysize, int mb = 1)
 {
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     const size_t bands = image.size() / xsize / ysize;
@@ -555,5 +566,10 @@ bool encode_fast(oBits& s, const std::vector<T>& image,
 
     return true;
 }
+
+template DLLEXPORT bool  encode_fast(const std::vector<uint8_t>& image, oBits& s, size_t xsize, size_t ysize, int mb);
+template DLLEXPORT bool encode_fast(const std::vector<uint16_t>& image, oBits& s, size_t xsize, size_t ysize, int mb);
+template DLLEXPORT bool encode_fast(const std::vector<uint32_t>& image, oBits& s, size_t xsize, size_t ysize, int mb);
+template DLLEXPORT bool encode_fast(const std::vector<uint64_t>& image, oBits& s, size_t xsize, size_t ysize, int mb);
 
 }

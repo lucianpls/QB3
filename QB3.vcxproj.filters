@@ -28,22 +28,10 @@
     <ClInclude Include="bmap.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="QB3.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="qb3_tables.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="bitstream.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="QB3decode.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QB3encode.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QB3common.h">
+    <ClInclude Include="QB3fwd.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
