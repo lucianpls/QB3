@@ -79,7 +79,7 @@ void gdecode(iBits &s, size_t rung, T group[B2], uint64_t acc, size_t abits) {
         }
         // Skip the peek if we have enough bits in accumulator
         // At rung 3, only for abits = 24 is possible to skip the load
-        if (!((rung == 1) || (rung == 2 && abits < 33) || (rung == 3 && abits < 25) )) {
+        if (!((rung == 1) || (rung == 2 && abits < 33))) {
             s.advance(abits);
             acc = s.peek();
             abits = 0;
@@ -151,8 +151,14 @@ UNDO_STEP:
     }
 }
 
+// integer multiply val(in magsign) by cf(normal)
 template<typename T>
-std::vector<T> decode(std::vector<uint8_t>& src,
+static inline T magsmul(T val, T cf) {
+    return ((magsabs(val) * cf) << 1) - (val & 1);
+}
+
+template<typename T>
+DLLEXPORT bool decode(std::vector<uint8_t>& src, T* image,
     size_t xsize, size_t ysize, size_t bands, int mb = 1)
 {
     // Set when an unexpected condition occurs
@@ -161,7 +167,6 @@ std::vector<T> decode(std::vector<uint8_t>& src,
     // Unit size bit length
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
 
-    std::vector<T> image(xsize * ysize * bands);
     iBits s(src);
     std::vector<T> prev(bands, 0);
     T group[B2];
@@ -289,12 +294,17 @@ std::vector<T> decode(std::vector<uint8_t>& src,
             }
 
             for (int c = 0; c < bands; c++)
-                if (mb >= 0 && mb != c)
+                if (mb != c && mb >= 0 && mb < bands)
                     for (size_t i = 0; i < B2; i++)
                         image[loc + c + offsets[i]] += image[loc + mb + offsets[i]];
         }
     }
-    return image;
+    return true;
 }
+
+template DLLEXPORT bool decode(std::vector<uint8_t>& src, uint8_t* image, size_t xsize, size_t ysize, size_t bands, int mb);
+template DLLEXPORT bool decode(std::vector<uint8_t>& src, uint16_t* image, size_t xsize, size_t ysize, size_t bands, int mb);
+template DLLEXPORT bool decode(std::vector<uint8_t>& src, uint32_t* image, size_t xsize, size_t ysize, size_t bands, int mb);
+template DLLEXPORT bool decode(std::vector<uint8_t>& src, uint64_t* image, size_t xsize, size_t ysize, size_t bands, int mb);
 
 } // Namespace

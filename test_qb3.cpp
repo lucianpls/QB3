@@ -17,12 +17,17 @@ Contributors:  Lucian Plesea
 #include <cmath>
 #include <algorithm>
 #include <chrono>
+#include <string>
 
 // From https://github.com/lucianpls/libicd
 #include <icd_codecs.h>
 
-#include "QB3.h"
+// #include "QB3.h"
+// #include "QB3fwd.h"
+
 #include "bmap.h"
+#include "bitstream.h"
+#include "QB3fwd.h"
 
 using namespace std;
 using namespace chrono;
@@ -51,7 +56,7 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
     outvec.reserve(image.size() * sizeof(T));
     oBits outbits(outvec);
     t1 = high_resolution_clock::now();
-    QB3::encode_cf(outbits, img, xsize, ysize, main_band);
+    QB3::encode_best(img, outbits, xsize, ysize, main_band);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
 
@@ -64,7 +69,8 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
         << time_span << "\t";
 
     t1 = high_resolution_clock::now();
-    auto re = QB3::decode<T>(outvec, xsize, ysize, bands, main_band);
+    std::vector<T> re(xsize * ysize * bands);
+    QB3::decode<T>(outvec, re.data(), xsize, ysize, bands,  main_band);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
     cout << time_span;
@@ -224,7 +230,8 @@ int main(int argc, char **argv)
             << "Encode" << "\t"
             << "Decode" << "\t" << endl << endl;
 
-        // From here on, test the algorithm for different data types
+        // From here on, test the algorithm for different data types, with 
+        // multiplied data so it covers most of the range
         check<uint64_t>(image, raster, 5);
         cout << endl;
         check<uint64_t>(image, raster, (1ull << 56) + 11);

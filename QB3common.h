@@ -24,7 +24,7 @@ Content: QB3 parts used by both the encoder and the decoder
 
 // Block is 4x4 pixels
 constexpr size_t B(4);
-constexpr size_t B2(B* B);
+constexpr size_t B2(B * B);
 
 #include "qb3_tables.h"
 
@@ -100,6 +100,12 @@ static T mags(T v) {
 template<typename T>
 static T smag(T v) {
     return (std::numeric_limits<T>::max() * (v & 1)) ^ (v >> 1);
+}
+
+// Convert from mag-sign to absolute
+template<typename T>
+static inline T magsabs(T val) {
+    return (val >> 1) + (val & 1);
 }
 
 // If the rung bits of the input values match *1*0, returns the index of first 0, otherwise B2 + 1
