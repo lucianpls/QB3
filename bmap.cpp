@@ -225,6 +225,5 @@ size_t BMap::pack(oBits& s) {
             s.push((val << b) | code, 7ull + b);
         }
     }
-
-    return s.size();
+    return s.size_bits();
 }

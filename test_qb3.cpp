@@ -49,17 +49,16 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
     double time_span;
 
     auto img = to(image, static_cast<T>(m));
-    vector<uint8_t> outvec;
-    outvec.reserve(image.size() * sizeof(T));
-    oBits outbits(outvec);
+    vector<uint8_t> outvec(image.size() * sizeof(T));
+    oBits outbits(outvec.data());
     t1 = high_resolution_clock::now();
     if (fast)
-        QB3::encode_fast(img, outbits, xsize, ysize, main_band);
+        QB3::encode_fast(img.data(), outbits, xsize, ysize, bands, main_band);
     else
-        QB3::encode_best(img, outbits, xsize, ysize, main_band);
+        QB3::encode_best(img.data(), outbits, xsize, ysize, bands, main_band);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
-
+    auto outsize = (outbits.size_bits() + 7) / 8;
     //cout << "Encoded " << sizeof(T) * 8 << " size is " << v.size()
     //    << "\tCompressed to " << float(v.size()) * 100 / image.size() / sizeof(T)
     //    << "\tTook " << time_span << " seconds.";
@@ -68,13 +67,13 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
         cout << "Fast ";
     if (m != 1)
         cout << "Multiplier " << m;
-    cout << " \tBPV " << sizeof(T) << '\t' << outvec.size() << "\t"
-        << float(outvec.size()) * 100 / image.size() / sizeof(T) << "\t" 
+    cout << " \tBPV " << sizeof(T) << '\t' << outsize << "\t"
+        << outsize * 100.0 / image.size() / sizeof(T) << "\t" 
         << time_span << "\t";
 
     t1 = high_resolution_clock::now();
     std::vector<T> re(xsize * ysize * bands);
-    QB3::decode<T>(outvec, re.data(), xsize, ysize, bands,  main_band);
+    QB3::decode<T>(outvec.data(), outsize, re.data(), xsize, ysize, bands, main_band);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
     cout << time_span;
@@ -101,14 +100,13 @@ void check(vector<uint16_t>& image, const Raster& raster, uint64_t m, int main_b
     double time_span;
 
     auto img = to(image, static_cast<T>(m));
-    vector<uint8_t> outvec;
-    outvec.reserve(image.size() * sizeof(T));
-    oBits outbits(outvec);
+    vector<uint8_t> outvec(image.size() * sizeof(T));
+    oBits outbits(outvec.data());
     t1 = high_resolution_clock::now();
     if (fast)
-        QB3::encode_fast(img, outbits, xsize, ysize, main_band);
+        QB3::encode_fast(img.data(), outbits, xsize, ysize, bands, main_band);
     else
-        QB3::encode_best(img, outbits, xsize, ysize, main_band);
+        QB3::encode_best(img.data(), outbits, xsize, ysize, bands, main_band);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
 
@@ -126,7 +124,7 @@ void check(vector<uint16_t>& image, const Raster& raster, uint64_t m, int main_b
 
     t1 = high_resolution_clock::now();
     std::vector<T> re(xsize * ysize * bands);
-    QB3::decode<T>(outvec, re.data(), xsize, ysize, bands, main_band);
+    QB3::decode<T>(outvec.data(), outvec.size(), re.data(), xsize, ysize, bands, main_band);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
     cout << time_span;
@@ -179,62 +177,63 @@ int main(int argc, char **argv)
     bool test_QB3 = true;
 
     if (test_bitmap) {
-        int sx = 200, sy = 299;
-        BMap bm(sx, sy);
-        //std::cout << bm.bit(7, 8);
-        //bm.clear(7, 8);
-        //std::cout << bm.bit(7, 8);
-        ////bm.set(7, 8);
+        //int sx = 200, sy = 299;
+        //BMap bm(sx, sy);
+
         ////std::cout << bm.bit(7, 8);
-        //std::cout << std::endl;
+        ////bm.clear(7, 8);
+        ////std::cout << bm.bit(7, 8);
+        //////bm.set(7, 8);
+        //////std::cout << bm.bit(7, 8);
+        ////std::cout << std::endl;
 
-        // a rectangle
-        for (int y = 30; y < 60; y++)
-            for (int x = 123; x < 130; x++)
-                bm.clear(x, y);
+        //// a rectangle
+        //for (int y = 30; y < 60; y++)
+        //    for (int x = 123; x < 130; x++)
+        //        bm.clear(x, y);
 
-        // circles
-        int cx = 150, cy = 76, cr = 34;
-        for (int y = 0; y < sy; y++)
-            for (int x = 0; x < sx; x++)
-                if (((x - cx) * (x - cx) + (y - cy) * (y - cy)) < cr * cr)
-                    bm.clear(x, y);
+        //// circles
+        //int cx = 150, cy = 76, cr = 34;
+        //for (int y = 0; y < sy; y++)
+        //    for (int x = 0; x < sx; x++)
+        //        if (((x - cx) * (x - cx) + (y - cy) * (y - cy)) < cr * cr)
+        //            bm.clear(x, y);
 
-        cx = 35; cy = 212; cr = 78;
-        for (int y = 0; y < sy; y++)
-            for (int x = 0; x < sx; x++)
-                if (((x - cx) * (x - cx) + (y - cy) * (y - cy)) < cr * cr)
-                    bm.clear(x, y);
+        //cx = 35; cy = 212; cr = 78;
+        //for (int y = 0; y < sy; y++)
+        //    for (int x = 0; x < sx; x++)
+        //        if (((x - cx) * (x - cx) + (y - cy) * (y - cy)) < cr * cr)
+        //            bm.clear(x, y);
 
-        cx = 79; cy = 235; cr = 135;
-        for (int y = 0; y < sy; y++)
-            for (int x = 0; x < sx; x++)
-                if (((x - cx) * (x - cx) + (y - cy) * (y - cy)) < cr * cr)
-                    bm.clear(x, y);
+        //cx = 79; cy = 235; cr = 135;
+        //for (int y = 0; y < sy; y++)
+        //    for (int x = 0; x < sx; x++)
+        //        if (((x - cx) * (x - cx) + (y - cy) * (y - cy)) < cr * cr)
+        //            bm.clear(x, y);
 
-        vector<uint8_t> values;
-        oBits s(values);
-        cout << endl << "Raw " << bm.dsize() * 8 << endl;
-        bm.pack(s);
-        cout << "Packed " << s.size() << endl;
+        //vector<uint8_t> values((sx * sy + 7) / 8);
+        //oBits s(values.data());
+        //cout << endl << "Raw " << bm.dsize() * 8 << endl;
+        //bm.pack(s);
+        //cout << "Packed " << s.size_bits() << endl;
 
-        vector<uint8_t> v;
-        RLE(values, v);
-        cout << "RLE " << v.size() * 8 << endl;
-        vector<uint8_t> outv;
-        oBits outs(outv);
-        unRLE(v, outv);
-        cout << "UnRLE " << outs.size() << std::endl;
-        if (memcmp(values.data(), outv.data(), outv.size()))
-            cerr << "RLE error" << endl;
+        //vector<uint8_t> v;
+        //RLE(values, v);
+        //cout << "RLE " << v.size() * 8 << endl;
+        //vector<uint8_t> outv(sx * sy);
+        //oBits outs(outv.data());
+        //unRLE(v, outv);
+        //cout << "UnRLE " << outs.size_bits() << std::endl;
+        //if (memcmp(values.data(), outv.data(), outv.size()))
+        //    cerr << "RLE error" << endl;
 
-        BMap bm1(sx, sy);
-        iBits ins(outv);
-        bm1.unpack(ins);
-        if (!bm1.compare(bm))
-            cerr << "Bitmap packing error" << endl;
-        else
-            cout << "Bitmap Success" << endl;
+        //BMap bm1(sx, sy);
+        //iBits ins(outv.data());
+        //bm1.unpack(ins);
+        //if (!bm1.compare(bm))
+        //    cerr << "Bitmap packing error" << endl;
+        //else
+        //    cout << "Bitmap Success" << endl;
     }
 
     if (test_QB3) {
@@ -276,7 +275,7 @@ int main(int argc, char **argv)
         codec_params params(raster);
         // From here on, test the algorithm for different data types, with 
         // multiplied data so it covers most of the range
-        if (raster.dt == ICDT_Byte || raster.dt == ICDT_Char) {
+        if (raster.dt == ICDT_Byte) {
 
             std::vector<uint8_t> image(params.get_buffer_size());
             auto t = high_resolution_clock::now();

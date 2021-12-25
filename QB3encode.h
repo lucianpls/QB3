@@ -22,9 +22,6 @@ Contributors:  Lucian Plesea
 #include <algorithm>
 #include "bitstream.h"
 
-//#define HISTOGRAM
-//#include <map>
-
 #if defined(_WIN32) && defined(QB3_EXPORTS)
 #define DLLEXPORT __declspec(dllexport)
 #else
@@ -102,10 +99,9 @@ static std::pair<size_t, uint64_t> qb3csztbl(uint64_t val, size_t rung) {
 // only encode the group entries, not the rung switch
 // maxval is used to choose the rung for encoding
 // If abits > 0, the accumulator is also pushed into the stream
-template <typename T> size_t groupencode(T group[B2], T maxval, oBits& s,
+template <typename T> void groupencode(T group[B2], T maxval, oBits& s,
     uint64_t acc = 0, size_t abits = 0)
 {
-    size_t ssize = s.size();
     assert(abits <= 64);
     if (abits > 8) { // Just in case, a rung switch is 8 bits at most
         s.push(acc, abits);
@@ -119,7 +115,7 @@ template <typename T> size_t groupencode(T group[B2], T maxval, oBits& s,
             for (int i = 0; i < B2; i++)
                 acc |= static_cast<uint64_t>(group[i]) << abits++;
         s.push(acc, abits);
-        return abits;
+        return;
     }
 
     // Flip the last set rung bit if the rung bit sequence is a step down
@@ -145,7 +141,7 @@ template <typename T> size_t groupencode(T group[B2], T maxval, oBits& s,
             abits += t[group[i]] >> 12;
         }
         s.push(acc, abits);
-        return s.size() - ssize;
+        return;
     }
 
     // Last part of table encoding, rung 6-7 or 6-10
@@ -162,7 +158,7 @@ template <typename T> size_t groupencode(T group[B2], T maxval, oBits& s,
             }
         for (size_t i = 0; i < B; i++)
             s.push(a[i], asz[i]);
-        return s.size() - ssize;
+        return;
     }
 
     // Computed encoding, slower, works for rung > 1
@@ -185,15 +181,13 @@ template <typename T> size_t groupencode(T group[B2], T maxval, oBits& s,
             }
         }
     }
-
-    return s.size() - ssize;
 }
 
 // Base QB3 group encode with code switch, returns encoded size
-template <typename T = uint8_t> size_t groupencode(T group[B2], T maxval, size_t oldrung, oBits& s) {
+template <typename T = uint8_t> void groupencode(T group[B2], T maxval, size_t oldrung, oBits& s) {
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     uint64_t acc = CSW[UBITS][(topbit(maxval | 1) - oldrung) & ((1ull << UBITS) - 1)];
-    return groupencode(group, maxval, s, acc & 0xffull, static_cast<size_t>(acc >> 12));
+    groupencode(group, maxval, s, acc & 0xffull, static_cast<size_t>(acc >> 12));
 }
 
 
@@ -293,18 +287,10 @@ void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung)
 
 
 template <typename T = uint8_t>
-bool encode_cf(oBits s, const std::vector<T>& image, size_t xsize, size_t ysize, int mb = 1)
+bool encode_cf(oBits s, const T *image, size_t xsize, size_t ysize, size_t bands, int mb = 1)
 {
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-    const size_t bands = image.size() / xsize / ysize;
-    assert(image.size() == xsize * ysize * bands);
     assert(0 == xsize % B && 0 == ysize % B);
-
-    size_t ssize; // Size of bitstream, if needed
-#if defined(HISTOGRAM)
-// A histogram of encoded group sizes
-    std::map<size_t, size_t> group_sizes;
-#endif
 
     // Running code length, start with nominal value
     std::vector<size_t> runbits(bands, sizeof(T) * 8 - 1);
@@ -341,19 +327,8 @@ bool encode_cf(oBits s, const std::vector<T>& image, size_t xsize, size_t ysize,
                     prev[c] = prv;
                 }
 
-                ssize = s.size();
                 const size_t rung = topbit(maxval | 1); // Force at least one bit set
                 runbits[c] = rung;
-
-#if defined(_DEBUG)
-                if (x == 0 * B && y == 0 * B) {
-                    printf("\nLen %04llx", s.size());
-                    printf("\nCOMP x %u y %u c %u, rung %u\t", int(x/B), int(y/B), int(c), int(rung));
-                    for (int i = 0; i < B2; i++)
-                        printf("%u\t", int(group[i]));
-                }
-#endif
-
                 if (0 == rung) { // only 1s and 0s, rung is -1 or 0
                     // Encode as QB3 group, no point in trying other modes
                     uint64_t acc = CSW[UBITS][(rung - oldrung) & ((1ull << UBITS) - 1)];
@@ -364,10 +339,6 @@ bool encode_cf(oBits s, const std::vector<T>& image, size_t xsize, size_t ysize,
                         for (size_t i = 0; i < B2; i++)
                             acc |= static_cast<uint64_t>(group[i]) << abits++;
                     s.push(acc, abits);
-
-#if defined(HISTOGRAM)
-                    group_sizes[abits]++;
-#endif
                     continue;
                 }
 
@@ -377,11 +348,6 @@ bool encode_cf(oBits s, const std::vector<T>& image, size_t xsize, size_t ysize,
                     cfgenc(s, group, cf, oldrung);
                 else
                     groupencode(group, maxval, oldrung, s);
-
-#if defined(HISTOGRAM)
-                group_sizes[s.size() - ssize]++;
-#endif
-
             }
         }
     }
@@ -394,18 +360,10 @@ bool encode_cf(oBits s, const std::vector<T>& image, size_t xsize, size_t ysize,
 }
 
 template <typename T = uint8_t>
-bool encode_best(const std::vector<T>& image, oBits& s, size_t xsize, size_t ysize, int mb = 1)
+bool encode_best(const T *image, oBits& s, size_t xsize, size_t ysize, size_t bands, int mb = 1)
 {
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-    const size_t bands = image.size() / xsize / ysize;
-    assert(image.size() == xsize * ysize * bands);
     assert(0 == xsize % B && 0 == ysize % B);
-
-    size_t ssize; // Size of bitstream, if needed
-#if defined(HISTOGRAM)
-// A histogram of encoded group sizes
-    std::map<size_t, size_t> group_sizes;
-#endif
 
     // Running code length, start with nominal value
     std::vector<size_t> runbits(bands, sizeof(T) * 8 - 1);
@@ -442,19 +400,8 @@ bool encode_best(const std::vector<T>& image, oBits& s, size_t xsize, size_t ysi
                     prev[c] = prv;
                 }
 
-                ssize = s.size();
                 const size_t rung = topbit(maxval | 1); // Force at least one bit set
                 runbits[c] = rung;
-
-#if defined(_DEBUG)
-                if (x == 0 * B && y == 0 * B) {
-                    printf("\nLen %04llx", s.size());
-                    printf("\nCOMP x %u y %u c %u, rung %u\t", int(x / B), int(y / B), int(c), int(rung));
-                    for (int i = 0; i < B2; i++)
-                        printf("%u\t", int(group[i]));
-                }
-#endif
-
                 if (0 == rung) { // only 1s and 0s, rung is -1 or 0
                     // Encode as QB3 group, no point in trying other modes
                     uint64_t acc = CSW[UBITS][(rung - oldrung) & ((1ull << UBITS) - 1)];
@@ -493,18 +440,16 @@ bool encode_best(const std::vector<T>& image, oBits& s, size_t xsize, size_t ysi
     return true;
 }
 
-template DLLEXPORT bool encode_best(const std::vector<uint8_t>&  image, oBits& s, size_t xsize, size_t ysize, int mb);
-template DLLEXPORT bool encode_best(const std::vector<uint16_t>& image, oBits& s, size_t xsize, size_t ysize, int mb);
-template DLLEXPORT bool encode_best(const std::vector<uint32_t>& image, oBits& s, size_t xsize, size_t ysize, int mb);
-template DLLEXPORT bool encode_best(const std::vector<uint64_t>& image, oBits& s, size_t xsize, size_t ysize, int mb);
+template DLLEXPORT bool encode_best(const uint8_t *image, oBits& s, size_t xsize, size_t ysize, size_t bands, int mb);
+template DLLEXPORT bool encode_best(const uint16_t *image, oBits& s, size_t xsize, size_t ysize, size_t bands, int mb);
+template DLLEXPORT bool encode_best(const uint32_t *image, oBits& s, size_t xsize, size_t ysize, size_t bands, int mb);
+template DLLEXPORT bool encode_best(const uint64_t *image, oBits& s, size_t xsize, size_t ysize, size_t bands, int mb);
 
 // Only basic encoding
 template<typename T>
-bool encode_fast(const std::vector<T>& image, oBits& s, size_t xsize, size_t ysize, int mb = 1)
+bool encode_fast(const T *image, oBits& s, size_t xsize, size_t ysize, size_t bands, int mb = 1)
 {
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-    const size_t bands = image.size() / xsize / ysize;
-    assert(image.size() == xsize * ysize * bands);
     assert(0 == xsize % B && 0 == ysize % B);
 
     // Running code length, start with nominal value
@@ -567,9 +512,8 @@ bool encode_fast(const std::vector<T>& image, oBits& s, size_t xsize, size_t ysi
     return true;
 }
 
-template DLLEXPORT bool  encode_fast(const std::vector<uint8_t>& image, oBits& s, size_t xsize, size_t ysize, int mb);
-template DLLEXPORT bool encode_fast(const std::vector<uint16_t>& image, oBits& s, size_t xsize, size_t ysize, int mb);
-template DLLEXPORT bool encode_fast(const std::vector<uint32_t>& image, oBits& s, size_t xsize, size_t ysize, int mb);
-template DLLEXPORT bool encode_fast(const std::vector<uint64_t>& image, oBits& s, size_t xsize, size_t ysize, int mb);
-
+template DLLEXPORT bool encode_fast(const uint8_t *image, oBits& s, size_t xsize, size_t ysize, size_t bands, int mb);
+template DLLEXPORT bool encode_fast(const uint16_t *image, oBits& s, size_t xsize, size_t ysize, size_t bands, int mb);
+template DLLEXPORT bool encode_fast(const uint32_t *image, oBits& s, size_t xsize, size_t ysize, size_t bands, int mb);
+template DLLEXPORT bool encode_fast(const uint64_t *image, oBits& s, size_t xsize, size_t ysize, size_t bands, int mb);
 }

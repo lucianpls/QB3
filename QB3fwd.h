@@ -16,25 +16,23 @@ Contributors:  Lucian Plesea
 */
 
 #pragma once
-#include <vector>
-
 class oBits;
 class iBits;
 
 namespace QB3 {
     // Encode image into an output bitstream, using only basic QB3
     template <typename T>
-    bool encode_fast(const std::vector<T>& image, oBits& s,
-        size_t xsize, size_t ysize, int mb = 1);
+    bool encode_fast(const T* image, oBits& s,
+        size_t xsize, size_t ysize, size_t bands, int mb = 1);
 
     // Encode image into an output bitstream, using basic QB3 and common factor
     // This method has better compression but is slower than encode_fast
-    template <typename T = uint8_t>
-    bool encode_best(const std::vector<T>& image, oBits& s, 
-        size_t xsize, size_t ysize, int mb = 1);
+    template <typename T>
+    bool encode_best(const T* image, oBits& s,
+        size_t xsize, size_t ysize, size_t bands, int mb = 1);
 
     //
     template<typename T>
-    bool decode(std::vector<uint8_t>& src, T* image, 
+    bool decode(uint8_t *src, size_t len, T* image, 
         size_t xsize, size_t ysize, size_t bands, int mb = 1);
 }

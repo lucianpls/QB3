@@ -41,5 +41,8 @@
     <ClInclude Include="..\bitstream.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\QB3fwd.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
