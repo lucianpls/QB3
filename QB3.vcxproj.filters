@@ -20,18 +20,9 @@
     <ClCompile Include="bmap.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="QB3tables.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="bmap.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="bitstream.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QB3fwd.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

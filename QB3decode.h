@@ -17,7 +17,6 @@ Contributors:  Lucian Plesea
 
 #pragma once
 #include <cinttypes>
-#include <vector>
 #include <utility>
 #include "bitstream.h"
 
@@ -158,7 +157,7 @@ static inline T magsmul(T val, T cf) {
 }
 
 template<typename T>
-DLLEXPORT bool decode(std::vector<uint8_t>& src, T* image,
+DLLEXPORT bool decode(uint8_t *src, size_t len, T* image,
     size_t xsize, size_t ysize, size_t bands, int mb = 1)
 {
     // Set when an unexpected condition occurs
@@ -167,7 +166,7 @@ DLLEXPORT bool decode(std::vector<uint8_t>& src, T* image,
     // Unit size bit length
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
 
-    iBits s(src);
+    iBits s(src, len);
     std::vector<T> prev(bands, 0);
     T group[B2];
     std::vector<size_t> runbits(bands, sizeof(T) * 8 - 1);
@@ -302,9 +301,9 @@ DLLEXPORT bool decode(std::vector<uint8_t>& src, T* image,
     return true;
 }
 
-template DLLEXPORT bool decode(std::vector<uint8_t>& src, uint8_t* image, size_t xsize, size_t ysize, size_t bands, int mb);
-template DLLEXPORT bool decode(std::vector<uint8_t>& src, uint16_t* image, size_t xsize, size_t ysize, size_t bands, int mb);
-template DLLEXPORT bool decode(std::vector<uint8_t>& src, uint32_t* image, size_t xsize, size_t ysize, size_t bands, int mb);
-template DLLEXPORT bool decode(std::vector<uint8_t>& src, uint64_t* image, size_t xsize, size_t ysize, size_t bands, int mb);
+template DLLEXPORT bool decode(uint8_t *src, size_t len, uint8_t* image, size_t xsize, size_t ysize, size_t bands, int mb);
+template DLLEXPORT bool decode(uint8_t *src, size_t len, uint16_t* image, size_t xsize, size_t ysize, size_t bands, int mb);
+template DLLEXPORT bool decode(uint8_t *src, size_t len, uint32_t* image, size_t xsize, size_t ysize, size_t bands, int mb);
+template DLLEXPORT bool decode(uint8_t *src, size_t len, uint64_t* image, size_t xsize, size_t ysize, size_t bands, int mb);
 
 } // Namespace
