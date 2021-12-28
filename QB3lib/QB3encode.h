@@ -22,14 +22,8 @@ Contributors:  Lucian Plesea
 #include <algorithm>
 #include "bitstream.h"
 
-#if defined(_WIN32) && defined(QB3_EXPORTS)
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
-namespace QB3 {
 #include "QB3common.h"
+namespace QB3 {
 
 // integer divide val(in magsign) by cf(normal)
 // if cf == 2, it assumes abs(val) % 2 == 0, otherwise results are wrong
@@ -66,11 +60,6 @@ T gcf(const T* group) {
     }
    
     return (0 == sz) ? T(1) : v[0]; // 2 or higher if there is a common factor
-}
-
-template<typename T>
-size_t gidx(const T* group) {
-
 }
 
 // Computed encoding with three codeword lenghts, used for higher rungs
@@ -359,12 +348,19 @@ bool encode_cf(oBits s, const T *image, size_t xsize, size_t ysize, size_t bands
     return true;
 }
 
+// Returns error code or 0 if success
+// TODO: Error code mapping
 template <typename T = uint8_t>
-bool encode_best(const T *image, oBits& s, size_t xsize, size_t ysize, size_t bands, int mb = 1)
+int encode_best(const T *image, oBits& s, size_t xsize, size_t ysize, size_t bands, const size_t *cband)
 {
-    constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-    assert(0 == xsize % B && 0 == ysize % B);
+    if (xsize == 0 || xsize > 0x10000ull || ysize == 0 || ysize > 0x10000ull || 0 == bands || nullptr == cband)
+        return 1;
+    // Check band mapping
+    for (size_t c = 0; c < bands; c++)
+        if (cband[c] >= bands)
+            return 2; // Band mapping error
 
+    constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     // Running code length, start with nominal value
     std::vector<size_t> runbits(bands, sizeof(T) * 8 - 1);
     std::vector<T> prev(bands, 0u); // Previous value, per band
@@ -376,14 +372,14 @@ bool encode_best(const T *image, oBits& s, size_t xsize, size_t ysize, size_t ba
     for (size_t y = 0; y < ysize; y += B) {
         for (size_t x = 0; x < xsize; x += B) {
             size_t loc = (y * xsize + x) * bands; // Top-left pixel address
-            for (size_t c = 0; c < bands; c++) { // blocks are band interleaved
+            for (size_t c = 0; c < bands; c++) { // blocks are always band interleaved
                 T maxval(0); // Maximum mag-sign value within this group
                 auto oldrung = runbits[c];
                 { // Collect the block for this band, convert to running delta mag-sign
                     auto prv = prev[c];
-                    if (mb != c && mb >= 0 && mb < bands) {
+                    if (c != cband[c]) {
                         for (size_t i = 0; i < B2; i++) {
-                            T g = image[loc + c + offsets[i]] - image[loc + mb + offsets[i]];
+                            T g = image[loc + c + offsets[i]] - image[loc + cband[c] + offsets[i]];
                             prv += g -= prv;
                             group[i] = mags(g);
                             maxval = std::max(maxval, mags(g));
@@ -437,20 +433,21 @@ bool encode_best(const T *image, oBits& s, size_t xsize, size_t ysize, size_t ba
     for (auto it : group_sizes)
         printf("%d, %d\n", int(it.first), int(it.second));
 #endif
-    return true;
+    return 0;
 }
-
-template DLLEXPORT bool encode_best(const uint8_t *image, oBits& s, size_t xsize, size_t ysize, size_t bands, int mb);
-template DLLEXPORT bool encode_best(const uint16_t *image, oBits& s, size_t xsize, size_t ysize, size_t bands, int mb);
-template DLLEXPORT bool encode_best(const uint32_t *image, oBits& s, size_t xsize, size_t ysize, size_t bands, int mb);
-template DLLEXPORT bool encode_best(const uint64_t *image, oBits& s, size_t xsize, size_t ysize, size_t bands, int mb);
 
 // Only basic encoding
 template<typename T>
-bool encode_fast(const T *image, oBits& s, size_t xsize, size_t ysize, size_t bands, int mb = 1)
+int encode_fast(const T *image, oBits& s, size_t xsize, size_t ysize, size_t bands, const size_t *cband)
 {
+    if (xsize == 0 || xsize > 0x10000ull || ysize == 0 || ysize > 0x10000ull || 0 == bands || nullptr == cband)
+        return 1;
+    // Check band mapping
+    for (size_t c = 0; c < bands; c++)
+        if (cband[c] >= bands)
+            return 2; // Band mapping error
+
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-    assert(0 == xsize % B && 0 == ysize % B);
 
     // Running code length, start with nominal value
     std::vector<size_t> runbits(bands, sizeof(T) * 8 - 1);
@@ -468,15 +465,15 @@ bool encode_fast(const T *image, oBits& s, size_t xsize, size_t ysize, size_t ba
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
     for (size_t y = 0; y < ysize; y += B) {
         for (size_t x = 0; x < xsize; x += B) {
-            size_t loc = (y * xsize + x) * bands; // Top-left pixel address
+            const size_t loc = (y * xsize + x) * bands; // Top-left pixel address
             for (size_t c = 0; c < bands; c++) { // blocks are band interleaved
                 T maxval(0); // Maximum mag-sign value within this group
                 { // Collect the block for this band, convert to running delta mag-sign
                     auto prv = prev[c];
                     // Use separate loops to avoid a test inside the loop
-                    if (mb != c && mb >= 0 && mb < bands) {
+                    if (c != cband[c]) {
                         for (size_t i = 0; i < B2; i++) {
-                            T g = image[loc + c + offsets[i]] - image[loc + mb + offsets[i]];
+                            T g = image[loc + c + offsets[i]] - image[loc + cband[c] + offsets[i]];
                             prv += g -= prv;
                             group[i] = mags(g);
                             maxval = std::max(maxval, mags(g));
@@ -509,11 +506,7 @@ bool encode_fast(const T *image, oBits& s, size_t xsize, size_t ysize, size_t ba
         printf("%d, %d\n", int(it.first), int(it.second));
 #endif
 
-    return true;
+    return 0;
 }
 
-template DLLEXPORT bool encode_fast(const uint8_t *image, oBits& s, size_t xsize, size_t ysize, size_t bands, int mb);
-template DLLEXPORT bool encode_fast(const uint16_t *image, oBits& s, size_t xsize, size_t ysize, size_t bands, int mb);
-template DLLEXPORT bool encode_fast(const uint32_t *image, oBits& s, size_t xsize, size_t ysize, size_t bands, int mb);
-template DLLEXPORT bool encode_fast(const uint64_t *image, oBits& s, size_t xsize, size_t ysize, size_t bands, int mb);
-}
+} // namespace

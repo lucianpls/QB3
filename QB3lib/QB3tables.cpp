@@ -13,7 +13,7 @@ limitations under the License.
 Contributors:  Lucian Plesea
 */
 
-#include "qb3_tables.h"
+#include "QB3tables.h"
 
 namespace QB3 {
 // block traversal order tables

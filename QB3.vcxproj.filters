@@ -17,14 +17,6 @@
     <ClCompile Include="test_qb3.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="bmap.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="bmap.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="README.md">

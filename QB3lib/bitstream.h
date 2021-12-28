@@ -19,8 +19,8 @@ Content: Bit streams, in low endian format
 #pragma once
 #include <cinttypes>
 #include <cassert>
-
-// TODO: Write these with c arrays instead of vector
+#include <type_traits>
+#include <limits>
 
 // Input bitstream, doesn't go past size
 class iBits {

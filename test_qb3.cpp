@@ -18,17 +18,14 @@ Contributors:  Lucian Plesea
 #include <algorithm>
 #include <chrono>
 #include <string>
+#include <vector>
 
 // From https://github.com/lucianpls/libicd
 #include <icd_codecs.h>
-
-#include "bmap.h"
-#include "bitstream.h"
-#include "QB3fwd.h"
+#include <QB3.h>
 
 using namespace std;
 using namespace chrono;
-using namespace QB3;
 NS_ICD_USE
 
 template<typename inT, typename outT>
@@ -49,16 +46,16 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
     double time_span;
 
     auto img = to(image, static_cast<T>(m));
-    vector<uint8_t> outvec(image.size() * sizeof(T));
-    oBits outbits(outvec.data());
+    auto tp = sizeof(T) == 8 ? qb3_dtype::QB3_I64 : sizeof(T) == 4 ? qb3_dtype::QB3_I32 :
+        sizeof(T) == 2 ? qb3_dtype::QB3_I16 : qb3_dtype::QB3_I8;
+    auto qenc = qb3_create_encoder(xsize, ysize, bands, tp);
+    vector<uint8_t> outvec(qb3_max_encoded_size(qenc));
+
     t1 = high_resolution_clock::now();
-    if (fast)
-        QB3::encode_fast(img.data(), outbits, xsize, ysize, bands, main_band);
-    else
-        QB3::encode_best(img.data(), outbits, xsize, ysize, bands, main_band);
+    auto outsize = qb3_encode(qenc, static_cast<void *>(img.data()), outvec.data(), 
+        fast ? qb3_mode::QB3_BASE : qb3_mode::QB3_BEST);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
-    auto outsize = (outbits.size_bits() + 7) / 8;
     //cout << "Encoded " << sizeof(T) * 8 << " size is " << v.size()
     //    << "\tCompressed to " << float(v.size()) * 100 / image.size() / sizeof(T)
     //    << "\tTook " << time_span << " seconds.";
@@ -71,10 +68,13 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
         << outsize * 100.0 / image.size() / sizeof(T) << "\t" 
         << time_span << "\t";
 
-    t1 = high_resolution_clock::now();
     std::vector<T> re(xsize * ysize * bands);
-    QB3::decode<T>(outvec.data(), outsize, re.data(), xsize, ysize, bands, main_band);
+
+    auto qdec = qb3_create_decoder(xsize, ysize, bands, tp);
+    t1 = high_resolution_clock::now();
+    qb3_decode(qdec, outvec.data(), outsize, re.data());
     t2 = high_resolution_clock::now();
+
     time_span = duration_cast<duration<double>>(t2 - t1).count();
     cout << time_span;
 
@@ -100,13 +100,13 @@ void check(vector<uint16_t>& image, const Raster& raster, uint64_t m, int main_b
     double time_span;
 
     auto img = to(image, static_cast<T>(m));
-    vector<uint8_t> outvec(image.size() * sizeof(T));
-    oBits outbits(outvec.data());
+    auto tp = sizeof(T) == 8 ? qb3_dtype::QB3_I64 : sizeof(T) == 4 ? qb3_dtype::QB3_I32 :
+        sizeof(T) == 2 ? qb3_dtype::QB3_I16 : qb3_dtype::QB3_I8;
+    auto qenc = qb3_create_encoder(xsize, ysize, bands, tp);
+    vector<uint8_t> outvec(qb3_max_encoded_size(qenc));
+
     t1 = high_resolution_clock::now();
-    if (fast)
-        QB3::encode_fast(img.data(), outbits, xsize, ysize, bands, main_band);
-    else
-        QB3::encode_best(img.data(), outbits, xsize, ysize, bands, main_band);
+    auto outsize = qb3_encode(qenc, img.data(), outvec.data(), fast ? qb3_mode::QB3_BASE : qb3_mode::QB3_BEST);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
 
@@ -121,11 +121,13 @@ void check(vector<uint16_t>& image, const Raster& raster, uint64_t m, int main_b
     cout << " \tBPV " << sizeof(T) << '\t' << outvec.size() << "\t"
         << float(outvec.size()) * 100 / image.size() / sizeof(T) << "\t"
         << time_span << "\t";
-
-    t1 = high_resolution_clock::now();
     std::vector<T> re(xsize * ysize * bands);
-    QB3::decode<T>(outvec.data(), outvec.size(), re.data(), xsize, ysize, bands, main_band);
+
+    auto qdec = qb3_create_decoder(xsize, ysize, bands, tp);
+    t1 = high_resolution_clock::now();
+    qb3_decode(qdec, outvec.data(), outsize, re.data());
     t2 = high_resolution_clock::now();
+
     time_span = duration_cast<duration<double>>(t2 - t1).count();
     cout << time_span;
 

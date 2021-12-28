@@ -10,6 +10,20 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="bitstream.h" />
+    <ClInclude Include="QB3.h" />
+    <ClInclude Include="QB3common.h" />
+    <ClInclude Include="QB3decode.h" />
+    <ClInclude Include="QB3encode.h" />
+    <ClInclude Include="QB3tables.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Q3Bencode.cpp" />
+    <ClCompile Include="Q3Bmain.cpp" />
+    <ClCompile Include="QB3decode.cpp" />
+    <ClCompile Include="QB3tables.cpp" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
@@ -87,23 +101,10 @@ copy /y $(TargetDir)$(TargetName).lib $(Prefix)lib</Command>
     <PostBuildEvent>
       <Command>copy /y $(TargetPath) $(Prefix)bin
 copy /y $(TargetDir)$(TargetName).lib $(Prefix)lib
-copy /y $(SolutionDir)QB3fwd.h $(Prefix)include
-copy /y $(SolutionDir)bitstream.h $(Prefix)include</Command>
+copy /y $(ProjectDir)QB3.h $(Prefix)include
+</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <ClCompile Include="..\QB3tables.cpp" />
-    <ClCompile Include="Q3Bmain.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="..\bitstream.h" />
-    <ClInclude Include="..\QB3.h" />
-    <ClInclude Include="..\QB3common.h" />
-    <ClInclude Include="..\QB3decode.h" />
-    <ClInclude Include="..\QB3encode.h" />
-    <ClInclude Include="..\QB3fwd.h" />
-    <ClInclude Include="..\qb3_tables.h" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

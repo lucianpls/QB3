@@ -16,18 +16,11 @@ Contributors:  Lucian Plesea
 #pragma once
 #include <cinttypes>
 
+// TODO: Split the tables into decoding and encoding ones, so the decoder can be built by itself
+// The SIGNAL table is shared
+
 namespace QB3 {
-// tables containing 16 bits have the value on bits 0-11 and size on bits 12-15
-#define TBLMASK 0xfffull
-
-// Define this to minimize the size of the tables if only byte data is required
-// Otherwise it still works, loosing a little speed for large data types
-// It saves about 20KB
-// #define QB3_SHORT_TABLES
-
-	extern const uint8_t xlut[16];
-	extern const uint8_t ylut[16];
-
+	extern const uint8_t xlut[16], ylut[16];
 // Encoding and decoding tables for low bit sizes
 // The 1-7 (byte) tables are always defined
 // tables for 8, 9 and 10 bits are optional

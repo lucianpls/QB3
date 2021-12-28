@@ -16,9 +16,10 @@ Contributors:  Lucian Plesea
 */
 
 #pragma once
+#include "bitstream.h"
 #include <cinttypes>
 #include <utility>
-#include "bitstream.h"
+#include <vector>
 
 namespace QB3 {
 #include "QB3common.h"
@@ -158,7 +159,7 @@ static inline T magsmul(T val, T cf) {
 
 template<typename T>
 DLLEXPORT bool decode(uint8_t *src, size_t len, T* image,
-    size_t xsize, size_t ysize, size_t bands, int mb = 1)
+    size_t xsize, size_t ysize, size_t bands, size_t *cband)
 {
     // Set when an unexpected condition occurs
     bool failure(false);
@@ -293,17 +294,12 @@ DLLEXPORT bool decode(uint8_t *src, size_t len, T* image,
             }
 
             for (int c = 0; c < bands; c++)
-                if (mb != c && mb >= 0 && mb < bands)
+                if (cband[c] != c)
                     for (size_t i = 0; i < B2; i++)
-                        image[loc + c + offsets[i]] += image[loc + mb + offsets[i]];
+                        image[loc + c + offsets[i]] += image[loc + cband[c] + offsets[i]];
         }
     }
-    return true;
+    return 0;
 }
-
-template DLLEXPORT bool decode(uint8_t *src, size_t len, uint8_t* image, size_t xsize, size_t ysize, size_t bands, int mb);
-template DLLEXPORT bool decode(uint8_t *src, size_t len, uint16_t* image, size_t xsize, size_t ysize, size_t bands, int mb);
-template DLLEXPORT bool decode(uint8_t *src, size_t len, uint32_t* image, size_t xsize, size_t ysize, size_t bands, int mb);
-template DLLEXPORT bool decode(uint8_t *src, size_t len, uint64_t* image, size_t xsize, size_t ysize, size_t bands, int mb);
 
 } // Namespace

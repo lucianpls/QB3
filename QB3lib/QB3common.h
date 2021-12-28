@@ -17,16 +17,20 @@ Content: QB3 parts used by both the encoder and the decoder
 */
 
 #pragma once
+#include "QB3.h"
+#include "bitstream.h"
+#include "QB3tables.h"
 
 #if defined(_WIN32)
 #include <intrin.h>
 #endif
 
+// Tables have 12bits of data, top 4 bits are size
+#define TBLMASK 0xfffull
+
 // Block is 4x4 pixels
 constexpr size_t B(4);
 constexpr size_t B2(B * B);
-
-#include "qb3_tables.h"
 
 #if defined(__GNUC__) && defined(__x86_64__)
 // Comment out if binary is to run on processors without sse4
@@ -39,10 +43,6 @@ static size_t topbit(uint64_t val) {
     return 63 - __lzcnt64(val);
 }
 
-static size_t setbits(uint64_t val) {
-    return __popcnt64(val);
-}
-
 static size_t setbits16(uint64_t val) {
     return __popcnt64(val);
 }
@@ -52,12 +52,8 @@ static size_t topbit(uint64_t val) {
     return 63 - __builtin_clzll(val);
 }
 
-static size_t setbits(uint64_t val) {
-    return __builtin_popcountll(val);
-}
-
 static size_t setbits16(uint64_t val) {
-    return setbits(val);
+    return __builtin_popcountll(val);
 }
 
 #else // no builtins, portable C
@@ -73,17 +69,19 @@ static inline size_t nbits(uint8_t v) {
     return ((((v - ((v >> 1) & 0x55u)) * 0x1010101u) & 0x30c00c03u) * 0x10040041u) >> 0x1cu;
 }
 
-static size_t setbits(uint64_t val) {
-    return nbits(0xff & val) + nbits(0xff & (val >> 8))
-        + nbits(0xff & (val >> 16)) + nbits(0xff & (val >> 24))
-        + nbits(0xff & (val >> 32)) + nbits(0xff & (val >> 40))
-        + nbits(0xff & (val >> 48)) + nbits(0xff & (val >> 56));
-}
-
 static size_t setbits16(uint64_t val) {
     return nbits(0xff & val) + nbits(0xff & (val >> 8));
 }
+
 #endif
+
+// Define this to minimize the size of the tables if only byte data is required
+// Otherwise it still works, loosing a little speed for large data types
+// It saves about 20KB
+// #define QB3_SHORT_TABLES
+
+extern const uint8_t xlut[16];
+extern const uint8_t ylut[16];
 
 // Encode integers as absolute magnitude and sign, so the bit 0 is the sign.
 // This encoding has the top rung always zero, regardless of sign

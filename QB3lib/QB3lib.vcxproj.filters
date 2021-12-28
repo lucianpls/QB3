@@ -15,34 +15,37 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\QB3tables.cpp">
+    <ClInclude Include="bitstream.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QB3.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QB3common.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QB3decode.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QB3encode.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QB3tables.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Q3Bencode.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Q3Bmain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="..\QB3.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\qb3_tables.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\QB3common.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\QB3decode.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\QB3encode.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\bitstream.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\QB3fwd.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
+    <ClCompile Include="QB3tables.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="QB3decode.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
