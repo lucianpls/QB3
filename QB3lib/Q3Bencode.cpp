@@ -34,6 +34,15 @@ void qb3_destroy_encoder(encsp p) {
     delete p;
 }
 
+bool qb3_set_coreband(encsp p, size_t bands, const size_t *cband) {
+    if (bands != p->nbands)
+        return false; // Incorrect band number
+    // Store the new mapping
+    for (size_t i = 0; i < bands; i++)
+        p->cband[i] = (cband[i] < bands) ? cband[i] : i;
+    return true;
+}
+
 // bytes per value by qb3_dtype
 static const int typesizes[] = { 1, 2, 4, 8 };
 

@@ -341,10 +341,6 @@ bool encode_cf(oBits s, const T *image, size_t xsize, size_t ysize, size_t bands
         }
     }
 
-#if defined(HISTOGRAM)
-    for (auto it : group_sizes)
-        printf("%d, %d\n", int(it.first), int(it.second));
-#endif
     return true;
 }
 
@@ -353,7 +349,8 @@ bool encode_cf(oBits s, const T *image, size_t xsize, size_t ysize, size_t bands
 template <typename T = uint8_t>
 int encode_best(const T *image, oBits& s, size_t xsize, size_t ysize, size_t bands, const size_t *cband)
 {
-    if (xsize == 0 || xsize > 0x10000ull || ysize == 0 || ysize > 0x10000ull || 0 == bands || nullptr == cband)
+    if (xsize == 0 || xsize > 0x10000ull || ysize == 0 || ysize > 0x10000ull 
+        || 0 == bands || nullptr == cband)
         return 1;
     // Check band mapping
     for (size_t c = 0; c < bands; c++)
@@ -366,15 +363,14 @@ int encode_best(const T *image, oBits& s, size_t xsize, size_t ysize, size_t ban
     std::vector<T> prev(bands, 0u); // Previous value, per band
     T group[B2]; // Current 2D group to encode, as array
     size_t offsets[B2];
-
     for (size_t i = 0; i < B2; i++)
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
+
     for (size_t y = 0; y < ysize; y += B) {
         for (size_t x = 0; x < xsize; x += B) {
             size_t loc = (y * xsize + x) * bands; // Top-left pixel address
             for (size_t c = 0; c < bands; c++) { // blocks are always band interleaved
                 T maxval(0); // Maximum mag-sign value within this group
-                auto oldrung = runbits[c];
                 { // Collect the block for this band, convert to running delta mag-sign
                     auto prv = prev[c];
                     if (c != cband[c]) {
@@ -396,6 +392,7 @@ int encode_best(const T *image, oBits& s, size_t xsize, size_t ysize, size_t ban
                     prev[c] = prv;
                 }
 
+                auto oldrung = runbits[c];
                 const size_t rung = topbit(maxval | 1); // Force at least one bit set
                 runbits[c] = rung;
                 if (0 == rung) { // only 1s and 0s, rung is -1 or 0
@@ -408,10 +405,6 @@ int encode_best(const T *image, oBits& s, size_t xsize, size_t ysize, size_t ban
                         for (size_t i = 0; i < B2; i++)
                             acc |= static_cast<uint64_t>(group[i]) << abits++;
                     s.push(acc, abits);
-
-#if defined(HISTOGRAM)
-                    group_sizes[abits]++;
-#endif
                     continue;
                 }
 
@@ -420,19 +413,9 @@ int encode_best(const T *image, oBits& s, size_t xsize, size_t ysize, size_t ban
                     cfgenc(s, group, cf, oldrung);
                 else
                     groupencode(group, maxval, oldrung, s);
-
-#if defined(HISTOGRAM)
-                group_sizes[s.size() - ssize]++;
-#endif
-
             }
         }
     }
-
-#if defined(HISTOGRAM)
-    for (auto it : group_sizes)
-        printf("%d, %d\n", int(it.first), int(it.second));
-#endif
     return 0;
 }
 
@@ -440,7 +423,8 @@ int encode_best(const T *image, oBits& s, size_t xsize, size_t ysize, size_t ban
 template<typename T>
 int encode_fast(const T *image, oBits& s, size_t xsize, size_t ysize, size_t bands, const size_t *cband)
 {
-    if (xsize == 0 || xsize > 0x10000ull || ysize == 0 || ysize > 0x10000ull || 0 == bands || nullptr == cband)
+    if (xsize == 0 || xsize > 0x10000ull || ysize == 0 || ysize > 0x10000ull 
+        || 0 == bands || nullptr == cband)
         return 1;
     // Check band mapping
     for (size_t c = 0; c < bands; c++)
@@ -448,21 +432,14 @@ int encode_fast(const T *image, oBits& s, size_t xsize, size_t ysize, size_t ban
             return 2; // Band mapping error
 
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-
     // Running code length, start with nominal value
     std::vector<size_t> runbits(bands, sizeof(T) * 8 - 1);
     std::vector<T> prev(bands, 0u);      // Previous value, per band
     T group[B2];  // Current 2D group to encode, as array
     size_t offsets[B2];
-
-#if defined(HISTOGRAM)
-    // A histogram of encoded group sizes
-    size_t ssize = 0;
-    std::map<size_t, size_t> group_sizes;
-#endif
-
     for (size_t i = 0; i < B2; i++)
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
+
     for (size_t y = 0; y < ysize; y += B) {
         for (size_t x = 0; x < xsize; x += B) {
             const size_t loc = (y * xsize + x) * bands; // Top-left pixel address
@@ -493,20 +470,9 @@ int encode_fast(const T *image, oBits& s, size_t xsize, size_t ysize, size_t ban
                 groupencode(group, maxval, runbits[c], s);
                 runbits[c] = topbit(maxval | 1);
 
-#if defined(HISTOGRAM)
-                group_sizes[s.size() - ssize]++;
-                ssize = s.size();
-#endif
             }
         }
     }
-
-#if defined(HISTOGRAM)
-    for (auto it : group_sizes)
-        printf("%d, %d\n", int(it.first), int(it.second));
-#endif
-
     return 0;
 }
-
 } // namespace

@@ -56,6 +56,7 @@ void gdecode(iBits &s, size_t rung, T group[B2], uint64_t acc, size_t abits) {
         acc = s.peek();
         abits = 0;
     }
+
     if (0 == rung) { // single bits, special case, need at least 17bits in accumulator
         if (0 != ((acc >> abits++) & 1)) {
             for (int i = 0; i < B2; i++)
@@ -184,10 +185,6 @@ DLLEXPORT bool decode(uint8_t *src, size_t len, T* image,
                 break;
             size_t loc = (y * xsize + x) * bands;
             for (int c = 0; c < bands; c++) {
-#if defined(_DEBUG)
-                if (x == 0 * B && y == 0 * B)
-                    printf("\nLen %04llx", s.position());
-#endif
 
                 uint64_t acc = s.peek();
                 if ((acc & 1) == 0) { // Same rung
@@ -280,13 +277,6 @@ DLLEXPORT bool decode(uint8_t *src, size_t len, T* image,
                     }
                 }
 
-#if defined(_DEBUG)
-                if (x == 0 * B && y == 0 * B) {
-                    printf("\nDECO x %u y %u c %u, rung %u\t", int(x / B), int(y / B), int(c), int(runbits[c]));
-                    for (int i = 0; i < B2; i++)
-                        printf("%u\t", int(group[i]));
-                }
-#endif
                 auto prv = prev[c];
                 for (int i = 0; i < B2; i++)
                     image[loc + c + offsets[i]] = prv += smag(group[i]);

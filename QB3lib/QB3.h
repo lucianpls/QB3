@@ -26,6 +26,7 @@ Contributors:  Lucian Plesea
 #endif
 #else
 // Not windows
+#define DLLEXPORT 
 #endif
 
 // Keep this close to plain C so it can have a C API
@@ -37,26 +38,35 @@ typedef struct decs * decsp; // decoder
 // Types, can be used with either signed or unsigned
 enum class qb3_dtype { QB3_I8 = 0, QB3_I16, QB3_I32, QB3_I64 };
 // Encode mode
-enum class qb3_mode { QB3_DEFAULT = 0, QB3_BASE = 0, QB3_BEST};
+enum class qb3_mode { QB3_DEFAULT = 0, QB3_BASE = 0, QB3_BEST };
 
 // In QB3encode.cpp
 // Call before anything else
-DLLEXPORT encsp qb3_create_encoder(size_t width, size_t height, size_t bands = 3, qb3_dtype dt = qb3_dtype::QB3_I8);
+DLLEXPORT encsp qb3_create_encoder(size_t width, size_t height, size_t bands = 3, 
+	qb3_dtype dt = qb3_dtype::QB3_I8);
 // Call when done with the encoder
 DLLEXPORT void qb3_destroy_encoder(encsp p);
+
+// Change the default core band mapping.
+// The default assumes bands are independent, except for 3 or 4 bands
+// when RGB(A) is assumed and R-G and B-G is used
+// equivalent to cbands = { 1, 1, 1 }
+// Returns false if band number differs from the one used to create p
+// Only values < bands are acceptable in cband array
+DLLEXPORT bool qb3_set_coreband(encsp p, size_t bands, const size_t *cband);
 
 // Upper bound of encoded size, without taking the header into consideration
 DLLEXPORT size_t qb3_max_encoded_size(const encsp p);
 
-// One call QB3 lossless encode the source into destination, (at least max_encoded_size())
+// Encode the source into destination buffer, which should be at least qb3_max_encoded_size
 // Source organization is expected to be y major, then x, then band (interleaved)
-// Returns actual size
-// encoder structure can be reused
-DLLEXPORT size_t qb3_encode(encsp p, void *source, void *destination, qb3_mode mode = qb3_mode::QB3_DEFAULT);
+// Returns actual size, the encoder can be reused
+DLLEXPORT size_t qb3_encode(encsp p, void *source, void *destination, 
+	qb3_mode mode = qb3_mode::QB3_DEFAULT);
 
 // In QB3decode.cpp
-
-DLLEXPORT decsp qb3_create_decoder(size_t width, size_t height, size_t bands = 3, qb3_dtype dt = qb3_dtype::QB3_I8);
+DLLEXPORT decsp qb3_create_decoder(size_t width, size_t height, size_t bands = 3, 
+	qb3_dtype dt = qb3_dtype::QB3_I8);
 
 DLLEXPORT void qb3_destroy_decoder(decsp p);
 
