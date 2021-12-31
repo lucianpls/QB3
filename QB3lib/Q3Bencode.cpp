@@ -34,7 +34,7 @@ void qb3_destroy_encoder(encsp p) {
     delete p;
 }
 
-bool qb3_set_coreband(encsp p, size_t bands, const size_t *cband) {
+bool qb3_set_encoder_coreband(encsp p, size_t bands, const size_t *cband) {
     if (bands != p->nbands)
         return false; // Incorrect band number
     // Store the new mapping

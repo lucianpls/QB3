@@ -53,7 +53,10 @@ DLLEXPORT void qb3_destroy_encoder(encsp p);
 // equivalent to cbands = { 1, 1, 1 }
 // Returns false if band number differs from the one used to create p
 // Only values < bands are acceptable in cband array
-DLLEXPORT bool qb3_set_coreband(encsp p, size_t bands, const size_t *cband);
+DLLEXPORT bool qb3_set_encoder_coreband(encsp p, size_t bands, const size_t *cband);
+
+// TODO: remove once the decoder can auto-detect the band deltas
+DLLEXPORT bool qb3_set_decoder_coreband(decsp p, size_t bands, const size_t* cband);
 
 // Upper bound of encoded size, without taking the header into consideration
 DLLEXPORT size_t qb3_max_encoded_size(const encsp p);
