@@ -26,7 +26,6 @@ Contributors:  Lucian Plesea
 namespace QB3 {
 
 // integer divide val(in magsign) by cf(normal)
-// if cf == 2, it assumes abs(val) % 2 == 0, otherwise results are wrong
 template<typename T>
 static inline T magsdiv(T val, T cf) {
     return ((magsabs(val) / cf) << 1) - (val & 1);
@@ -37,7 +36,7 @@ static inline T magsdiv(T val, T cf) {
 template<typename T>
 T gcf(const T* group) {
     // Work with actual absolute values
-    T v[B2];
+    T v[B2] = {0}; // Only the first value has to be zero
     int sz = 0;
     for (int i = 0; i < B2; i++) { // skip the zeros
         if (group[i] > 2)
@@ -59,7 +58,7 @@ T gcf(const T* group) {
         sz = j; // Never zero
     }
    
-    return (0 == sz) ? T(1) : v[0]; // 2 or higher if there is a common factor
+    return v[0]; // 2 or higher if there is a common factor
 }
 
 // Computed encoding with three codeword lenghts, used for higher rungs
@@ -176,24 +175,29 @@ template <typename T> void groupencode(T group[B2], T maxval, oBits& s,
 template <typename T = uint8_t> void groupencode(T group[B2], T maxval, size_t oldrung, oBits& s) {
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     uint64_t acc = CSW[UBITS][(topbit(maxval | 1) - oldrung) & ((1ull << UBITS) - 1)];
-    groupencode(group, maxval, s, acc & 0xffull, static_cast<size_t>(acc >> 12));
+    groupencode(group, maxval, s, acc & TBLMASK, static_cast<size_t>(acc >> 12));
 }
 
 
 // Group encode with cf
 template <typename T = uint8_t>
-void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung)
+void cfgenc(oBits &bits, const T group[B2], T cf, size_t oldrung)
 {
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-    uint64_t acc = SIGNAL[UBITS] & 0xff;
-    size_t abits = SIGNAL[UBITS] >> 12;
+    uint64_t acc = SIGNAL[UBITS] & TBLMASK;
+    size_t abits = UBITS + 2; // SIGNAL[UBITS] >> 12;
     // divide group values by CF and find the new maxvalue
     T maxval = 0;
     T cfgroup[B2];
     for (size_t i = 0; i < B2; i++) {
-        auto val = magsdiv(group[i], cf);
-        maxval = std::max(maxval, val);
-        cfgroup[i] = val;
+        if (0 != group[i]) {
+            auto val = T(((magsabs(group[i]) / cf) << 1) - (group[i] & 1));
+            maxval = std::max(maxval, val);
+            cfgroup[i] = val;
+        }
+        else {
+            cfgroup[i] = 0;
+        }
     }
 
     cf -= 2; // Bias down, 0 and 1 are not used
@@ -204,10 +208,10 @@ void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung)
     auto cs = CSW[UBITS][(trung - oldrung) & ((1ull << UBITS) - 1)];
     if ((cs >> 12) == 1) // Would be no-switch, use signal instead, it decodes to delta of zero
         cs = SIGNAL[UBITS];
+
     // When trung is only somewhat larger than cfrung encode cf at same rung as data
-    // TODO: The second part of this condition may increase the size in some cases. Why?
-    if (trung >= cfrung && trung < (cfrung + UBITS)) {
-        acc |= (static_cast<uint64_t>(cs) & 0xffull) << abits;
+    if (trung >= cfrung && (trung < (cfrung + UBITS) || 0 == cfrung)) {
+        acc |= (cs & TBLMASK) << abits;
         abits += cs >> 12;
 
         if (trung == 0) { // Special encoding for single bit
@@ -237,11 +241,10 @@ void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung)
             acc = p.second;
             abits = p.first;
         }
-        bits.push(acc, abits);
     }
     else { // CF needs a different rung than the group, so the change is never 0
         // First, encode trung using code-switch with the change bit cleared
-        acc |= (cs & 0xfeull) << abits;
+        acc |= (cs & (TBLMASK - 1)) << abits;
         abits += cs >> 12;
 
         // Then encode cfrung, using code-switch from trung, 
@@ -254,95 +257,26 @@ void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung)
         // Push the accumulator and the cf encoding
         // Could use the accumulator and let groupencode deal with last part
         assert(0 != (cf >> cfrung) || cfrung == 0); // CF value is in the long group
-
         if (cfrung > 1) {
             auto p = qb3csztbl(cf ^ (1ull << cfrung), cfrung - 1); // Can't overflow
-            if (p.first + abits > 64) {
-                bits.push(acc, abits);
-                acc = abits = 0;
+            if (p.first + abits <= 64) {
+                acc |= p.second << abits;
+                abits += p.first;
             }
-            acc |= p.second << abits;
-            abits += p.first;
+            else { // can't oveflow since cfrung can't be 63
+                bits.push(acc, abits);
+                acc = p.second;
+                abits = p.first;
+            }
         }
         else { // single bit, there is enough space, cfrung 0 or 1, save only the bottom bit
             acc |= static_cast<uint64_t>(cf - static_cast<T>(cfrung * 2)) << abits++;
         }
-        bits.push(acc, abits);
     }
-
     // And the reduced group
-    groupencode(cfgroup, maxval, bits);
+    groupencode(cfgroup, maxval, bits, acc, abits);
 }
 
-
-template <typename T = uint8_t>
-bool encode_cf(oBits s, const T *image, size_t xsize, size_t ysize, size_t bands, int mb = 1)
-{
-    constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-    assert(0 == xsize % B && 0 == ysize % B);
-
-    // Running code length, start with nominal value
-    std::vector<size_t> runbits(bands, sizeof(T) * 8 - 1);
-    std::vector<T> prev(bands, 0u);      // Previous value, per band
-    T group[B2];  // Current 2D group to encode, as array
-    size_t offsets[B2];
-
-    for (size_t i = 0; i < B2; i++)
-        offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
-    for (size_t y = 0; y < ysize; y += B) {
-        for (size_t x = 0; x < xsize; x += B) {
-            size_t loc = (y * xsize + x) * bands; // Top-left pixel address
-            for (size_t c = 0; c < bands; c++) { // blocks are band interleaved
-                T maxval(0); // Maximum mag-sign value within this group
-                auto oldrung = runbits[c];
-                { // Collect the block for this band, convert to running delta mag-sign
-                    auto prv = prev[c];
-                    if (mb != c && mb >= 0 && mb < bands) {
-                        for (size_t i = 0; i < B2; i++) {
-                            T g = image[loc + c + offsets[i]] - image[loc + mb + offsets[i]];
-                            prv += g -= prv;
-                            group[i] = mags(g);
-                            maxval = std::max(maxval, mags(g));
-                        }
-                    }
-                    else {
-                        for (size_t i = 0; i < B2; i++) {
-                            T g = image[loc + c + offsets[i]];
-                            prv += g -= prv;
-                            group[i] = mags(g);
-                            maxval = std::max(maxval, mags(g));
-                        }
-                    }
-                    prev[c] = prv;
-                }
-
-                const size_t rung = topbit(maxval | 1); // Force at least one bit set
-                runbits[c] = rung;
-                if (0 == rung) { // only 1s and 0s, rung is -1 or 0
-                    // Encode as QB3 group, no point in trying other modes
-                    uint64_t acc = CSW[UBITS][(rung - oldrung) & ((1ull << UBITS) - 1)];
-                    size_t abits = acc >> 12;
-                    acc &= 0xffull;
-                    acc |= static_cast<uint64_t>(maxval) << abits++; // Add the all-zero flag
-                    if (0 != maxval)
-                        for (size_t i = 0; i < B2; i++)
-                            acc |= static_cast<uint64_t>(group[i]) << abits++;
-                    s.push(acc, abits);
-                    continue;
-                }
-
-                // Try the common factor
-                auto cf = gcf(group);
-                if (cf > 1)
-                    cfgenc(s, group, cf, oldrung);
-                else
-                    groupencode(group, maxval, oldrung, s);
-            }
-        }
-    }
-
-    return true;
-}
 
 // Returns error code or 0 if success
 // TODO: Error code mapping
