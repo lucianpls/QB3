@@ -105,6 +105,10 @@ public:
         bitp += nbits;
     }
 
+    size_t position() const {
+        return bitp;
+    }
+
 private:
     uint8_t *v;
 

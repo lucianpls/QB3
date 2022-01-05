@@ -52,7 +52,6 @@ static std::pair<size_t, uint64_t> qb3dsztbl(uint64_t val, size_t rung) {
 template<typename T>
 void gdecode(iBits &s, size_t rung, T group[B2], uint64_t acc, size_t abits) {
     assert(abits <= 8);
-
     if (0 == rung) { // single bits, special case, need at least 17bits in accumulator
         if (0 != ((acc >> abits++) & 1)) {
             for (int i = 0; i < B2; i++)
@@ -64,7 +63,6 @@ void gdecode(iBits &s, size_t rung, T group[B2], uint64_t acc, size_t abits) {
         }
         s.advance(abits);
     }
-
     else if (rung < 6) { // Table decode, half of the values fit in accumulator
         const auto drg = DRG[rung];
         const auto m = (1ull << (rung + 2)) - 1;
@@ -87,7 +85,6 @@ void gdecode(iBits &s, size_t rung, T group[B2], uint64_t acc, size_t abits) {
         }
         s.advance(abits);
     }
-
     // Last part of table decoding, use the accumulator for every 4 values
     else if (rung < (sizeof(DRG) / sizeof(*DRG))) {
         const auto drg = DRG[rung];
@@ -103,7 +100,6 @@ void gdecode(iBits &s, size_t rung, T group[B2], uint64_t acc, size_t abits) {
             abits = 0;
         }
     }
-
     // Computed decoding, one stream read per value
     else if (sizeof(T) != 1) {
         s.advance(abits);
@@ -134,7 +130,6 @@ void gdecode(iBits &s, size_t rung, T group[B2], uint64_t acc, size_t abits) {
             }
         }
     }
-
     // Undo the step shift, MSB of last value has to be zero
     if ((0 == (group[B2 - 1] >> rung)) & (rung > 0)) {
         auto p = step(group, rung);
@@ -154,17 +149,12 @@ template<typename T>
 DLLEXPORT bool decode(uint8_t *src, size_t len, T* image,
     size_t xsize, size_t ysize, size_t bands, size_t *cband)
 {
-    // Set when an unexpected condition occurs
     bool failure(false);
-
-    // Unit size bit length
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-
     iBits s(src, len);
     std::vector<T> prev(bands, 0);
     T group[B2];
     std::vector<size_t> runbits(bands, sizeof(T) * 8 - 1);
-
     std::vector<size_t> offsets(B2);
     for (size_t i = 0; i < B2; i++)
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
@@ -184,7 +174,6 @@ DLLEXPORT bool decode(uint8_t *src, size_t len, T* image,
                     cs = DSW[UBITS][(acc >> 1) & ((1ull << (UBITS + 1)) - 1)];
                     abits = static_cast<size_t>(cs >> 12);
                 }
-
                 if (abits == 1 || 0 != (cs & TBLMASK)) { // Normal decoding, not a signal
                     auto rung = (runbits[c] + cs) & ((1ull << UBITS) - 1);
                     runbits[c] = rung;
@@ -193,7 +182,6 @@ DLLEXPORT bool decode(uint8_t *src, size_t len, T* image,
                 else { // signal, cf decoding
                     T cf;
                     size_t cfrung;
-
                     // The rung switch for the values
                     cs = DSW[UBITS][(acc >> (abits + 1)) & ((1ull << (UBITS + 1)) - 1)];
                     auto rung = (runbits[c] + cs) & ((1ull << UBITS) - 1);
@@ -265,13 +253,11 @@ DLLEXPORT bool decode(uint8_t *src, size_t len, T* image,
                         runbits[c] = topbit(maxval | 1); // Still, don't call topbit with 0
                     }
                 }
-
                 auto prv = prev[c];
                 for (int i = 0; i < B2; i++)
                     image[loc + c + offsets[i]] = prv += smag(group[i]);
                 prev[c] = prv;
             }
-
             for (int c = 0; c < bands; c++)
                 if (cband[c] != c)
                     for (size_t i = 0; i < B2; i++)
@@ -280,5 +266,4 @@ DLLEXPORT bool decode(uint8_t *src, size_t len, T* image,
     }
     return 0;
 }
-
 } // Namespace

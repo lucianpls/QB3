@@ -51,6 +51,13 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
     auto qenc = qb3_create_encoder(xsize, ysize, bands, tp);
     vector<uint8_t> outvec(qb3_max_encoded_size(qenc));
 
+    if (main_band != 1) {
+        std::vector<size_t> cbands(bands);
+        if (-1 == main_band)
+            for (size_t i = 0; i < bands; i++)
+                cbands[i] = i;
+        qb3_set_encoder_coreband(qenc, bands, cbands.data());
+    }
     t1 = high_resolution_clock::now();
     auto outsize = qb3_encode(qenc, static_cast<void *>(img.data()), outvec.data(), 
         fast ? qb3_mode::QB3_BASE : qb3_mode::QB3_BEST);
@@ -71,6 +78,13 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
     std::vector<T> re(xsize * ysize * bands);
 
     auto qdec = qb3_create_decoder(xsize, ysize, bands, tp);
+    if (main_band != 1) {
+        std::vector<size_t> cbands(bands);
+        if (-1 == main_band)
+            for (size_t i = 0; i < bands; i++)
+                cbands[i] = i;
+        qb3_set_decoder_coreband(qdec, bands, cbands.data());
+    }
     t1 = high_resolution_clock::now();
     qb3_decode(qdec, outvec.data(), outsize, re.data());
     t2 = high_resolution_clock::now();

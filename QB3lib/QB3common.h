@@ -106,7 +106,7 @@ static inline T magsabs(T val) {
     return (val >> 1) + (val & 1);
 }
 
-// If the rung bits of the input values match *1*0, returns the index of first 0, otherwise B2 + 1
+// If the rung bits of the input values match 1*0*, returns the index of first 0, otherwise B2 + 1
 template<typename T>
 static size_t step(const T* const v, size_t rung) {
     // We are looking for 1*0* pattern on the B2 bits
