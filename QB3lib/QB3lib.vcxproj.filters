@@ -35,10 +35,10 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Q3Bencode.cpp">
+    <ClCompile Include="QB3encode.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Q3Bmain.cpp">
+    <ClCompile Include="QB3main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="QB3tables.cpp">
