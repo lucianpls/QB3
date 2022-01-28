@@ -146,7 +146,7 @@ static inline T magsmul(T val, T cf) {
 }
 
 template<typename T>
-DLLEXPORT bool decode(uint8_t *src, size_t len, T* image,
+bool decode(uint8_t *src, size_t len, T* image,
     size_t xsize, size_t ysize, size_t bands, size_t *cband)
 {
     bool failure(false);

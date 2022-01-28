@@ -19,7 +19,7 @@ Contributors:  Lucian Plesea
 #include <cinttypes>
 
 #if defined(_WIN32)
-#if defined(QB3_EXPORTS)
+#if defined(QB3lib_EXPORTS)
 #define DLLEXPORT __declspec(dllexport)
 #else
 #define DLLEXPORT __declspec(dllimport)
