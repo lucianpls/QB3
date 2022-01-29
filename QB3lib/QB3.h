@@ -34,6 +34,9 @@ Contributors:  Lucian Plesea
 // Keep this close to plain C so it can have a C API
 #define QB3_MAXBANDS 10
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
 typedef struct encs * encsp; // encoder
 typedef struct decs * decsp; // decoder
 
@@ -78,3 +81,6 @@ DLLEXPORT void qb3_destroy_decoder(decsp p);
 DLLEXPORT size_t qb3_decoded_size(const decsp p);
 
 DLLEXPORT size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination);
+#if defined(__cplusplus)
+}
+#endif
