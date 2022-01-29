@@ -17,6 +17,8 @@ Contributors:  Lucian Plesea
 
 #pragma once
 #include <cinttypes>
+// For size_t
+#include <stddef.h>
 
 #if defined(_WIN32)
 #if defined(QB3lib_EXPORTS)
