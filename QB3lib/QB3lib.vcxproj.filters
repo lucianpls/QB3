@@ -38,9 +38,6 @@
     <ClCompile Include="QB3encode.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="QB3main.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="QB3tables.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

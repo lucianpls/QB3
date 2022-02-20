@@ -20,7 +20,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="QB3encode.cpp" />
-    <ClCompile Include="QB3main.cpp" />
     <ClCompile Include="QB3decode.cpp" />
     <ClCompile Include="QB3tables.cpp" />
   </ItemGroup>
