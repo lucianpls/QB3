@@ -49,24 +49,31 @@ public:
         bitp = (bitp + d < len * 8) ? (bitp + d) : (len * 8);
     }
 
+
+    // Get 64bits without changing the state, use only when input buffer has 8 extra usable bytes
+    // Uses unaligned access
+    uint64_t unsafe_peek() const {
+        return (v[bitp / 8] >> (bitp % 8)) | (*reinterpret_cast<const uint64_t *>(v + ((bitp + 7) / 8)) << ((8 - bitp) % 8));
+    }
+
     // Get 64bits without changing the state
     uint64_t peek() const {
-        uint64_t val = 0;
-        size_t bits = 0;
-        if (bitp % 8) { // partial bits
-            val = v[bitp / 8] >> (bitp % 8);
-            bits = 8 - (bitp % 8);
-        }
+        if (avail() > 63)
+            return unsafe_peek();
+        if (empty())
+            return 0;
 
-        // (bitp + bits) is now byte aligned, we need data from 8 more bytes
-        for (; bits < 64 && bitp + bits < len * 8; bits += 8)
+        // Careful
+        uint64_t val = v[bitp / 8] >> (bitp % 8);
+        // (bitp + bits) is byte aligned, we need data from 7 or 8 more bytes
+        for (size_t bits = 8 - (bitp % 8); bits < 64 && bitp + bits < len * 8; bits += 8)
             val |= static_cast<uint64_t>(v[(bitp + bits) / 8]) << bits;
         return val;
     }
 
     // informational
     size_t avail() const { return len * 8 - bitp; }
-    bool empty() const { return len * 8 <= bitp; }
+    bool empty() const { return avail() == 0; }
 
     size_t position() const {
         return bitp;
