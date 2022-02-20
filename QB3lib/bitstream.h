@@ -56,10 +56,8 @@ public:
         return (v[bitp / 8] >> (bitp % 8)) | (*reinterpret_cast<const uint64_t *>(v + ((bitp + 7) / 8)) << ((8 - bitp) % 8));
     }
 
-    // Get 64bits without changing the state
-    uint64_t peek() const {
-        if (avail() > 63)
-            return unsafe_peek();
+    // Careful
+    uint64_t safe_peek() const {
         if (empty())
             return 0;
 
@@ -69,6 +67,13 @@ public:
         for (size_t bits = 8 - (bitp % 8); bits < 64 && bitp + bits < len * 8; bits += 8)
             val |= static_cast<uint64_t>(v[(bitp + bits) / 8]) << bits;
         return val;
+    }
+
+    // Get 64bits without changing the state
+    uint64_t peek() const {
+        if (avail() >= 64)
+            return unsafe_peek();
+        return safe_peek();
     }
 
     // informational

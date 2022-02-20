@@ -131,7 +131,7 @@ void gdecode(iBits &s, size_t rung, T group[B2], uint64_t acc, size_t abits) {
         }
     }
     // Undo the step shift, MSB of last value has to be zero
-    if ((0 == (group[B2 - 1] >> rung)) & (rung > 0)) {
+    if ((0 == (group[B2 - 1] >> rung)) && (rung > 0)) {
         auto p = step(group, rung);
         assert(p != B2); // Can't occur, could be a signal
         if (p < B2)
