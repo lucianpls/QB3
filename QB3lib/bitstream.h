@@ -25,7 +25,7 @@ Content: Bit streams, in low endian format
 // Input bitstream, doesn't go past size
 class iBits {
 public:
-    iBits(const uint8_t* data, size_t size) : v(data), len(size), bitp(0) {}
+    iBits(const uint8_t* data, size_t size) : v(data), len(size * 8), bitp(0) {}
 
     // Single bit fetch
     uint64_t get() {
@@ -46,25 +46,23 @@ public:
 
     // Advance read position by d bits
     void advance(size_t d) {
-        bitp = (bitp + d < len * 8) ? (bitp + d) : (len * 8);
+        bitp = (bitp + d < len) ? (bitp + d) : len;
     }
 
 
     // Get 64bits without changing the state, use only when input buffer has 8 extra usable bytes
-    // Uses unaligned access
-    uint64_t unsafe_peek() const {
-        return (v[bitp / 8] >> (bitp % 8)) | (*reinterpret_cast<const uint64_t *>(v + ((bitp + 7) / 8)) << ((8 - bitp) % 8));
+    uint64_t unsafe_peek() const { // Uses unaligned access
+        return (v[bitp / 8] >> (bitp % 8)) | 
+            (*reinterpret_cast<const uint64_t *>(v + ((bitp + 7) / 8)) << ((8 - bitp) % 8));
     }
 
     // Careful
     uint64_t safe_peek() const {
         if (empty())
             return 0;
-
-        // Careful
         uint64_t val = v[bitp / 8] >> (bitp % 8);
         // (bitp + bits) is byte aligned, we need data from 7 or 8 more bytes
-        for (size_t bits = 8 - (bitp % 8); bits < 64 && bitp + bits < len * 8; bits += 8)
+        for (size_t bits = 8 - (bitp % 8); bits < 64 && bitp + bits < len; bits += 8)
             val |= static_cast<uint64_t>(v[(bitp + bits) / 8]) << bits;
         return val;
     }
@@ -77,7 +75,7 @@ public:
     }
 
     // informational
-    size_t avail() const { return len * 8 - bitp; }
+    size_t avail() const { return len - bitp; }
     bool empty() const { return avail() == 0; }
 
     size_t position() const {
@@ -86,8 +84,8 @@ public:
 
 private:
     const uint8_t* v;
+    // In bits
     const size_t len;
-
     // next bit to read
     size_t bitp;
 };

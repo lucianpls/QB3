@@ -239,7 +239,6 @@ bool decode(uint8_t *src, size_t len, T* image,
                             }
                         }
                         s.advance(abits);
-                        // Read the group, refresh the accumulator
                         gdecode(s, rung, group, s.peek(), 0);
                         // Multiply with CF and get the maxval for the actual group rung
                         cf += 2;
