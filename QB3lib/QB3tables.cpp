@@ -22,7 +22,7 @@ const uint8_t xlut[16] = { 0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3 };
 const uint8_t ylut[16] = { 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3 };
 
 // Encoding tables for rungs 2 to 11, for speedup. Rung 0 and 1 are special
-// Storage is under 8K by using short int, or under 1K when only byte data is optimized
+// Storage is under 8K by using short int, under 1K for short tables
 // See tables.py for how they are generated
 const uint16_t crg0[] = { 0x1000, 0x1001 };
 const uint16_t crg1[] = { 0x1000, 0x2003, 0x3001, 0x3005 };
@@ -67,7 +67,7 @@ const uint16_t crg7[] = { 0x7040, 0x7041, 0x7042, 0x7043, 0x7044, 0x7045, 0x7046
 #if defined(QB3_SHORT_TABLES)
 const uint16_t* CRG[] = { crg0, crg1, crg2, crg3, crg4, crg5, crg6, crg7 };
 #else
-// Define encoding tables for rungs 8, 9 and 10. They make no difference when encoding byte data
+// Define encoding tables for rungs 8, 9 and 10. This makes no difference when encoding byte data
 const uint16_t crg8[] = { 0x8080, 0x8081, 0x8082, 0x8083, 0x8084, 0x8085, 0x8086, 0x8087, 0x8088, 0x8089, 0x808a, 0x808b,
 0x808c, 0x808d, 0x808e, 0x808f, 0x8090, 0x8091, 0x8092, 0x8093, 0x8094, 0x8095, 0x8096, 0x8097, 0x8098, 0x8099, 0x809a, 0x809b,
 0x809c, 0x809d, 0x809e, 0x809f, 0x80a0, 0x80a1, 0x80a2, 0x80a3, 0x80a4, 0x80a5, 0x80a6, 0x80a7, 0x80a8, 0x80a9, 0x80aa, 0x80ab,
@@ -299,7 +299,7 @@ const uint16_t* CRG[] = { crg0, crg1, crg2, crg3, crg4, crg5, crg6, crg7, crg8, 
 #endif
 
 // Decoding tables, twice as large as the encoding ones
-// 2k for byte or 16K up to rung 11
+// 2k for 0-7 or 16K up to rung 10
 const uint16_t drg0[] = { 0x1000, 0x1001 };
 const uint16_t drg1[] = { 0x1000, 0x3002, 0x1000, 0x2001, 0x1000, 0x3003, 0x1000, 0x2001 };
 const uint16_t drg2[] = { 0x4004, 0x3002, 0x2000, 0x2001, 0x4005, 0x3003, 0x2000, 0x2001, 0x4006, 0x3002, 0x2000, 0x2001,
@@ -832,7 +832,7 @@ const uint16_t* DRG[] = { drg0, drg1, drg2, drg3, drg4, drg5, drg6, drg7, drg8, 
 
 // Code switch encoding tables, about 256 bytes, stored the same way
 // See tables.py for how they are generated
-// They are defined for 3 4 5 and 6 bits for unit length. 0x1000 means no change
+// They are defined for 3 - 6 bits for unit length. 0x1000 means no change
 const uint16_t csw3[] = { 0x1000, 0x3005, 0x4003, 0x5001, 0x5019, 0x5009, 0x400b, 0x3007 };
 const uint16_t csw4[] = { 0x1000, 0x4009, 0x400d, 0x5005, 0x5007, 0x6001, 0x6021, 0x6003, 0x6033, 0x6013, 0x6031, 0x6011,
 0x5017, 0x5015, 0x400f, 0x400b };
