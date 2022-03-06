@@ -19,6 +19,12 @@ Content: QB3 parts used by both the encoder and the decoder
 #pragma once
 #include "QB3.h"
 #include "bitstream.h"
+
+// Define QB3_SHORT_TABLES to minimize the size of the tables
+// This makes no difference for byte data, runs slower for large data types
+// It saves about 20KB
+// #define QB3_SHORT_TABLES
+//
 #include "QB3tables.h"
 
 #if defined(_WIN32)
@@ -75,34 +81,26 @@ static size_t setbits16(uint64_t val) {
 
 #endif
 
-// Define this to minimize the size of the tables if only byte data is required
-// Otherwise it still works, loosing a little speed for large data types
-// It saves about 20KB
-// #define QB3_SHORT_TABLES
-
-extern const uint8_t xlut[16];
-extern const uint8_t ylut[16];
-
-// Encode integers as absolute magnitude and sign, so the bit 0 is the sign.
-// This encoding has the top rung always zero, regardless of sign
-// To keep the range exactly the same as two's complement, the magnitude of 
+// Encode integers as magnitude and sign, with bit 0 for sign.
+// This encoding has the top bits always zero, regardless of sign
+// To keep the range the same as two's complement, the magnitude of 
 // negative values is biased down by one (no negative zero)
 
 // Change to mag-sign without conditionals, as fast as C can make it
 template<typename T>
 static T mags(T v) {
-    return (std::numeric_limits<T>::max() * (v >> (8 * sizeof(T) - 1))) ^ (v << 1);
+    return (v << 1) ^ (~T(0) * (v >> (8 * sizeof(T) - 1)));
 }
 
 // Undo mag-sign without conditionals, as fast as C can make it
 template<typename T>
 static T smag(T v) {
-    return (std::numeric_limits<T>::max() * (v & 1)) ^ (v >> 1);
+    return (v >> 1) ^ (~T(0) * (v & 1));
 }
 
-// Convert from mag-sign to absolute
+// Absolute from mag-sign
 template<typename T>
-static inline T magsabs(T val) {
+static T magsabs(T val) {
     return (val >> 1) + (val & 1);
 }
 
