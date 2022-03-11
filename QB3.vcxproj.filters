@@ -22,5 +22,11 @@
     <None Include="README.md">
       <Filter>Extras</Filter>
     </None>
+    <None Include="bitmap.md">
+      <Filter>Extras</Filter>
+    </None>
+    <None Include="QB3.md">
+      <Filter>Extras</Filter>
+    </None>
   </ItemGroup>
 </Project>

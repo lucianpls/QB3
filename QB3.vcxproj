@@ -105,6 +105,8 @@
     <ClCompile Include="test_qb3.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="bitmap.md" />
+    <None Include="QB3.md" />
     <None Include="README.md" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
