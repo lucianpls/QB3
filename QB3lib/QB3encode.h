@@ -20,6 +20,7 @@ Contributors:  Lucian Plesea
 #include <utility>
 #include <functional>
 #include <algorithm>
+#include <type_traits>
 #include "bitstream.h"
 #include "QB3common.h"
 
@@ -247,10 +248,145 @@ static void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung) {
     groupencode(group, maxval, bits, acc, abits);
 }
 
+template<typename T>
+struct encoder {
+    encoder(oBits &s) : _s(s) {};
+    virtual ~encoder() {};
+    size_t xsz, ysz, csz;
+    std::vector<T const *> line;
+    static const size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+    std::vector<size_t> core;
+    T group[B2];
+    oBits &_s;
+
+    T collect_group() {
+        auto prv = prev[c];
+        T maxval(0);
+        if (c != core[c]) {
+            for (int i = 0; i < B2; i++) {
+                const T* pixl = line[y + ylut[i]] + (x + xlut[i]) * csz;
+                T g = pixl[c] - pixl[core[c]];
+                prv += g -= prv;
+                group[i] = mags(g);
+                maxval = std::max(maxval, mags(g));
+            }
+        }
+        else {
+            for (int i = 0; i < B2; i++) {
+                T g = (line[y + ylut[i]] + (x + xlut[i]) * csz)[c];
+                prv += g -= prv;
+                group[i] = mags(g);
+                maxval = std::max(maxval, mags(g));
+            }
+        }
+        prev[c] = prv;
+        return maxval;
+    }
+
+    virtual void encode_strip(); // Assumes c and x info is valid
+    void encode(); // Assumes c, x and y info is valid
+    int encode_image(const T* image, size_t xsize, size_t ysize, size_t bands, const size_t* cband);
+
+    // Transient
+    // block location
+    size_t y; // Top line
+    size_t x; // Left column
+    size_t c; // band
+    std::vector<size_t> runbits;
+    std::vector<T> prev;
+};
+
+// fast encoding
+template<typename T>
+void encoder<T>::encode_strip() {
+    assert(0 == xsz % B);
+    for (x = 0; x < xsz; x += B) {
+        for (c = 0; c < csz; c++) {
+            T maxval = collect_group();
+            groupencode(group, maxval, runbits[c], _s);
+            runbits[c] = topbit(maxval | 1);
+        }
+    }
+}
+
+// Assumes all lines are valid
+template<typename T>
+void encoder<T>::encode() {
+    assert(0 == ysz % B);
+    for (y = 0; y < ysz; y += B)
+        encode_strip();
+}
+
+// Checks input, sets up the state then calls encode
+template<typename T>
+int encoder<T>::encode_image(const T* image, size_t xsize, size_t ysize, size_t bands, const size_t* cband) {
+    if (xsize == 0 || xsize > 0x10000ull || ysize == 0 || ysize > 0x10000ull
+        || 0 == bands || nullptr == cband)
+        return 1;
+    // Check band mapping
+    for (size_t c = 0; c < bands; c++)
+        if (cband[c] >= bands)
+            return 2; // Band mapping error
+    if (0 != ((xsize % B) | (ysize % B)))
+        return 3; // Error, size is not a block multiple
+    csz = bands;
+    ysz = ysize;
+    xsz = xsize;
+    core.clear();
+    prev.clear();
+    runbits.clear();
+    for (c = 0; c < bands; c++) {
+        core.push_back(cband[c]);
+        prev.push_back(T(0));
+        runbits.push_back(sizeof(T) * 8 - 1);
+    }
+    line.clear();
+    size_t line_size = bands * xsz;
+    for (y = 0; y < ysz; y++)
+        line.push_back(image + y * line_size);
+    encode();
+    return 0;
+}
+
+template<typename T>
+struct encoder_best : encoder<T> {
+    encoder_best(oBits& s) : encoder(s) {};
+    virtual ~encoder_best() {};
+    virtual void encode_strip();
+};
+
+template<typename T>
+void encoder_best<T>::encode_strip() {
+    for (this->x = 0; this->x < this->xsz; this->x += B) {
+        for (this->c = 0; this->c < this->csz; this->c++) {
+            T maxval = this->collect_group();
+            const auto oldrung = this->runbits[this->c];
+            auto rung = topbit(maxval | 1);
+            this->runbits[this->c] = rung;
+            if (rung != 0) {
+                auto cf = gcf(this->group);
+                if (cf > 1) {// Always smaller in cf encoding
+                    cfgenc(this->s, this->group, cf, oldrung);
+                    continue;
+                }
+            }
+            groupencode(this->group, maxval, oldrung, this->s);
+        }
+    }
+}
+
+//template<typename T>
+//static int encode_fast(const T* image, oBits& s, size_t xsize, size_t ysize, size_t bands, const size_t* cband)
+//{
+//    encoder<T> encdr(s);
+//    return encdr.encode_image(image, xsize, ysize, bands, cband);
+//}
+
 // Only basic encoding
 template<typename T>
 static int encode_fast(const T* image, oBits& s, size_t xsize, size_t ysize, size_t bands, const size_t* cband)
 {
+    static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
     if (xsize == 0 || xsize > 0x10000ull || ysize == 0 || ysize > 0x10000ull
         || 0 == bands || nullptr == cband)
         return 1;
@@ -262,10 +398,10 @@ static int encode_fast(const T* image, oBits& s, size_t xsize, size_t ysize, siz
     // Running code length, start with nominal value
     std::vector<size_t> runbits(bands, sizeof(T) * 8 - 1);
     std::vector<T> prev(bands, 0u);      // Previous value, per band
-    T group[B2];  // Current 2D group to encode, as array
     size_t offsets[B2];
     for (size_t i = 0; i < B2; i++)
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
+    T group[B2];
     for (size_t y = 0; y < ysize; y += B) {
         for (size_t x = 0; x < xsize; x += B) {
             const size_t loc = (y * xsize + x) * bands; // Top-left pixel address
@@ -304,7 +440,8 @@ static int encode_fast(const T* image, oBits& s, size_t xsize, size_t ysize, siz
 template <typename T = uint8_t>
 static int encode_best(const T *image, oBits& s, size_t xsize, size_t ysize, size_t bands, const size_t *cband)
 {
-    if (xsize == 0 || xsize > 0x10000ull || ysize == 0 || ysize > 0x10000ull 
+    static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
+    if (xsize == 0 || xsize > 0x10000ull || ysize == 0 || ysize > 0x10000ull
         || 0 == bands || nullptr == cband)
         return 1;
     // Check band mapping

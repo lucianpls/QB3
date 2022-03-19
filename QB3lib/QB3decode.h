@@ -20,6 +20,7 @@ Contributors:  Lucian Plesea
 #include <cinttypes>
 #include <utility>
 #include <vector>
+#include <type_traits>
 
 namespace QB3 {
 #include "QB3common.h"
@@ -149,6 +150,7 @@ template<typename T>
 static bool decode(uint8_t *src, size_t len, T* image,
     size_t xsize, size_t ysize, size_t bands, size_t *cband)
 {
+    static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
     bool failure(false);
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     iBits s(src, len);
