@@ -41,9 +41,9 @@ typedef struct encs * encsp; // encoder
 typedef struct decs * decsp; // decoder
 
 // Types, can be used with either signed or unsigned
-enum class qb3_dtype { QB3_I8 = 0, QB3_I16, QB3_I32, QB3_I64 };
+enum qb3_dtype { QB3_I8 = 0, QB3_I16, QB3_I32, QB3_I64 };
 // Encode mode
-enum class qb3_mode { QB3_DEFAULT = 0, QB3_BASE = 0, QB3_BEST };
+enum qb3_mode { QB3_DEFAULT = 0, QB3_BASE = 0, QB3_BEST };
 
 // In QB3encode.cpp
 // Call before anything else
@@ -81,6 +81,8 @@ DLLEXPORT void qb3_destroy_decoder(decsp p);
 DLLEXPORT size_t qb3_decoded_size(const decsp p);
 
 DLLEXPORT size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination);
+
 #if defined(__cplusplus)
 }
+
 #endif
