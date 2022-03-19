@@ -19,6 +19,8 @@ Contributors:  Lucian Plesea
 #include <chrono>
 #include <string>
 #include <vector>
+#include <cassert>
+#include <type_traits>
 
 // From https://github.com/lucianpls/libicd
 #include <icd_codecs.h>
@@ -119,6 +121,8 @@ void check(vector<uint16_t>& image, const Raster& raster, uint64_t m, int main_b
     auto qenc = qb3_create_encoder(xsize, ysize, bands, tp);
     vector<uint8_t> outvec(qb3_max_encoded_size(qenc));
 
+    //size_t bandmap[] = { 0, 1, 2, 3, 4, 5 };
+    //qb3_set_encoder_coreband(qenc, 3, bandmap);
     t1 = high_resolution_clock::now();
     auto outsize = qb3_encode(qenc, img.data(), outvec.data(), fast ? qb3_mode::QB3_BASE : qb3_mode::QB3_BEST);
     t2 = high_resolution_clock::now();
@@ -132,12 +136,13 @@ void check(vector<uint16_t>& image, const Raster& raster, uint64_t m, int main_b
         cout << "Fast ";
     if (m != 1)
         cout << "Multiplier " << m;
-    cout << " \tBPV " << sizeof(T) << '\t' << outvec.size() << "\t"
-        << float(outvec.size()) * 100 / image.size() / sizeof(T) << "\t"
+    cout << " \tBPV " << sizeof(T) << '\t' << outsize << "\t"
+        << float(outsize) * 100 / image.size() / sizeof(T) << "\t"
         << time_span << "\t";
     std::vector<T> re(xsize * ysize * bands);
 
     auto qdec = qb3_create_decoder(xsize, ysize, bands, tp);
+    //qb3_set_decoder_coreband(qdec, 3, bandmap);
     t1 = high_resolution_clock::now();
     qb3_decode(qdec, outvec.data(), outsize, re.data());
     t2 = high_resolution_clock::now();
@@ -187,7 +192,7 @@ int test(string fname) {
     return 0;
 }
 
-int main(int argc, char **argv)
+int main(int argc, char **argv) 
 {
     bool test_bitmap = false;
     bool test_QB3 = true;

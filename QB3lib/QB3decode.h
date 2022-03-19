@@ -50,7 +50,7 @@ static std::pair<size_t, uint64_t> qb3dsztbl(uint64_t val, size_t rung) {
 // Decode a B2 sized group of QB3 values from s and acc
 // Accumulator should be valid and almost full
 template<typename T>
-void gdecode(iBits &s, size_t rung, T group[B2], uint64_t acc, size_t abits) {
+static void gdecode(iBits &s, size_t rung, T group[B2], uint64_t acc, size_t abits) {
     assert(abits <= 8);
     if (0 == rung) { // single bits, special case, need at least 17bits in accumulator
         if (0 != ((acc >> abits++) & 1)) {
@@ -141,12 +141,12 @@ void gdecode(iBits &s, size_t rung, T group[B2], uint64_t acc, size_t abits) {
 
 // integer multiply val(in magsign) by cf(normal)
 template<typename T>
-static inline T magsmul(T val, T cf) {
+static T magsmul(T val, T cf) {
     return magsabs(val) * (cf << 1) - (val & 1);
 }
 
 template<typename T>
-bool decode(uint8_t *src, size_t len, T* image,
+static bool decode(uint8_t *src, size_t len, T* image,
     size_t xsize, size_t ysize, size_t bands, size_t *cband)
 {
     bool failure(false);

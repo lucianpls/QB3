@@ -37,9 +37,13 @@ void qb3_destroy_encoder(encsp p) {
 bool qb3_set_encoder_coreband(encsp p, size_t bands, const size_t *cband) {
     if (bands != p->nbands)
         return false; // Incorrect band number
-    // Store the new mapping
+    // Set it, make sure it's not out of spec
     for (size_t i = 0; i < bands; i++)
         p->cband[i] = (cband[i] < bands) ? cband[i] : i;
+    // Force any core band to be independent
+    for (size_t i = 0; i < bands; i++)
+        if (p->cband[i] != i)
+            p->cband[p->cband[i]] = p->cband[i];
     return true;
 }
 
@@ -47,11 +51,11 @@ bool qb3_set_encoder_coreband(encsp p, size_t bands, const size_t *cband) {
 static const int typesizes[] = { 1, 2, 4, 8 };
 
 size_t qb3_max_encoded_size(const encsp p) {
-    // Start with a static size of 1K, in case the input is tiny
-    // Maximum expansion is definitely under 10 / 8 of the input
-    // TODO: Should be under 9 / 8, data type dependent
-    return p->xsize * p->ysize * p->nbands
-        * typesizes[static_cast<int>(p->type)] * 10 / 8 + 1024;
+    // Pad to 4 x 4
+    size_t nvalues = 16 * ((p->xsize + 3) / 4) * ((p->ysize + 3) / 4) * p->nbands;
+    // Maximum expansion is 17/16 bits per input value, for large number of values
+    double bits_per_value = 17.0 / 16.0 + typesizes[static_cast<int>(p->type)] * 8;
+    return 1024 + static_cast<size_t>(bits_per_value * nvalues / 8);
 }
 
 // The encode public API, returns 0 if an error is detected

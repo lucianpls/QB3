@@ -26,14 +26,14 @@ Contributors:  Lucian Plesea
 namespace QB3 {
 // integer divide val(in magsign) by cf(normal)
 template<typename T>
-static inline T magsdiv(T val, T cf) {
+static T magsdiv(T val, T cf) {
     return ((magsabs(val) / cf) << 1) - (val & 1);
 }
 
 // return greatest common factor (absolute) of a B2 sized vector of mag-sign values
 // T is always unsigned
 template<typename T>
-T gcf(const T* group) {
+static T gcf(const T* group) {
     // Work with actual absolute values
     T v[B2] = {0}; // Only the first value has to be zero
     int sz = 0;
@@ -84,7 +84,8 @@ static std::pair<size_t, uint64_t> qb3csztbl(uint64_t val, size_t rung) {
 // only encode the group entries, not the rung switch
 // maxval is used to choose the rung for encoding
 // If abits > 0, the accumulator is also pushed into the stream
-template <typename T> void groupencode(T group[B2], T maxval, oBits& s,
+template <typename T>
+static void groupencode(T group[B2], T maxval, oBits& s,
     uint64_t acc = 0, size_t abits = 0)
 {
     assert(abits <= 64);
@@ -164,7 +165,8 @@ template <typename T> void groupencode(T group[B2], T maxval, oBits& s,
 }
 
 // Base QB3 group encode with code switch, returns encoded size
-template <typename T = uint8_t> void groupencode(T group[B2], T maxval, size_t oldrung, oBits& s) {
+template <typename T = uint8_t> 
+static void groupencode(T group[B2], T maxval, size_t oldrung, oBits& s) {
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     uint64_t acc = CSW[UBITS][(topbit(maxval | 1) - oldrung) & ((1ull << UBITS) - 1)];
     groupencode(group, maxval, s, acc & TBLMASK, static_cast<size_t>(acc >> 12));
@@ -172,24 +174,14 @@ template <typename T = uint8_t> void groupencode(T group[B2], T maxval, size_t o
 
 // Group encode with cf
 template <typename T = uint8_t>
-void cfgenc(oBits &bits, const T group[B2], T cf, size_t oldrung)
-{
+static void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung) {
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     uint64_t acc = SIGNAL[UBITS] & TBLMASK;
     size_t abits = UBITS + 2; // SIGNAL[UBITS] >> 12;
     // divide group values by CF and find the new maxvalue
     T maxval = 0;
-    T cfgroup[B2];
-    for (size_t i = 0; i < B2; i++) {
-        if (0 != group[i]) {
-            auto val = T(((magsabs(group[i]) / cf) << 1) - (group[i] & 1));
-            maxval = std::max(maxval, val);
-            cfgroup[i] = val;
-        }
-        else {
-            cfgroup[i] = 0;
-        }
-    }
+    for (size_t i = 0; i < B2; i++) if (group[i])
+        maxval = std::max(maxval, group[i] = T(((magsabs(group[i]) / cf) << 1) - (group[i] & 1)));
     cf -= 2; // Bias down, 0 and 1 are not used
     auto trung = topbit(maxval | 1); // cf mode rung
     auto cfrung = topbit(cf | 1); // rung for cf-2 value
@@ -208,14 +200,13 @@ void cfgenc(oBits &bits, const T group[B2], T cf, size_t oldrung)
             acc |= static_cast<uint64_t>(cf) << abits++;
             // And the group bits
             for (int i = 0; i < B2; i++)
-                acc |= static_cast<uint64_t>(cfgroup[i]) << abits++;
+                acc |= static_cast<uint64_t>(group[i]) << abits++;
             // store it directly in the main output stream
             bits.push(acc, abits);
             return; // done
         }
         cfrung = trung; // Encode cf value with trung
-        // Push the accumulator and the cf encoding
-        // cfrung can't be zero or 63
+        // Push the accumulator and the cf encoding, cfrung can't be zero or 63
         auto p = qb3csztbl(cf, cfrung);
         if (p.first + abits <= 64) {
             acc |= p.second << abits;
@@ -237,9 +228,6 @@ void cfgenc(oBits &bits, const T group[B2], T cf, size_t oldrung)
         cs = CSW[UBITS][(cfrung - trung) & ((1ull << UBITS) - 1)];
         acc |= (cs & (TBLMASK - 1)) << (abits - 1);
         abits += static_cast<size_t>(cs >> 12) - 1;
-        // Push the accumulator and the cf encoding
-        // Could use the accumulator and let groupencode deal with last part
-        assert(0 != (cf >> cfrung) || cfrung == 0); // CF value is in the long group
         if (cfrung > 1) {
             auto p = qb3csztbl(cf ^ (1ull << cfrung), cfrung - 1); // Can't overflow
             if (p.first + abits <= 64) {
@@ -256,13 +244,12 @@ void cfgenc(oBits &bits, const T group[B2], T cf, size_t oldrung)
             acc |= static_cast<uint64_t>(cf - static_cast<T>(cfrung * 2)) << abits++;
         }
     }
-    // And the reduced group
-    groupencode(cfgroup, maxval, bits, acc, abits);
+    groupencode(group, maxval, bits, acc, abits);
 }
 
 // Only basic encoding
 template<typename T>
-int encode_fast(const T* image, oBits& s, size_t xsize, size_t ysize, size_t bands, const size_t* cband)
+static int encode_fast(const T* image, oBits& s, size_t xsize, size_t ysize, size_t bands, const size_t* cband)
 {
     if (xsize == 0 || xsize > 0x10000ull || ysize == 0 || ysize > 0x10000ull
         || 0 == bands || nullptr == cband)
@@ -286,7 +273,7 @@ int encode_fast(const T* image, oBits& s, size_t xsize, size_t ysize, size_t ban
                 T maxval(0); // Maximum mag-sign value within this group
                 // Collect the block for this band, convert to running delta mag-sign
                 auto prv = prev[c];
-                // Use separate loops to avoid a test inside the loop
+                // Use separate loop for basebands to avoid a test inside the hot loop
                 if (c != cband[c]) {
                     for (size_t i = 0; i < B2; i++) {
                         T g = image[loc + c + offsets[i]] - image[loc + cband[c] + offsets[i]];
@@ -295,7 +282,7 @@ int encode_fast(const T* image, oBits& s, size_t xsize, size_t ysize, size_t ban
                         maxval = std::max(maxval, mags(g));
                     }
                 }
-                else {
+                else { // baseband
                     for (size_t i = 0; i < B2; i++) {
                         T g = image[loc + c + offsets[i]];
                         prv += g -= prv;
@@ -315,7 +302,7 @@ int encode_fast(const T* image, oBits& s, size_t xsize, size_t ysize, size_t ban
 // Returns error code or 0 if success
 // TODO: Error code mapping
 template <typename T = uint8_t>
-int encode_best(const T *image, oBits& s, size_t xsize, size_t ysize, size_t bands, const size_t *cband)
+static int encode_best(const T *image, oBits& s, size_t xsize, size_t ysize, size_t bands, const size_t *cband)
 {
     if (xsize == 0 || xsize > 0x10000ull || ysize == 0 || ysize > 0x10000ull 
         || 0 == bands || nullptr == cband)
@@ -360,7 +347,7 @@ int encode_best(const T *image, oBits& s, size_t xsize, size_t ysize, size_t ban
                 const size_t rung = topbit(maxval | 1); // Force at least one bit set
                 runbits[c] = rung;
                 if (0 == rung) { // only 1s and 0s, rung is -1 or 0
-                    // Encode as QB3 group, no point in trying other modes
+                    // Encode as QB3 group, no point in trying cf
                     uint64_t acc = CSW[UBITS][(rung - oldrung) & ((1ull << UBITS) - 1)];
                     size_t abits = acc >> 12;
                     acc &= 0xffull;
@@ -372,7 +359,7 @@ int encode_best(const T *image, oBits& s, size_t xsize, size_t ysize, size_t ban
                     continue;
                 }
                 auto cf = gcf(group);
-                if (cf > 1)
+                if (cf > 1) // Always smaller in cf encoding
                     cfgenc(s, group, cf, oldrung);
                 else
                     groupencode(group, maxval, oldrung, s);
@@ -381,4 +368,23 @@ int encode_best(const T *image, oBits& s, size_t xsize, size_t ysize, size_t ban
     }
     return 0;
 }
+
+// Round to Zero Division, no overflow
+template<typename T>
+static T rto0div(T x, T y) {
+    static_assert(std::is_integral<T>(), "Integer types only");
+    T r = x / y, m = x % y;
+    y = (y >> 1);
+    return r + (~(x < 0) & (m > y)) - ((x < 0) & (m < -y));
+}
+
+// Round from Zero Division, no overflow
+template<typename T>
+static T rfr0div(T x, T y) {
+    static_assert(std::is_integral<T>(), "Integer types only");
+    T r = x / y, m = x % y;
+    y = (y >> 1) + (y & 1);
+    return r + (~(x < 0) & (m >= y)) - ((x < 0) & (m <= -y));
+}
+
 } // namespace
