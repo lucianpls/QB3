@@ -75,9 +75,6 @@ void check_plus(vector<uint8_t>& image, const Raster& raster, uint64_t m, int ma
         fast ? qb3_mode::QB3_BASE : qb3_mode::QB3_BEST);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
-    //cout << "Encoded " << sizeof(T) * 8 << " size is " << v.size()
-    //    << "\tCompressed to " << float(v.size()) * 100 / image.size() / sizeof(T)
-    //    << "\tTook " << time_span << " seconds.";
 
     if (fast)
         cout << "Fast ";
@@ -143,17 +140,9 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
         fast ? qb3_mode::QB3_BASE : qb3_mode::QB3_BEST);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
-    //cout << "Encoded " << sizeof(T) * 8 << " size is " << v.size()
-    //    << "\tCompressed to " << float(v.size()) * 100 / image.size() / sizeof(T)
-    //    << "\tTook " << time_span << " seconds.";
 
-    if (fast)
-        cout << "Fast ";
-    if (m != 1)
-        cout << "Multiplier " << m;
-    cout << " \tBPV " << sizeof(T) << '\t' << outsize << "\t"
-        << outsize * 100.0 / image.size() / sizeof(T) << "\t" 
-        << time_span << "\t";
+    cout << outsize << '\t' << outsize * 100.0 / image.size() / sizeof(T) 
+        << '\t' << time_span << '\t';
 
     std::vector<T> re(xsize * ysize * bands);
 
@@ -170,7 +159,9 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
     t2 = high_resolution_clock::now();
 
     time_span = duration_cast<duration<double>>(t2 - t1).count();
-    cout << time_span;
+    cout << time_span << '\t' << sizeof(T) << '\t' << m << '\t';
+    if (fast)
+        cout << "Fast";
 
     if (img != re) {
         for (size_t i = 0; i < img.size(); i++)
@@ -206,17 +197,9 @@ void check(vector<uint16_t>& image, const Raster& raster, uint64_t m, int main_b
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
 
-    //cout << "Encoded " << sizeof(T) * 8 << " size is " << v.size()
-    //    << "\tCompressed to " << float(v.size()) * 100 / image.size() / sizeof(T)
-    //    << "\tTook " << time_span << " seconds.";
+    cout << outsize << '\t' << outsize * 100.0 / image.size() / sizeof(T)
+        << '\t' << time_span << '\t';
 
-    if (fast)
-        cout << "Fast ";
-    if (m != 1)
-        cout << "Multiplier " << m;
-    cout << " \tBPV " << sizeof(T) << '\t' << outsize << "\t"
-        << float(outsize) * 100 / image.size() / sizeof(T) << "\t"
-        << time_span << "\t";
     std::vector<T> re(xsize * ysize * bands);
 
     auto qdec = qb3_create_decoder(xsize, ysize, bands, tp);
@@ -227,6 +210,10 @@ void check(vector<uint16_t>& image, const Raster& raster, uint64_t m, int main_b
 
     time_span = duration_cast<duration<double>>(t2 - t1).count();
     cout << time_span;
+
+    cout << time_span << '\t' << sizeof(T) << '\t' << m << '\t';
+    if (fast)
+        cout << "Fast";
 
     if (img != re) {
         for (size_t i = 0; i < img.size(); i++)
@@ -382,11 +369,7 @@ int main(int argc, char **argv)
             auto time_span = duration_cast<duration<double>>(high_resolution_clock::now() - t).count();
             cout << "Decode time " << time_span << endl;
 
-            cout << "Type" << '\t'
-                << "Compressed" << "\t"
-                << "Ratio" << "\t"
-                << "Encode" << "\t"
-                << "Decode" << "\t" << endl << endl;
+            cout << "Compressed\tRatio\tEncode\tDecode\tType\n\n";
 
             // Check that offsetting the input around max doesn't really change the compression
             // This is obvious because only differences are encoded
@@ -395,7 +378,7 @@ int main(int argc, char **argv)
 
             check<uint64_t>(image, raster, 5, 1);
             cout << endl;
-            check<uint64_t>(image, raster, (1ull << 56) + 11, 1);
+            check<uint64_t>(image, raster, (1ull << 56), 1);
             cout << endl;
             check<uint32_t>(image, raster, 5, 1);
             cout << endl;
@@ -406,16 +389,25 @@ int main(int argc, char **argv)
             check<uint16_t>(image, raster, 1ull << 8, 1);
             cout << endl;
 
-            cout << "Data type\n";
+            cout << "\nLarge rung\n";
+            check<uint64_t>(image, raster, (1ull << 56), 1, true);
+            cout << endl;
+            check<uint32_t>(image, raster, 1ull << 24, 1, true);
+            cout << endl;
+            check<uint16_t>(image, raster, 1ull << 8, 1, true);
+            cout << endl;
+
+            cout << "\nData type\n";
             check<uint64_t>(image, raster, 1, 1);
             cout << endl;
             check<uint32_t>(image, raster, 1, 1);
             cout << endl;
             check<uint16_t>(image, raster, 1, 1);
             cout << endl;
-            check<uint16_t>(image, raster, 1, 1, true);
-            cout << endl;
             check<uint8_t>(image, raster, 1, 1);
+            cout << endl;
+
+            check<uint16_t>(image, raster, 1, 1, true);
             cout << endl;
             check<uint8_t>(image, raster, 1, 1, true);
             cout << endl;
@@ -428,11 +420,7 @@ int main(int argc, char **argv)
             auto time_span = duration_cast<duration<double>>(high_resolution_clock::now() - t).count();
             cout << "Decode time " << time_span << endl;
 
-            cout << "Type" << '\t'
-                << "Compressed" << "\t"
-                << "Ratio" << "\t"
-                << "Encode" << "\t"
-                << "Decode" << "\t" << endl << endl;
+            cout << "Compressed\tRatio\tEncode\tDecode\tType\n\n";
             check<uint16_t>(image, raster, 1, 1);
             cout << endl;
             check<uint16_t>(image, raster, 1, 1, true);
