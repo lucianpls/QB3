@@ -42,7 +42,7 @@ static std::pair<size_t, uint64_t> qb3dsz(uint64_t val, size_t rung) {
 static std::pair<size_t, uint64_t> qb3dsztbl(uint64_t val, size_t rung) {
     assert(rung);
     if ((sizeof(DRG) / sizeof(*DRG)) > rung) {
-        auto code = DRG[rung][val & ((1ull << (rung + 2)) - 1) ];
+        auto code = DRG[rung][val & ((1ull << (rung + 2)) - 1)];
         return std::make_pair<size_t, uint64_t>(code >> 12, code & TBLMASK);
     }
     return qb3dsz(val, rung);
@@ -54,9 +54,14 @@ template<typename T>
 static void gdecode(iBits &s, size_t rung, T *group, uint64_t acc, size_t abits) {
     assert(abits <= 8);
     if (0 == rung) { // single bits
-        if (0 != ((acc >> abits++) & 1))
-            for (size_t i = 0; i < B2; i++)
-                group[i] = static_cast<T>((acc >> abits++) & 1);
+        if (0 != ((acc >> abits++) & 1)) {
+            acc >>= abits;
+            abits += B2;
+            for (size_t i = 0; i < B2; i++) {
+                group[i] = 1 & acc;
+                acc >>= 1;
+            }
+        }
         else
             for (size_t i = 0; i < B2; i++)
                 group[i] = static_cast<T>(0);
