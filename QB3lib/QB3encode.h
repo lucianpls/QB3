@@ -283,10 +283,9 @@ struct encoder {
     T collect_group() {
         auto prv = prev[c];
         T maxval(0);
-        if (c != core[c]) {
+        if (c == core[c]) {
             for (int i = 0; i < B2; i++) {
-                const T* pixl = line[y + ylut[i]] + (x + xlut[i]) * csz;
-                T g = pixl[c] - pixl[core[c]];
+                T g = line[y + ylut[i]][(x + xlut[i]) * csz + c];
                 prv += g -= prv;
                 group[i] = mags(g);
                 maxval = std::max(maxval, mags(g));
@@ -294,32 +293,8 @@ struct encoder {
         }
         else {
             for (int i = 0; i < B2; i++) {
-                T g = (line[y + ylut[i]] + (x + xlut[i]) * csz)[c];
-                prv += g -= prv;
-                group[i] = mags(g);
-                maxval = std::max(maxval, mags(g));
-            }
-        }
-        prev[c] = prv;
-        return maxval;
-    }
-
-    // Same as above, but pre-divide the inputs by a factor
-    T collect_div(T factor) {
-        auto prv = prev[c];
-        T maxval(0);
-        if (c != core[c]) {
-            for (int i = 0; i < B2; i++) {
                 const T* pixl = line[y + ylut[i]] + (x + xlut[i]) * csz;
                 T g = pixl[c] - pixl[core[c]];
-                prv += g -= prv;
-                group[i] = mags(g);
-                maxval = std::max(maxval, mags(g));
-            }
-        }
-        else {
-            for (int i = 0; i < B2; i++) {
-                T g = (line[y + ylut[i]] + (x + xlut[i]) * csz)[c];
                 prv += g -= prv;
                 group[i] = mags(g);
                 maxval = std::max(maxval, mags(g));
@@ -388,9 +363,9 @@ int encoder<T>::encode_image(const T* image, size_t xsize, size_t ysize, size_t 
     for (c = 0; c < bands; c++)
         _core[c] = cband[c];
     _line.resize(ysz);
-    size_t line_size = bands * xsz;
     for (y = 0; y < ysz; y++)
-        _line[y] = image + y * line_size;
+        _line[y] = image + y * bands * xsz;
+    // Raw pointers to vector space
     line = _line.data();
     core = _core.data();
     prev = _prev.data();

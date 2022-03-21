@@ -51,28 +51,26 @@ static std::pair<size_t, uint64_t> qb3dsztbl(uint64_t val, size_t rung) {
 // Decode a B2 sized group of QB3 values from s and acc
 // Accumulator should be valid and almost full
 template<typename T>
-static void gdecode(iBits &s, size_t rung, T group[B2], uint64_t acc, size_t abits) {
+static void gdecode(iBits &s, size_t rung, T *group, uint64_t acc, size_t abits) {
     assert(abits <= 8);
-    if (0 == rung) { // single bits, special case, need at least 17bits in accumulator
-        if (0 != ((acc >> abits++) & 1)) {
-            for (int i = 0; i < B2; i++)
+    if (0 == rung) { // single bits
+        if (0 != ((acc >> abits++) & 1))
+            for (size_t i = 0; i < B2; i++)
                 group[i] = static_cast<T>((acc >> abits++) & 1);
-        }
-        else {
-            for (int i = 0; i < B2; i++)
+        else
+            for (size_t i = 0; i < B2; i++)
                 group[i] = static_cast<T>(0);
-        }
         s.advance(abits);
     }
     else if (rung < 6) { // Table decode, half of the values fit in accumulator
-        const auto drg = DRG[rung];
+        auto drg = DRG[rung];
         const auto m = (1ull << (rung + 2)) - 1;
         for (size_t i = 0; i < B2 / 2; i++) {
             auto v = drg[(acc >> abits) & m];
             abits += v >> 12;
             group[i] = static_cast<T>(v & TBLMASK);
         }
-        // Skip the peek if we have enough bits in accumulator
+        // Skip reloading if we have enough bits in accumulator
         // At rung 3, only for abits = 24 is possible to skip the load
         if (!((rung == 1) || (rung == 2 && abits < 33))) {
             s.advance(abits);
@@ -86,9 +84,9 @@ static void gdecode(iBits &s, size_t rung, T group[B2], uint64_t acc, size_t abi
         }
         s.advance(abits);
     }
-    // Last part of table decoding, use the accumulator for every 4 values
+    // Last part of table decoding, can use the accumulator for every 4 values
     else if (rung < (sizeof(DRG) / sizeof(*DRG))) {
-        const auto drg = DRG[rung];
+        auto drg = DRG[rung];
         const auto m = (1ull << (rung + 2)) - 1;
         for (size_t j = 0; j < B2; j += B2 / 4) {
             for (size_t i = 0; i < B2 / 4; i++) {
@@ -97,29 +95,52 @@ static void gdecode(iBits &s, size_t rung, T group[B2], uint64_t acc, size_t abi
                 group[j + i] = static_cast<T>(v & TBLMASK);
             }
             s.advance(abits);
-            acc = s.peek();
             abits = 0;
+            if (j <= B2 / 2) // Skip the last peek
+                acc = s.peek();
         }
     }
     // Computed decoding, one stream read per value
-    else if (sizeof(T) != 1) {
-        s.advance(abits);
-        if (sizeof(T) != 8) {
+    else if (sizeof(T) != 1) { // Not used for 8 bit data
+        if (sizeof(T) != 8) { // 32 or 16 bit only
             for (int i = 0; i < B2; i++) {
-                auto p = qb3dsz(s.peek(), rung);
-                s.advance(p.first);
+                if (abits + rung > 62) {
+                    s.advance(abits);
+                    acc = s.peek();
+                    abits = 0;
+                }
+                auto p = qb3dsz(acc >> abits, rung);
+                abits += p.first;
                 group[i] = static_cast<T>(p.second);
             }
+            s.advance(abits);
         }
-        else { // Only for 64bit data
+        else { // Only for 64 bit
             if (63 != rung) {
-                for (int i = 0; i < B2; i++) {
-                    auto p = qb3dsz(s.peek(), rung);
-                    s.advance(p.first);
-                    group[i] = static_cast<T>(p.second);
+                if (rung < 31) {
+                    for (int i = 0; i < B2; i++) {
+                        if (abits + rung > 62) {
+                            s.advance(abits);
+                            acc = s.peek();
+                            abits = 0;
+                        }
+                        auto p = qb3dsz(acc >> abits, rung);
+                        abits += p.first;
+                        group[i] = static_cast<T>(p.second);
+                    }
+                    s.advance(abits);
+                }
+                else { // always one peek per value
+                    s.advance(abits);
+                    for (int i = 0; i < B2; i++) {
+                        auto p = qb3dsz(s.peek(), rung);
+                        s.advance(p.first);
+                        group[i] = static_cast<T>(p.second);
+                    }
                 }
             }
-            else { // Might require more than one read
+            else { // May require more than one read
+                s.advance(abits);
                 for (int i = 0; i < B2; i++) {
                     auto p = qb3dsz(s.peek(), rung);
                     auto ovf = p.first & (p.first >> 6);
@@ -166,13 +187,9 @@ static bool decode(uint8_t *src, size_t len, T* image,
     for (size_t i = 0; i < B2; i++)
         offset[i] = (xsize * ylut[i] + xlut[i]) * bands;
 
-    bool failure(false);
+    bool failed(false);
     for (size_t y = 0; (y + B) <= ysize; y += B) {
-        if (failure) 
-            break;
         for (size_t x = 0; (x + B) <= xsize; x += B) {
-            if (failure) 
-                break;
             size_t loc = (y * xsize + x) * bands;
             for (int c = 0; c < bands; c++) {
                 uint64_t acc = s.peek();
@@ -193,8 +210,7 @@ static bool decode(uint8_t *src, size_t len, T* image,
                     // The rung switch for the values
                     cs = DSW[UBITS][(acc >> (abits + 1)) & ((1ull << (UBITS + 1)) - 1)];
                     auto rung = (runbits[c] + cs) & ((1ull << UBITS) - 1);
-                    failure |= (rung == 63);
-                    // assert(!failure); // can't be 63 since CF encoding looses at least one rung
+                    failed |= (rung == 63); // can't be 63 since CF encoding looses at least one rung
 
                     if ((acc >> abits) & 1) { // same rung for cf and values
                         abits += static_cast<size_t>(cs >> 12);
@@ -206,7 +222,7 @@ static bool decode(uint8_t *src, size_t len, T* image,
                         abits += static_cast<size_t>(cs >> 12) - 1;
                         cfrung = (rung + cs) & ((1ull << UBITS) - 1);
                         // cfrung has to be different than rung here, either larger or much smaller
-                        failure |= (rung == cfrung);
+                        failed |= (rung == cfrung);
                         // assert(!failure); // Bad encoding?
                     }
 
@@ -224,12 +240,11 @@ static bool decode(uint8_t *src, size_t len, T* image,
                     }
                     else {
                         // check and refill accumulator before reading cf
-                        if (cfrung + 2 + abits > 64) {
+                        if (cfrung + abits > 62) {
                             s.advance(abits);
-                            abits = 0;
                             acc = s.peek();
+                            abits = 0;
                         }
-
                         // There is no overflow possible here, trung is < 64 and > 0
                         if (cfrung == rung) { // standard encoding
                             auto p = qb3dsztbl(acc >> abits, cfrung);
@@ -246,8 +261,12 @@ static bool decode(uint8_t *src, size_t len, T* image,
                                 cf = static_cast<T>(((acc >> abits++) & 1) + cfrung * 2);
                             }
                         }
-                        s.advance(abits);
-                        gdecode(s, rung, group, s.peek(), 0);
+                        if (abits > 8) {
+                            s.advance(abits);
+                            acc = s.peek();
+                            abits = 0;
+                        }
+                        gdecode(s, rung, group, acc, abits);
                         // Multiply with CF and get the maxval for the actual group rung
                         cf += 2;
                         T maxval = 0;
@@ -256,7 +275,7 @@ static bool decode(uint8_t *src, size_t len, T* image,
                             maxval = std::max(maxval, v);
                             group[i] = v;
                         }
-                        failure |= (2 > maxval);
+                        failed |= (2 > maxval);
                         runbits[c] = topbit(maxval | 1); // Still, don't call topbit with 0
                     }
                 }
@@ -269,8 +288,12 @@ static bool decode(uint8_t *src, size_t len, T* image,
                 if (cband[c] != c)
                     for (size_t i = 0; i < B2; i++)
                         image[loc + c + offset[i]] += image[loc + cband[c] + offset[i]];
+            if (failed)
+                break;
         }
+        if (failed)
+            break;
     }
-    return 0;
+    return failed;
 }
 } // Namespace
