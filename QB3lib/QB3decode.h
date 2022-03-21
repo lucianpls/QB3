@@ -151,16 +151,22 @@ static bool decode(uint8_t *src, size_t len, T* image,
     size_t xsize, size_t ysize, size_t bands, size_t *cband)
 {
     static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
-    bool failure(false);
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     iBits s(src, len);
-    std::vector<T> prev(bands, 0);
-    T group[B2];
-    std::vector<size_t> runbits(bands, sizeof(T) * 8 - 1);
-    std::vector<size_t> offsets(B2);
-    for (size_t i = 0; i < B2; i++)
-        offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
 
+    // vectors as fixed size buffers
+    std::vector<T> _prev(bands, 0);
+    std::vector<size_t> _runbits(bands, 0);
+    auto prev = _prev.data();
+    auto runbits = _runbits.data();
+
+    T group[B2];
+    size_t offset[B2];
+
+    for (size_t i = 0; i < B2; i++)
+        offset[i] = (xsize * ylut[i] + xlut[i]) * bands;
+
+    bool failure(false);
     for (size_t y = 0; (y + B) <= ysize; y += B) {
         if (failure) 
             break;
@@ -256,13 +262,13 @@ static bool decode(uint8_t *src, size_t len, T* image,
                 }
                 auto prv = prev[c];
                 for (int i = 0; i < B2; i++)
-                    image[loc + c + offsets[i]] = prv += smag(group[i]);
+                    image[loc + c + offset[i]] = prv += smag(group[i]);
                 prev[c] = prv;
             }
             for (int c = 0; c < bands; c++)
                 if (cband[c] != c)
                     for (size_t i = 0; i < B2; i++)
-                        image[loc + c + offsets[i]] += image[loc + cband[c] + offsets[i]];
+                        image[loc + c + offset[i]] += image[loc + cband[c] + offset[i]];
         }
     }
     return 0;

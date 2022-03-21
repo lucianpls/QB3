@@ -26,10 +26,7 @@ Contributors:  Lucian Plesea
 
 namespace QB3 {
 // integer divide val(in magsign) by cf(normal)
-template<typename T>
-static T magsdiv(T val, T cf) {
-    return ((magsabs(val) / cf) << 1) - (val & 1);
-}
+template<typename T> static T magsdiv(T val, T cf) {return ((magsabs(val) / cf) << 1) - (val & 1);}
 
 // return greatest common factor (absolute) of a B2 sized vector of mag-sign values
 // T is always unsigned
@@ -248,16 +245,40 @@ static void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung) {
     groupencode(group, maxval, bits, acc, abits);
 }
 
+// Round to Zero Division, no overflow
+template<typename T>
+static T rto0div(T x, T y) {
+    static_assert(std::is_integral<T>(), "Integer types only");
+    T r = x / y, m = x % y;
+    y = (y >> 1);
+    return r + (~(x < 0) & (m > y)) - ((x < 0) & (m < -y));
+}
+
+// Round from Zero Division, no overflow
+template<typename T>
+static T rfr0div(T x, T y) {
+    static_assert(std::is_integral<T>(), "Integer types only");
+    T r = x / y, m = x % y;
+    y = (y >> 1) + (y & 1);
+    return r + (~(x < 0) & (m >= y)) - ((x < 0) & (m <= -y));
+}
+
+// Use objects instead of raw functions
+// The object version is slower, measurably so, but allows more flexibility features.
+// #define OBJ_
+#if defined(OBJ_)
+
 template<typename T>
 struct encoder {
     encoder(oBits &s) : _s(s) {};
     virtual ~encoder() {};
-    size_t xsz, ysz, csz;
-    std::vector<T const *> line;
-    static const size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-    std::vector<size_t> core;
+    oBits& _s;
+    T const* *line;
+    size_t* runbits;
+    T* prev;
+    size_t* core;
     T group[B2];
-    oBits &_s;
+    size_t xsz, ysz, csz;
 
     T collect_group() {
         auto prv = prev[c];
@@ -287,13 +308,17 @@ struct encoder {
     void encode(); // Assumes c, x and y info is valid
     int encode_image(const T* image, size_t xsize, size_t ysize, size_t bands, const size_t* cband);
 
-    // Transient
     // block location
     size_t y; // Top line
     size_t x; // Left column
     size_t c; // band
-    std::vector<size_t> runbits;
-    std::vector<T> prev;
+
+    // The variables named without an _ are raw pointers to the data of these vectors.
+    // Even in release mode, accessing a vector content is slower than a raw pointer
+    std::vector<size_t> _runbits;
+    std::vector<T> _prev;
+    std::vector<size_t> _core;
+    std::vector<T const*> _line;
 };
 
 // fast encoding
@@ -332,25 +357,29 @@ int encoder<T>::encode_image(const T* image, size_t xsize, size_t ysize, size_t 
     csz = bands;
     ysz = ysize;
     xsz = xsize;
-    core.clear();
-    prev.clear();
-    runbits.clear();
+    _core.clear();
+    _prev.clear();
+    _runbits.clear();
     for (c = 0; c < bands; c++) {
-        core.push_back(cband[c]);
-        prev.push_back(T(0));
-        runbits.push_back(sizeof(T) * 8 - 1);
+        _core.push_back(cband[c]);
+        _prev.push_back(T(0));
+        _runbits.push_back(sizeof(T) * 8 - 1);
     }
-    line.clear();
+    _line.clear();
     size_t line_size = bands * xsz;
     for (y = 0; y < ysz; y++)
-        line.push_back(image + y * line_size);
+        _line.push_back(image + y * line_size);
+    line = _line.data();
+    core = _core.data();
+    prev = _prev.data();
+    runbits = _runbits.data();
     encode();
     return 0;
 }
 
 template<typename T>
 struct encoder_best : encoder<T> {
-    encoder_best(oBits& s) : encoder(s) {};
+    encoder_best(oBits& s) : encoder<T>(s) {};
     virtual ~encoder_best() {};
     virtual void encode_strip();
 };
@@ -366,22 +395,34 @@ void encoder_best<T>::encode_strip() {
             if (rung != 0) {
                 auto cf = gcf(this->group);
                 if (cf > 1) {// Always smaller in cf encoding
-                    cfgenc(this->s, this->group, cf, oldrung);
+                    cfgenc(this->_s, this->group, cf, oldrung);
                     continue;
                 }
             }
-            groupencode(this->group, maxval, oldrung, this->s);
+            groupencode(this->group, maxval, oldrung, this->_s);
         }
     }
 }
 
-//template<typename T>
-//static int encode_fast(const T* image, oBits& s, size_t xsize, size_t ysize, size_t bands, const size_t* cband)
-//{
-//    encoder<T> encdr(s);
-//    return encdr.encode_image(image, xsize, ysize, bands, cband);
-//}
+template<typename T>
+static int encode_fast(const T* image, oBits& s, size_t xsize, size_t ysize, size_t bands, const size_t* cband)
+{
+    encoder<T> encdr(s);
+    return encdr.encode_image(image, xsize, ysize, bands, cband);
+}
 
+template<typename T>
+static int encode_best(const T* image, oBits& s, size_t xsize, size_t ysize, size_t bands, const size_t* cband)
+{
+    encoder_best<T> encdr(s);
+    return encdr.encode_image(image, xsize, ysize, bands, cband);
+}
+
+#else
+
+// Encode a whole image without using encoder objects
+// These are faster but less flexible
+ 
 // Only basic encoding
 template<typename T>
 static int encode_fast(const T* image, oBits& s, size_t xsize, size_t ysize, size_t bands, const size_t* cband)
@@ -396,8 +437,11 @@ static int encode_fast(const T* image, oBits& s, size_t xsize, size_t ysize, siz
             return 2; // Band mapping error
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     // Running code length, start with nominal value
-    std::vector<size_t> runbits(bands, sizeof(T) * 8 - 1);
-    std::vector<T> prev(bands, 0u);      // Previous value, per band
+//    std::vector<size_t> _runbits(bands, sizeof(T) * 8 - 1);
+    std::vector<size_t> _runbits(bands, 0);
+    auto runbits = _runbits.data();
+    std::vector<T> _prev(bands, T(0));      // Previous value, per band
+    auto prev = _prev.data();
     size_t offsets[B2];
     for (size_t i = 0; i < B2; i++)
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
@@ -450,8 +494,11 @@ static int encode_best(const T *image, oBits& s, size_t xsize, size_t ysize, siz
             return 2; // Band mapping error
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     // Running code length, start with nominal value
-    std::vector<size_t> runbits(bands, sizeof(T) * 8 - 1);
-    std::vector<T> prev(bands, 0u); // Previous value, per band
+//    std::vector<size_t> _runbits(bands, sizeof(T) * 8 - 1);
+    std::vector<size_t> _runbits(bands, 0);
+    auto runbits = _runbits.data();
+    std::vector<T> _prev(bands, 0u); // Previous value, per band
+    auto prev = _prev.data();
     T group[B2]; // Current 2D group to encode, as array
     size_t offsets[B2];
     for (size_t i = 0; i < B2; i++)
@@ -506,22 +553,6 @@ static int encode_best(const T *image, oBits& s, size_t xsize, size_t ysize, siz
     return 0;
 }
 
-// Round to Zero Division, no overflow
-template<typename T>
-static T rto0div(T x, T y) {
-    static_assert(std::is_integral<T>(), "Integer types only");
-    T r = x / y, m = x % y;
-    y = (y >> 1);
-    return r + (~(x < 0) & (m > y)) - ((x < 0) & (m < -y));
-}
-
-// Round from Zero Division, no overflow
-template<typename T>
-static T rfr0div(T x, T y) {
-    static_assert(std::is_integral<T>(), "Integer types only");
-    T r = x / y, m = x % y;
-    y = (y >> 1) + (y & 1);
-    return r + (~(x < 0) & (m >= y)) - ((x < 0) & (m <= -y));
-}
+#endif // OBJ_
 
 } // namespace
