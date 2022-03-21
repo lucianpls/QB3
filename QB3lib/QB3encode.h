@@ -265,7 +265,7 @@ static T rfr0div(T x, T y) {
 
 // Use objects instead of raw functions
 // The object version is slower, measurably so, but allows more flexibility features.
-// #define OBJ_
+#define OBJ_
 #if defined(OBJ_)
 
 template<typename T>
@@ -281,6 +281,31 @@ struct encoder {
     size_t xsz, ysz, csz;
 
     T collect_group() {
+        auto prv = prev[c];
+        T maxval(0);
+        if (c != core[c]) {
+            for (int i = 0; i < B2; i++) {
+                const T* pixl = line[y + ylut[i]] + (x + xlut[i]) * csz;
+                T g = pixl[c] - pixl[core[c]];
+                prv += g -= prv;
+                group[i] = mags(g);
+                maxval = std::max(maxval, mags(g));
+            }
+        }
+        else {
+            for (int i = 0; i < B2; i++) {
+                T g = (line[y + ylut[i]] + (x + xlut[i]) * csz)[c];
+                prv += g -= prv;
+                group[i] = mags(g);
+                maxval = std::max(maxval, mags(g));
+            }
+        }
+        prev[c] = prv;
+        return maxval;
+    }
+
+    // Same as above, but pre-divide the inputs by a factor
+    T collect_div(T factor) {
         auto prv = prev[c];
         T maxval(0);
         if (c != core[c]) {
@@ -357,18 +382,15 @@ int encoder<T>::encode_image(const T* image, size_t xsize, size_t ysize, size_t 
     csz = bands;
     ysz = ysize;
     xsz = xsize;
-    _core.clear();
-    _prev.clear();
-    _runbits.clear();
-    for (c = 0; c < bands; c++) {
-        _core.push_back(cband[c]);
-        _prev.push_back(T(0));
-        _runbits.push_back(sizeof(T) * 8 - 1);
-    }
-    _line.clear();
+    _core.resize(bands);
+    _prev.resize(bands, 0);
+    _runbits.resize(bands, 0);
+    for (c = 0; c < bands; c++)
+        _core[c] = cband[c];
+    _line.resize(ysz);
     size_t line_size = bands * xsz;
     for (y = 0; y < ysz; y++)
-        _line.push_back(image + y * line_size);
+        _line[y] = image + y * line_size;
     line = _line.data();
     core = _core.data();
     prev = _prev.data();
@@ -437,7 +459,6 @@ static int encode_fast(const T* image, oBits& s, size_t xsize, size_t ysize, siz
             return 2; // Band mapping error
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     // Running code length, start with nominal value
-//    std::vector<size_t> _runbits(bands, sizeof(T) * 8 - 1);
     std::vector<size_t> _runbits(bands, 0);
     auto runbits = _runbits.data();
     std::vector<T> _prev(bands, T(0));      // Previous value, per band
@@ -494,7 +515,6 @@ static int encode_best(const T *image, oBits& s, size_t xsize, size_t ysize, siz
             return 2; // Band mapping error
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     // Running code length, start with nominal value
-//    std::vector<size_t> _runbits(bands, sizeof(T) * 8 - 1);
     std::vector<size_t> _runbits(bands, 0);
     auto runbits = _runbits.data();
     std::vector<T> _prev(bands, 0u); // Previous value, per band
