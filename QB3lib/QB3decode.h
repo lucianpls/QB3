@@ -53,12 +53,13 @@ static std::pair<size_t, uint64_t> qb3dsztbl(uint64_t val, size_t rung) {
 template<typename T>
 static void gdecode(iBits &s, size_t rung, T *group, uint64_t acc, size_t abits) {
     assert(abits <= 8);
+    const auto m = (1ull << (rung + 2)) - 1;
     if (0 == rung) { // single bits
         if (0 != ((acc >> abits++) & 1)) {
             acc >>= abits;
             abits += B2;
             for (size_t i = 0; i < B2; i++) {
-                group[i] = 1 & acc;
+                group[i] = static_cast<T>(1 & acc);
                 acc >>= 1;
             }
         }
@@ -69,10 +70,11 @@ static void gdecode(iBits &s, size_t rung, T *group, uint64_t acc, size_t abits)
     }
     else if (rung < 6) { // Table decode, half of the values fit in accumulator
         auto drg = DRG[rung];
-        const auto m = (1ull << (rung + 2)) - 1;
+        acc >>= abits;
         for (size_t i = 0; i < B2 / 2; i++) {
-            auto v = drg[(acc >> abits) & m];
+            auto v = drg[acc & m];
             abits += v >> 12;
+            acc >>= v >> 12;
             group[i] = static_cast<T>(v & TBLMASK);
         }
         // Skip reloading if we have enough bits in accumulator
@@ -83,8 +85,9 @@ static void gdecode(iBits &s, size_t rung, T *group, uint64_t acc, size_t abits)
             abits = 0;
         }
         for (size_t i = B2 / 2; i < B2; i++) {
-            auto v = drg[(acc >> abits) & m];
+            auto v = drg[acc & m];
             abits += v >> 12;
+            acc >>= v >> 12;
             group[i] = static_cast<T>(v & TBLMASK);
         }
         s.advance(abits);
@@ -92,11 +95,12 @@ static void gdecode(iBits &s, size_t rung, T *group, uint64_t acc, size_t abits)
     // Last part of table decoding, can use the accumulator for every 4 values
     else if (rung < (sizeof(DRG) / sizeof(*DRG))) {
         auto drg = DRG[rung];
-        const auto m = (1ull << (rung + 2)) - 1;
+        acc >>= abits;
         for (size_t j = 0; j < B2; j += B2 / 4) {
             for (size_t i = 0; i < B2 / 4; i++) {
-                auto v = drg[(acc >> abits) & m];
+                auto v = drg[acc & m];
                 abits += v >> 12;
+                acc >>= v >> 12;
                 group[j + i] = static_cast<T>(v & TBLMASK);
             }
             s.advance(abits);
