@@ -50,8 +50,9 @@ static std::pair<size_t, uint64_t> qb3dsztbl(uint64_t val, size_t rung) {
 
 // Decode a B2 sized group of QB3 values from s and acc
 // Accumulator should be valid and almost full
+// returns false on failure
 template<typename T>
-static void gdecode(iBits &s, size_t rung, T *group, uint64_t acc, size_t abits) {
+static bool gdecode(iBits &s, size_t rung, T *group, uint64_t acc, size_t abits) {
     assert(abits <= 8);
     const auto m = (1ull << (rung + 2)) - 1;
     if (0 == rung) { // single bits
@@ -67,51 +68,63 @@ static void gdecode(iBits &s, size_t rung, T *group, uint64_t acc, size_t abits)
             for (size_t i = 0; i < B2; i++)
                 group[i] = static_cast<T>(0);
         s.advance(abits);
+        return true;
     }
-    else if (rung < 6) { // Table decode, half of the values fit in accumulator
+
+    // Byte decoding is always done with tables
+    if (sizeof(T) == 1 || rung < (sizeof(DRG) / sizeof(*DRG))) {
         auto drg = DRG[rung];
         acc >>= abits;
-        for (size_t i = 0; i < B2 / 2; i++) {
-            auto v = drg[acc & m];
-            abits += v >> 12;
-            acc >>= v >> 12;
-            group[i] = static_cast<T>(v & TBLMASK);
-        }
-        // Skip reloading if we have enough bits in accumulator
-        // At rung 3, only for abits = 24 is possible to skip the load
-        if (!((rung == 1) || (rung == 2 && abits < 33))) {
-            s.advance(abits);
-            acc = s.peek();
-            abits = 0;
-        }
-        for (size_t i = B2 / 2; i < B2; i++) {
-            auto v = drg[acc & m];
-            abits += v >> 12;
-            acc >>= v >> 12;
-            group[i] = static_cast<T>(v & TBLMASK);
-        }
-        s.advance(abits);
-    }
-    // Last part of table decoding, can use the accumulator for every 4 values
-    else if (rung < (sizeof(DRG) / sizeof(*DRG))) {
-        auto drg = DRG[rung];
-        acc >>= abits;
-        for (size_t j = 0; j < B2; j += B2 / 4) {
-            for (size_t i = 0; i < B2 / 4; i++) {
+        if (rung < 6) { // Table decode, half of the values fit in accumulator
+            for (size_t i = 0; i < B2 / 2; i++) {
                 auto v = drg[acc & m];
                 abits += v >> 12;
                 acc >>= v >> 12;
-                group[j + i] = static_cast<T>(v & TBLMASK);
+                group[i] = static_cast<T>(v & TBLMASK);
+            }
+            // Skip reloading if we have enough bits in accumulator
+            // At rung 3, only for abits = 24 is possible to skip the load
+            if (!((rung == 1) || (rung == 2 && abits < 33))) {
+                s.advance(abits);
+                acc = s.peek();
+                abits = 0;
+            }
+            for (size_t i = B2 / 2; i < B2; i++) {
+                auto v = drg[acc & m];
+                abits += v >> 12;
+                acc >>= v >> 12;
+                group[i] = static_cast<T>(v & TBLMASK);
             }
             s.advance(abits);
-            abits = 0;
-            if (j <= B2 / 2) // Skip the last peek
-                acc = s.peek();
+        }
+        else { // Last part of table decoding, rungs 6+, four values per accumulator
+            for (size_t j = 0; j < B2; j += B2 / 4) {
+                for (size_t i = 0; i < B2 / 4; i++) {
+                    auto v = drg[acc & m];
+                    abits += v >> 12;
+                    acc >>= v >> 12;
+                    group[j + i] = static_cast<T>(v & TBLMASK);
+                }
+                s.advance(abits);
+                abits = 0;
+                if (j <= B2 / 2) // Skip the last peek
+                    acc = s.peek();
+            }
         }
     }
-    // Computed decoding, one stream read per value
-    else if (sizeof(T) != 1) { // Not used for 8 bit data
-        if (sizeof(T) != 8) { // 32 or 16 bit only
+    else {     // Large types and high rung Computed decoding, one stream read per value
+        if (sizeof(T) == 8 && rung == 63) { // May need 65 bits
+            s.advance(abits);
+            for (int i = 0; i < B2; i++) {
+                auto p = qb3dsz(s.peek(), rung);
+                auto ovf = p.first & (p.first >> 6);
+                group[i] = static_cast<T>(p.second);
+                s.advance(p.first - ovf);
+                if (ovf)
+                    group[i] |= s.get() << 1;
+            }
+        }
+        else if (sizeof(T) != 8 || rung < 32) { // 16bit and above, may reuse accumulator
             for (int i = 0; i < B2; i++) {
                 if (abits + rung > 62) {
                     s.advance(abits);
@@ -124,50 +137,25 @@ static void gdecode(iBits &s, size_t rung, T *group, uint64_t acc, size_t abits)
             }
             s.advance(abits);
         }
-        else { // Only for 64 bit
-            if (63 != rung) {
-                if (rung < 31) {
-                    for (int i = 0; i < B2; i++) {
-                        if (abits + rung > 62) {
-                            s.advance(abits);
-                            acc = s.peek();
-                            abits = 0;
-                        }
-                        auto p = qb3dsz(acc >> abits, rung);
-                        abits += p.first;
-                        group[i] = static_cast<T>(p.second);
-                    }
-                    s.advance(abits);
-                }
-                else { // always one peek per value
-                    s.advance(abits);
-                    for (int i = 0; i < B2; i++) {
-                        auto p = qb3dsz(s.peek(), rung);
-                        s.advance(p.first);
-                        group[i] = static_cast<T>(p.second);
-                    }
-                }
-            }
-            else { // May require more than one read
-                s.advance(abits);
-                for (int i = 0; i < B2; i++) {
-                    auto p = qb3dsz(s.peek(), rung);
-                    auto ovf = p.first & (p.first >> 6);
-                    group[i] = static_cast<T>(p.second);
-                    s.advance(p.first - ovf);
-                    if (ovf)
-                        group[i] |= s.get() << 1;
-                }
+        else { // 64bit and rung in [32 - 62], can't reuse accumulator
+            s.advance(abits);
+            for (int i = 0; i < B2; i++) {
+                auto p = qb3dsz(s.peek(), rung);
+                group[i] = static_cast<T>(p.second);
+                s.advance(p.first);
             }
         }
     }
+
     // Undo the step shift, MSB of last value has to be zero
     if ((0 == (group[B2 - 1] >> rung)) && (rung > 0)) {
         auto p = step(group, rung);
-        assert(p != B2); // Can't occur, could be a signal
         if (p < B2)
             group[p] ^= static_cast<T>(1) << rung;
+        else if (p == B2)
+            return false;
     }
+    return true;
 }
 
 // integer multiply val(in magsign) by cf(normal)
@@ -211,7 +199,7 @@ static bool decode(uint8_t *src, size_t len, T* image,
                 if (abits == 1 || 0 != (cs & TBLMASK)) { // Normal decoding, not a signal
                     auto rung = (runbits[c] + cs) & ((1ull << UBITS) - 1);
                     runbits[c] = rung;
-                    gdecode(s, rung, group, acc, abits);
+                    failed |= !gdecode(s, rung, group, acc, abits);
                 }
                 else { // signal, cf decoding
                     T cf;
@@ -275,7 +263,7 @@ static bool decode(uint8_t *src, size_t len, T* image,
                             acc = s.peek();
                             abits = 0;
                         }
-                        gdecode(s, rung, group, acc, abits);
+                        failed |= !gdecode(s, rung, group, acc, abits);
                         // Multiply with CF and get the maxval for the actual group rung
                         cf += 2;
                         T maxval = 0;
