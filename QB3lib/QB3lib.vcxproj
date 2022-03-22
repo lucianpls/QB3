@@ -23,6 +23,9 @@
     <ClCompile Include="QB3decode.cpp" />
     <ClCompile Include="QB3tables.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <Text Include="CMakeLists.txt" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
