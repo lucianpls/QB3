@@ -161,10 +161,45 @@ def showsame():
         s += f"0x{v:04x}, "
     print(s[:-2] + "};")
 
+def print_table(t, s, formt : str):
+    for v in t:
+        s += formt.format(v);
+        if len(s) > 120:
+            print(s)
+            s = ""
+    if len(s) == 0:
+        s = "  "
+    print(s[:-2] + "};")
+
+def show_dopio():
+    # rung 1 single shot as byte
+    single = (0x1000, 0x3002, 0x1000, 0x2001, 0x1000, 0x3003, 0x1000, 0x2001)
+    out = []
+    for i in range(2 ** 6):
+        v = single[i & 0x7] # First value
+        v1 = single[(i >> (v >> 12)) & 0x7]; # Second value
+        out.append((((v + v1) & 0xf000) >> 8) + (v1 & 0x3) * 4 + (v & 0x3))
+    print_table(out, "static const uint8_t dopio[] = {{", "0x{:02x}, ")
+
+    #s = f"static const uint8_t dopio[] = {{"
+    #for i in range(2 ** 6):
+    #    v = single[i & 0x7] # First value
+    #    v1 = single[(i >> (v >> 12)) & 0x7]; # Second value
+    #    v = (((v + v1) & 0xf000) >> 8) + (v1 & 0x3) * 4 + (v & 0x3)
+    #    s += f"0x{v:02x}, "
+    #    if len(s) > 120:
+    #        print(s)
+    #        s = ""
+
+    #if len(s) == 0:
+    #    s = "  ";
+    #print(s[:-2] + "};")
+
 if __name__ == "__main__":
     # showencode8()
     # showencode16()
     # showcodeswitch()
-    showdecodeswitch()
+    # showdecodeswitch()
     # showdecode()
     # showsame()
+    show_dopio()
