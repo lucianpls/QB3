@@ -38,9 +38,8 @@ static std::pair<size_t, uint64_t> qb3dsz(uint64_t val, size_t rung) {
         + (((1 & nnxt) * ~0ull) & ((rmsk + 1) + ((val & (rmsk >> 1)) << 2) + ((val >> rung) & 0b11))));
 }
 
-// Decode using tables when possible, works for rungs 1+
+// Decode using tables when possible, works for all rungs
 static std::pair<size_t, uint64_t> qb3dsztbl(uint64_t val, size_t rung) {
-    assert(rung);
     if ((sizeof(DRG) / sizeof(*DRG)) > rung) {
         auto code = DRG[rung][val & ((1ull << (rung + 2)) - 1)];
         return std::make_pair<size_t, uint64_t>(code >> 12, code & TBLMASK);
@@ -54,8 +53,7 @@ static std::pair<size_t, uint64_t> qb3dsztbl(uint64_t val, size_t rung) {
 template<typename T>
 static bool gdecode(iBits &s, size_t rung, T *group, uint64_t acc, size_t abits) {
     assert(abits <= 8);
-    const auto m = (1ull << (rung + 2)) - 1;
-    if (0 == rung) { // single bits
+    if (0 == rung) { // single bits, direct decoding
         if (0 != ((acc >> abits++) & 1)) {
             acc >>= abits;
             abits += B2;
@@ -70,12 +68,22 @@ static bool gdecode(iBits &s, size_t rung, T *group, uint64_t acc, size_t abits)
         s.advance(abits);
         return true;
     }
-
     // Byte decoding is always done with tables
     if (sizeof(T) == 1 || rung < (sizeof(DRG) / sizeof(*DRG))) {
-        auto drg = DRG[rung];
         acc >>= abits;
-        if (rung < 6) { // Table decode, half of the values fit in accumulator
+        if (1 == rung) { // double barrel decoding
+            for (size_t i = 0; i < B2; i += 2) {
+                auto v = DDRG1[acc & 0x3f];
+                group[i] = v & 0x3;
+                group[i + 1] = (v >> 2) & 0x3;
+                abits += v >> 4;
+                acc >>= v >> 4;
+            }
+            s.advance(abits);
+        }
+        else if (rung < 6) { // Table decode, half of the values fit in accumulator
+            auto drg = DRG[rung];
+            const auto m = (1ull << (rung + 2)) - 1;
             for (size_t i = 0; i < B2 / 2; i++) {
                 auto v = drg[acc & m];
                 abits += v >> 12;
@@ -84,7 +92,7 @@ static bool gdecode(iBits &s, size_t rung, T *group, uint64_t acc, size_t abits)
             }
             // Skip reloading if we have enough bits in accumulator
             // At rung 3, only for abits = 24 is possible to skip the load
-            if (!((rung == 1) || (rung == 2 && abits < 33))) {
+            if (!(rung == 2 && abits < 33)) {
                 s.advance(abits);
                 acc = s.peek();
                 abits = 0;
@@ -98,6 +106,8 @@ static bool gdecode(iBits &s, size_t rung, T *group, uint64_t acc, size_t abits)
             s.advance(abits);
         }
         else { // Last part of table decoding, rungs 6+, four values per accumulator
+            auto drg = DRG[rung];
+            const auto m = (1ull << (rung + 2)) - 1;
             for (size_t j = 0; j < B2; j += B2 / 4) {
                 for (size_t i = 0; i < B2 / 4; i++) {
                     auto v = drg[acc & m];
@@ -147,7 +157,6 @@ static bool gdecode(iBits &s, size_t rung, T *group, uint64_t acc, size_t abits)
         }
     }
 
-    // Undo the step shift, MSB of last value has to be zero
     if ((0 == (group[B2 - 1] >> rung)) && (rung > 0)) {
         auto p = step(group, rung);
         if (p < B2)
@@ -177,10 +186,8 @@ static bool decode(uint8_t *src, size_t len, T* image,
     std::vector<size_t> _runbits(bands, 0);
     auto prev = _prev.data();
     auto runbits = _runbits.data();
-
     T group[B2];
     size_t offset[B2];
-
     for (size_t i = 0; i < B2; i++)
         offset[i] = (xsize * ylut[i] + xlut[i]) * bands;
 
@@ -218,9 +225,7 @@ static bool decode(uint8_t *src, size_t len, T* image,
                         cs = DSW[UBITS][(acc >> abits) & ((1ull << (UBITS + 1)) - 1)];
                         abits += static_cast<size_t>(cs >> 12) - 1;
                         cfrung = (rung + cs) & ((1ull << UBITS) - 1);
-                        // cfrung has to be different than rung here, either larger or much smaller
                         failed |= (rung == cfrung);
-                        // assert(!failure); // Bad encoding?
                     }
 
                     if (0 == (rung | cfrung)) { // single bit encoding for everything
@@ -230,13 +235,11 @@ static bool decode(uint8_t *src, size_t len, T* image,
                         static const uint8_t tbl[] = { 0, 0b11, 0, 0b101 };
                         for (int i = 0; i < B2; i++)
                             group[i] = static_cast<T>(tbl[cf * 2ull + ((acc >> abits++) & 1)]);
-
                         // actual rung is 1 or 2 respectively
                         runbits[c] = 1ull + cf;
                         s.advance(abits);
                     }
                     else {
-                        // check and refill accumulator before reading cf
                         if (cfrung + abits > 62) {
                             s.advance(abits);
                             acc = s.peek();

@@ -20,21 +20,23 @@ Contributors:  Lucian Plesea
 // The SIGNAL table is shared
 
 namespace QB3 {
-	extern const uint8_t xlut[16], ylut[16];
+    extern const uint8_t xlut[16], ylut[16];
 // Encoding and decoding tables for low bit sizes
 // The 1-7 (byte) tables are always defined
 // tables for 8, 9 and 10 bits are optional
 
 #if defined(QB3_SHORT_TABLES)
-	extern const uint16_t* CRG[8];
-	extern const uint16_t* DRG[8];
+    extern const uint16_t* CRG[8];
+    extern const uint16_t* DRG[8];
 #else
-	extern const uint16_t* CRG[11];
-	extern const uint16_t* DRG[11];
+    extern const uint16_t* CRG[11];
+    extern const uint16_t* DRG[11];
 #endif
 
-	// Dispatch tables for rungs, by bits/unit
-	extern const uint16_t SIGNAL[7]; // switch to same rung, used as a signal
-	extern const uint16_t* CSW[7];
-	extern const uint16_t* DSW[7];
+    // Dispatch tables for rungs, by bits/unit
+    extern const uint16_t SIGNAL[7]; // switch to same rung, used as a signal
+    extern const uint16_t* CSW[7];
+    extern const uint16_t* DSW[7];
+
+    extern const uint8_t DDRG1[64];
 }
