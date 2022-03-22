@@ -132,7 +132,7 @@ static void groupencode(T group[B2], T maxval, oBits& s,
         size_t asz[4] = { abits, 0, 0, 0 };
         for (size_t i = 0; i < B; i++)
             for (size_t j = 0; j < B; j++) {
-                uint16_t v = t[group[j * B + i]];
+                auto v = t[group[j * B + i]];
                 a[j] |= (TBLMASK & v) << asz[j];
                 asz[j] += v >> 12;
             }
@@ -265,6 +265,7 @@ static T rfr0div(T x, T y) {
 
 // Use objects instead of raw functions
 // The object version is slower, measurably so, but allows more flexibility features.
+// This only matters for byte data, where the overhead is larger
 #define OBJ_
 #if defined(OBJ_)
 
