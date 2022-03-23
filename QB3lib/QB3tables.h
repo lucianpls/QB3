@@ -33,10 +33,13 @@ namespace QB3 {
     extern const uint16_t* DRG[11];
 #endif
 
+    // Double decoding tables, rungs 1 and 2
+    extern const uint8_t DDRG1[64];
+    extern const uint16_t DDRG2[256];
+
     // Dispatch tables for rungs, by bits/unit
     extern const uint16_t SIGNAL[7]; // switch to same rung, used as a signal
     extern const uint16_t* CSW[7];
     extern const uint16_t* DSW[7];
 
-    extern const uint8_t DDRG1[64];
 }

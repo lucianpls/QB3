@@ -169,7 +169,7 @@ def print_table(t, s, formt : str):
             s = ""
     if len(s) == 0:
         s = "  "
-    print(s[:-2] + "};")
+    print(s[:-2] + " };")
 
 def show_dopio():
     # rung 1 single shot as byte
@@ -181,19 +181,16 @@ def show_dopio():
         out.append((((v + v1) & 0xf000) >> 8) + (v1 & 0x3) * 4 + (v & 0x3))
     print_table(out, "static const uint8_t dopio[] = {{", "0x{:02x}, ")
 
-    #s = f"static const uint8_t dopio[] = {{"
-    #for i in range(2 ** 6):
-    #    v = single[i & 0x7] # First value
-    #    v1 = single[(i >> (v >> 12)) & 0x7]; # Second value
-    #    v = (((v + v1) & 0xf000) >> 8) + (v1 & 0x3) * 4 + (v & 0x3)
-    #    s += f"0x{v:02x}, "
-    #    if len(s) > 120:
-    #        print(s)
-    #        s = ""
-
-    #if len(s) == 0:
-    #    s = "  ";
-    #print(s[:-2] + "};")
+def show_tripio():
+    # rung 2 single shot as byte
+    single = (0x4004, 0x3002, 0x2000, 0x2001, 0x4005, 0x3003, 0x2000, 0x2001, 0x4006, 0x3002, 0x2000, 0x2001,
+0x4007, 0x3003, 0x2000, 0x2001)
+    out = []
+    for i in range(2 ** 8):
+        v = single[i & 0xf] # First value
+        v1 = single[(i >> (v >> 12)) & 0xf]; # Second value
+        out.append( ((v + v1) & 0xf000) + (v1 & 0x7) * 8 + (v & 0x7))
+    print_table(out, "static const uint8_t tripio[] = { ", "0x{:04x}, ")
 
 if __name__ == "__main__":
     # showencode8()
@@ -202,4 +199,5 @@ if __name__ == "__main__":
     # showdecodeswitch()
     # showdecode()
     # showsame()
-    show_dopio()
+    # show_dopio()
+    show_tripio()
