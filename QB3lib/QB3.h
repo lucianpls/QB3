@@ -40,15 +40,14 @@ extern "C" {
 typedef struct encs * encsp; // encoder
 typedef struct decs * decsp; // decoder
 
-// Types, can be used with either signed or unsigned
-enum qb3_dtype { QB3_I8 = 0, QB3_I16, QB3_I32, QB3_I64 };
+// Types
+enum qb3_dtype { QB3_U8 = 0, QB3_I8, QB3_U16, QB3_I16, QB3_U32, QB3_I32, QB3_U64, QB3_I64 };
 // Encode mode
 enum qb3_mode { QB3_DEFAULT = 0, QB3_BASE = 0, QB3_BEST };
 
 // In QB3encode.cpp
 // Call before anything else
-DLLEXPORT encsp qb3_create_encoder(size_t width, size_t height, size_t bands = 3, 
-	qb3_dtype dt = qb3_dtype::QB3_I8);
+DLLEXPORT encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt);
 // Call when done with the encoder
 DLLEXPORT void qb3_destroy_encoder(encsp p);
 
@@ -63,6 +62,11 @@ DLLEXPORT bool qb3_set_encoder_coreband(encsp p, size_t bands, const size_t *cba
 // TODO: remove once the decoder can auto-detect the band deltas
 DLLEXPORT bool qb3_set_decoder_coreband(decsp p, size_t bands, const size_t* cband);
 
+// Sets quantization parameters, returns true on success
+// sign = true -> data type is signed
+// away = true -> round away from zero
+DLLEXPORT bool qb3_set_encoder_quanta(encsp p, size_t q, bool sign, bool away);
+
 // Upper bound of encoded size, without taking the header into consideration
 DLLEXPORT size_t qb3_max_encoded_size(const encsp p);
 
@@ -73,8 +77,7 @@ DLLEXPORT size_t qb3_encode(encsp p, void *source, void *destination,
 	qb3_mode mode = qb3_mode::QB3_DEFAULT);
 
 // In QB3decode.cpp
-DLLEXPORT decsp qb3_create_decoder(size_t width, size_t height, size_t bands = 3, 
-	qb3_dtype dt = qb3_dtype::QB3_I8);
+DLLEXPORT decsp qb3_create_decoder(size_t width, size_t height, size_t bands, qb3_dtype dt);
 
 DLLEXPORT void qb3_destroy_decoder(decsp p);
 

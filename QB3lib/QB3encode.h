@@ -263,12 +263,6 @@ static T rfr0div(T x, T y) {
     return r + (~(x < 0) & (m >= y)) - ((x < 0) & (m <= -y));
 }
 
-// Use objects instead of raw functions
-// The object version is slower, measurably so, but allows more flexibility features.
-// This only matters for byte data, where the overhead is larger
-#define OBJ_
-#if defined(OBJ_)
-
 template<typename T>
 struct encoder {
     encoder(oBits &s) : _s(s) {};
@@ -278,13 +272,13 @@ struct encoder {
     size_t* runbits;
     T* prev;
     size_t* core;
-    T group[B2];
     size_t xsz, ysz, csz;
 
-    T collect_group() {
+    T collect_group(size_t y, size_t x, size_t c, T *group) {
         auto prv = prev[c];
         T maxval(0);
-        if (c == core[c]) {
+        auto coreband = core[c];
+        if (c == coreband) {
             for (int i = 0; i < B2; i++) {
                 T g = line[y + ylut[i]][(x + xlut[i]) * csz + c];
                 prv += g -= prv;
@@ -295,7 +289,7 @@ struct encoder {
         else {
             for (int i = 0; i < B2; i++) {
                 const T* pixl = line[y + ylut[i]] + (x + xlut[i]) * csz;
-                T g = pixl[c] - pixl[core[c]];
+                T g = pixl[c] - pixl[coreband];
                 prv += g -= prv;
                 group[i] = mags(g);
                 maxval = std::max(maxval, mags(g));
@@ -305,30 +299,27 @@ struct encoder {
         return maxval;
     }
 
-    virtual void encode_strip(); // Assumes c and x info is valid
-    void encode(); // Assumes c, x and y info is valid
-    int encode_image(const T* image, size_t xsize, size_t ysize, size_t bands, const size_t* cband);
-
-    // block location
-    size_t y; // Top line
-    size_t x; // Left column
-    size_t c; // band
+    virtual void encode_strip(size_t y, T* group); // Assumes c and x info is valid
+    void encode();
+    int encode_image(const T* image, const encs &info);
 
     // The variables named without an _ are raw pointers to the data of these vectors.
     // Even in release mode, accessing a vector content is slower than a raw pointer
+    // Could use unique pointers here
     std::vector<size_t> _runbits;
     std::vector<T> _prev;
     std::vector<size_t> _core;
     std::vector<T const*> _line;
 };
 
-// fast encoding
+// fast encoding of a 4 line strip
 template<typename T>
-void encoder<T>::encode_strip() {
+void encoder<T>::encode_strip(size_t y, T* group) {
     assert(0 == xsz % B);
-    for (x = 0; x < xsz; x += B) {
-        for (c = 0; c < csz; c++) {
-            T maxval = collect_group();
+    auto xsize = xsz, csize = csz;
+    for (size_t x = 0; x < xsize; x += B) {
+        for (size_t c = 0; c < csize; c++) {
+            T maxval = collect_group(y, x, c, group);
             groupencode(group, maxval, runbits[c], _s);
             runbits[c] = topbit(maxval | 1);
         }
@@ -338,14 +329,17 @@ void encoder<T>::encode_strip() {
 // Assumes all lines are valid
 template<typename T>
 void encoder<T>::encode() {
-    assert(0 == ysz % B);
-    for (y = 0; y < ysz; y += B)
-        encode_strip();
+    T group[B2];
+    auto ysize(ysz);
+    for (size_t y = 0; y < ysize; y += B)
+        encode_strip(y, group);
 }
 
 // Checks input, sets up the state then calls encode
 template<typename T>
-int encoder<T>::encode_image(const T* image, size_t xsize, size_t ysize, size_t bands, const size_t* cband) {
+int encoder<T>::encode_image(const T* image, const encs &info)
+{
+    const size_t xsize(info.xsize), ysize(info.ysize), bands(info.nbands), * cband(info.cband);
     if (xsize == 0 || xsize > 0x10000ull || ysize == 0 || ysize > 0x10000ull
         || 0 == bands || nullptr == cband)
         return 1;
@@ -361,17 +355,21 @@ int encoder<T>::encode_image(const T* image, size_t xsize, size_t ysize, size_t 
     _core.resize(bands);
     _prev.resize(bands, 0);
     _runbits.resize(bands, 0);
-    for (c = 0; c < bands; c++)
+    for (size_t c = 0; c < bands; c++)
         _core[c] = cband[c];
     _line.resize(ysz);
-    for (y = 0; y < ysz; y++)
+    for (size_t y = 0; y < ysz; y++)
         _line[y] = image + y * bands * xsz;
     // Raw pointers to vector space
     line = _line.data();
     core = _core.data();
     prev = _prev.data();
     runbits = _runbits.data();
-    encode();
+    if (info.quanta < 2) {
+        encode(); // The whole image
+        return 0;
+    }
+    // We have a quantization request
     return 0;
 }
 
@@ -379,55 +377,42 @@ template<typename T>
 struct encoder_best : encoder<T> {
     encoder_best(oBits& s) : encoder<T>(s) {};
     virtual ~encoder_best() {};
-    virtual void encode_strip();
+    virtual void encode_strip(size_t y, T* group) override;
 };
 
 template<typename T>
-void encoder_best<T>::encode_strip() {
-    for (this->x = 0; this->x < this->xsz; this->x += B) {
-        for (this->c = 0; this->c < this->csz; this->c++) {
-            T maxval = this->collect_group();
-            const auto oldrung = this->runbits[this->c];
+void encoder_best<T>::encode_strip(size_t y, T* group) {
+    auto xsize = this->xsz;
+    auto csize = this->csz;
+    for (size_t x = 0; x < xsize; x += B) {
+        for (size_t c = 0; c < csize; c++) {
+            T maxval = this->collect_group(y, x, c, group);
+            const auto oldrung = this->runbits[c];
             auto rung = topbit(maxval | 1);
-            this->runbits[this->c] = rung;
+            this->runbits[c] = rung;
             if (rung != 0) {
-                auto cf = gcf(this->group);
+                auto cf = gcf(group);
                 if (cf > 1) {// Always smaller in cf encoding
-                    cfgenc(this->_s, this->group, cf, oldrung);
+                    cfgenc(this->_s, group, cf, oldrung);
                     continue;
                 }
             }
-            groupencode(this->group, maxval, oldrung, this->_s);
+            groupencode(group, maxval, oldrung, this->_s);
         }
     }
 }
 
-template<typename T>
-static int encode_fast(const T* image, oBits& s, size_t xsize, size_t ysize, size_t bands, const size_t* cband)
-{
-    encoder<T> encdr(s);
-    return encdr.encode_image(image, xsize, ysize, bands, cband);
-}
-
-template<typename T>
-static int encode_best(const T* image, oBits& s, size_t xsize, size_t ysize, size_t bands, const size_t* cband)
-{
-    encoder_best<T> encdr(s);
-    return encdr.encode_image(image, xsize, ysize, bands, cband);
-}
-
-#else
 
 // Encode a whole image without using encoder objects
 // These are faster but less flexible
  
 // Only basic encoding
 template<typename T>
-static int encode_fast(const T* image, oBits& s, size_t xsize, size_t ysize, size_t bands, const size_t* cband)
+static int raw_encode_fast(const T* image, oBits& s, const encs &info)
 {
     static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
-    if (xsize == 0 || xsize > 0x10000ull || ysize == 0 || ysize > 0x10000ull
-        || 0 == bands || nullptr == cband)
+    const size_t xsize(info.xsize), ysize(info.ysize), bands(info.nbands), * cband(info.cband);
+    if (xsize == 0 || xsize > 0x10000ull || ysize == 0 || ysize > 0x10000ull || 0 == bands)
         return 1;
     // Check band mapping
     for (size_t c = 0; c < bands; c++)
@@ -479,11 +464,11 @@ static int encode_fast(const T* image, oBits& s, size_t xsize, size_t ysize, siz
 // Returns error code or 0 if success
 // TODO: Error code mapping
 template <typename T = uint8_t>
-static int encode_best(const T *image, oBits& s, size_t xsize, size_t ysize, size_t bands, const size_t *cband)
+static int raw_encode_best(const T *image, oBits& s, const encs &info)
 {
     static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
-    if (xsize == 0 || xsize > 0x10000ull || ysize == 0 || ysize > 0x10000ull
-        || 0 == bands || nullptr == cband)
+    const size_t xsize(info.xsize), ysize(info.ysize), bands(info.nbands), * cband(info.cband);
+    if (xsize == 0 || xsize > 0x10000ull || ysize == 0 || ysize > 0x10000ull || 0 == bands)
         return 1;
     // Check band mapping
     for (size_t c = 0; c < bands; c++)
@@ -549,6 +534,26 @@ static int encode_best(const T *image, oBits& s, size_t xsize, size_t ysize, siz
     return 0;
 }
 
-#endif // OBJ_
+// The entry points
+template<typename T>
+static int encode_fast(const T* image, oBits& s, const encs& info)
+{
+    if (info.quanta < 2)
+        return raw_encode_fast(image, s, info);
+    else {
+        encoder<T> encdr(s);
+        return encdr.encode_image(image, info);
+    }
+}
 
+template<typename T>
+static int encode_best(const T* image, oBits& s, const encs& info)
+{
+    if (info.quanta < 2)
+        return raw_encode_best(image, s, info);
+    else {
+        encoder_best<T> encdr(s);
+        return encdr.encode_image(image, info);
+    }
+}
 } // namespace

@@ -81,6 +81,19 @@ static size_t setbits16(uint64_t val) {
 
 #endif
 
+// Encoder control structure
+struct encs {
+    size_t xsize;
+    size_t ysize;
+    size_t nbands;
+    size_t quanta;
+    // band which will be subtracted, by band
+    size_t cband[QB3_MAXBANDS];
+    qb3_dtype type;
+    bool away; // Round up instead of down when quantizing
+    bool sign; // Data is signed, used for quantizing
+};
+
 // Encode integers as magnitude and sign, with bit 0 for sign.
 // This encoding has the top bits always zero, regardless of sign
 // To keep the range the same as two's complement, the magnitude of 

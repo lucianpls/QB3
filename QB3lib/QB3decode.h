@@ -21,11 +21,10 @@ Contributors:  Lucian Plesea
 #include <utility>
 #include <vector>
 #include <type_traits>
-
-namespace QB3 {
 #include "QB3common.h"
 
-// Computed decode, does not work for rung 0 or 1
+namespace QB3 {
+    // Computed decode, does not work for rung 0 or 1
 static std::pair<size_t, uint64_t> qb3dsz(uint64_t val, size_t rung) {
     assert(rung > 1);
     uint64_t ntop = (~(val >> (rung - 1))) & 1;

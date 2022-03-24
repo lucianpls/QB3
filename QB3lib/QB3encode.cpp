@@ -1,16 +1,6 @@
 #include "QB3common.h"
 #include "QB3encode.h"
 
-struct encs {
-    size_t xsize;
-    size_t ysize;
-    size_t nbands;
-    size_t outsize;
-    // band which will be subtracted, by band
-    size_t cband[QB3_MAXBANDS];
-    qb3_dtype type;
-};
-
 // constructor
 encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt) {
     if (width > 0x10000ul || height > 0x10000ul || bands == 0 || bands > QB3_MAXBANDS)
@@ -20,7 +10,9 @@ encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt
     p->ysize = height;
     p->nbands = bands;
     p->type = dt;
-    p->outsize = 0;
+    p->quanta = 1; // No quantization
+    p->away = false; // Round to zero
+    p->sign = false; // 
     // Start with no inter-band differential
     for (size_t c = 0; c < bands; c++)
         p->cband[c] = c;
@@ -47,8 +39,38 @@ bool qb3_set_encoder_coreband(encsp p, size_t bands, const size_t *cband) {
     return true;
 }
 
-// bytes per value by qb3_dtype
-static const int typesizes[] = { 1, 2, 4, 8 };
+// Sets quantization parameters
+// Valid values are 2 and above
+// sign = true when the input data is signed
+// away = true to round away from zero
+bool qb3_set_encoder_quanta(encsp p, size_t q, bool sign, bool away) {
+    p->quanta = 1;
+    p->away = false;
+    p->sign = false;
+    if (q < 1) // Quanta of zero if not valid
+        return false;
+    p->quanta = q;
+    p->sign = sign;
+    p->away = away;
+    if (q == 1) // No quantization
+        return true;
+    // Check the quanta value agains the max positive by type
+    bool error = false;
+    switch (p->type) {
+    case qb3_dtype::QB3_I8:
+        error |= (p->quanta > (p->sign ? 0x7full : 0xffull));
+    case qb3_dtype::QB3_I16:
+        error |= (p->quanta > (p->sign ? 0x7fffull : 0xffffull));
+    case qb3_dtype::QB3_I32:
+        error |= (p->quanta > (p->sign ? 0x7fffffffull : 0xffffffffull));
+    } // data type
+    if (error)
+        p->quanta = 1;
+    return !error;
+}
+
+// bytes per value by qb3_dtype, keep them in sync
+static const int typesizes[] = { 1, 1, 2, 2, 4, 4, 8, 8 };
 
 size_t qb3_max_encoded_size(const encsp p) {
     // Pad to 4 x 4
@@ -63,18 +85,21 @@ size_t qb3_max_encoded_size(const encsp p) {
 size_t qb3_encode(encsp p, void* source, void* destination, qb3_mode mode) {
     oBits s(reinterpret_cast<uint8_t*>(destination));
     int error_code = 0;
-#define ENC(T) QB3::encode_best(reinterpret_cast<const T*>(source), s, p->xsize, p->ysize, p->nbands, p->cband)
+#define ENC(T) QB3::encode_best(reinterpret_cast<const T*>(source), s, *p)
 
     switch (mode) {
-
     case(qb3_mode::QB3_BEST):
         switch (p->type) {
+        case qb3_dtype::QB3_U8:
         case qb3_dtype::QB3_I8:
             error_code = ENC(uint8_t); break;
+        case qb3_dtype::QB3_U16:
         case qb3_dtype::QB3_I16:
             error_code = ENC(uint16_t); break;
+        case qb3_dtype::QB3_U32:
         case qb3_dtype::QB3_I32:
             error_code = ENC(uint32_t); break;
+        case qb3_dtype::QB3_U64:
         case qb3_dtype::QB3_I64:
             error_code = ENC(uint64_t); break;
         default:
@@ -84,14 +109,18 @@ size_t qb3_encode(encsp p, void* source, void* destination, qb3_mode mode) {
         break;
 
     default: // encoding mode
-#define ENC(T) QB3::encode_fast(reinterpret_cast<const T*>(source), s, p->xsize, p->ysize, p->nbands, p->cband)
+#define ENC(T) QB3::encode_fast(reinterpret_cast<const T*>(source), s, *p)
         switch (p->type) {
+        case qb3_dtype::QB3_U8:
         case qb3_dtype::QB3_I8:
             error_code = ENC(uint8_t); break;
+        case qb3_dtype::QB3_U16:
         case qb3_dtype::QB3_I16:
             error_code = ENC(uint16_t); break;
+        case qb3_dtype::QB3_U32:
         case qb3_dtype::QB3_I32:
             error_code = ENC(uint32_t); break;
+        case qb3_dtype::QB3_U64:
         case qb3_dtype::QB3_I64:
             error_code = ENC(uint64_t); break;
         default:

@@ -123,8 +123,15 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
     double time_span;
 
     auto img = to(image, static_cast<T>(m));
-    auto tp = sizeof(T) == 8 ? qb3_dtype::QB3_I64 : sizeof(T) == 4 ? qb3_dtype::QB3_I32 :
-        sizeof(T) == 2 ? qb3_dtype::QB3_I16 : qb3_dtype::QB3_I8;
+    qb3_dtype tp = qb3_dtype::QB3_U8;
+    if (is_signed<T>()) {
+        tp = sizeof(T) == 8 ? qb3_dtype::QB3_I64 : sizeof(T) == 4 ? qb3_dtype::QB3_I32 :
+            sizeof(T) == 2 ? qb3_dtype::QB3_I16 : qb3_dtype::QB3_I8;
+    }
+    else {
+        tp = sizeof(T) == 8 ? qb3_dtype::QB3_U64 : sizeof(T) == 4 ? qb3_dtype::QB3_U32 :
+            sizeof(T) == 2 ? qb3_dtype::QB3_U16 : qb3_dtype::QB3_U8;
+    }
     auto qenc = qb3_create_encoder(xsize, ysize, bands, tp);
     vector<uint8_t> outvec(qb3_max_encoded_size(qenc));
 

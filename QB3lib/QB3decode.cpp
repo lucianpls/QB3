@@ -60,12 +60,16 @@ size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination) {
 #define DEC(T) QB3::decode(src, src_sz, reinterpret_cast<T*>(destination), p->xsize, p->ysize, p->nbands, p->cband)
 
     switch (p->type) {
+    case qb3_dtype::QB3_U8:
     case qb3_dtype::QB3_I8:
         error_code = DEC(uint8_t); break;
+    case qb3_dtype::QB3_U16:
     case qb3_dtype::QB3_I16:
         error_code = DEC(uint16_t); break;
+    case qb3_dtype::QB3_U32:
     case qb3_dtype::QB3_I32:
         error_code = DEC(uint32_t); break;
+    case qb3_dtype::QB3_U64:
     case qb3_dtype::QB3_I64:
         error_code = DEC(uint64_t); break;
     default:
