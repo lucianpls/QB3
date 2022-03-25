@@ -123,23 +123,23 @@ The used:
 ## Group Step encoding
 
 The rung of a group is the highest bit set for any value within the group. This means that at least one of the values in 
-the group is in the long range of the respective group. This means that the encoder will not produce an encoded group where
+the group is in the long range of the respective group. The encoder will not generate an encoded group where
 all the values are in the nominal or short range. This would be a relatively small encoded group, an opportunity wasted.
 Knowing this, it is possible to reduce one of the values in an unambiguous way, so it can be restored when decoding. In the case
 where the first value within the group is the only one in the long range, the top bit can be flipped to zero, which changes
-the range of that value to the nominal or low. On decoding, if no values in the decoded group are in the long range, it is
-assumed that the first value was reduced, and can be restored by setting the rung bit. This eliminates group encoding where
-the first value is the only one in the long range. This can be used by reducing the second value in the group, if only the
-first two values are in the long range. This progresses all the way to reducing the last value in the group, if all the values
+the range of that value to the nominal or low. On decoding, if no values in the decoded group are in the long range, it can be
+reasoned that the first value was reduced, and can be restored by setting the rung bit. This eliminates group encoding where
+the first value is the only one in the long range. This encoding can be used to reduce the second value in the group, if only the
+first two values are in the long range. This progresses all the way to last value in the group if all the values
 within the group are in the long range. This situation is the worst case, where the group would require 16 extra bits compared
 with the nominal. Using this reduction, the worst case scenario would require at most 15 extra bits, since the last value 
-will be reduced.  
+will always be reduced.  
 Another way to describe this is by looking at the squence of the rung bits across the group. If the first n values have the
 rung bit set while then rest of the values have it cleared, the last value with the bit set can be reduced on encoding and
 restored on decoding. We know that at least one rung bit is set, so it is not possible to have all the rung bits clear 
 initially. The sequnce of the rung bits is a step down function, going from 1 to 0, so this optimization is called 
 *step encoding*. if the rung-bit distribution is a step down, this optimization reduces the number of bits required to store 
-a group by 1 or 2 bits. This encoding applies to any rung except for rung 0, since a single bit can't be reduced.
+a group by 1 or 2 bits. This encoding applies to any rung except for rung 0, since the rung of a single bit can't be reduced.
 
 # Common Factor Group Encoding
 
