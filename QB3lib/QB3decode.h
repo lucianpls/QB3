@@ -50,26 +50,26 @@ static std::pair<size_t, uint64_t> qb3dsztbl(uint64_t val, size_t rung) {
 // Accumulator should be valid and almost full
 // returns false on failure
 template<typename T>
-static bool gdecode(iBits &s, size_t rung, T *group, uint64_t acc, size_t abits) {
+static bool gdecode(iBits &s, size_t rung, T * group, uint64_t acc, size_t abits) {
     assert(abits <= 8);
+    if (abits)
+        acc >>= abits;
     if (0 == rung) { // single bits, direct decoding
-        if (0 != ((acc >> abits++) & 1)) {
-            acc >>= abits;
+        if (0 != (acc & 1)) {
             abits += B2;
             for (size_t i = 0; i < B2; i++) {
-                group[i] = static_cast<T>(1 & acc);
                 acc >>= 1;
+                group[i] = static_cast<T>(1 & acc);
             }
         }
         else
             for (size_t i = 0; i < B2; i++)
                 group[i] = static_cast<T>(0);
-        s.advance(abits);
+        s.advance(abits + 1);
         return true;
     }
     // Byte decoding is always done with tables
     if (sizeof(T) == 1 || rung < (sizeof(DRG) / sizeof(*DRG))) {
-        acc >>= abits;
         if (1 == rung) { // double barrel
             for (size_t i = 0; i < B2; i += 2) {
                 auto v = DDRG1[acc & 0x3f];
@@ -144,8 +144,9 @@ static bool gdecode(iBits &s, size_t rung, T *group, uint64_t acc, size_t abits)
                     acc = s.peek();
                     abits = 0;
                 }
-                auto p = qb3dsz(acc >> abits, rung);
+                auto p = qb3dsz(acc, rung);
                 abits += p.first;
+                acc >>= p.first;
                 group[i] = static_cast<T>(p.second);
             }
             s.advance(abits);
@@ -234,16 +235,20 @@ static bool decode(uint8_t *src, size_t len, T* image,
                         cfrung = (rung + cs) & ((1ull << UBITS) - 1);
                         failed |= (rung == cfrung);
                     }
-                    if (0 == (rung | cfrung)) { // single bit encoding for everything
-                        cf = static_cast<T>((acc >> abits++) & 1);
-                        // cf is 0 or 1, which means 2 or 3 encoded as mags
-                        // while the value can only be 0 or -1, encoded as mags
-                        static const uint8_t tbl[] = { 0, 0b11, 0, 0b101 };
-                        for (int i = 0; i < B2; i++)
-                            group[i] = static_cast<T>(tbl[cf * 2ull + ((acc >> abits++) & 1)]);
-                        // actual rung is 1 or 2
-                        runbits[c] = 1ull + cf;
-                        s.advance(abits);
+                    if (0 == (rung | cfrung)) { // single bit for everything, decode here
+                        acc >>= abits;
+                        runbits[c] = 1ull + (acc & 1);
+                        if (acc & 1)
+                            for (int i = 0; i < B2; i++) {
+                                acc >>= 1;
+                                group[i] = static_cast<T>((acc & 1) * 0b101);
+                            }
+                        else
+                            for (int i = 0; i < B2; i++) {
+                                acc >>= 1;
+                                group[i] = static_cast<T>((acc & 1) * 0b11);
+                            }
+                        s.advance(abits + B2 + 1);
                     }
                     else {
                         if (cfrung + abits > 62) {
@@ -263,9 +268,8 @@ static bool decode(uint8_t *src, size_t len, T* image,
                                 cf = static_cast<T>(p.second + (1ull << cfrung));
                                 abits += p.first;
                             }
-                            else { // single bit
+                            else // single bit
                                 cf = static_cast<T>(((acc >> abits++) & 1) + cfrung * 2);
-                            }
                         }
                         if (abits > 8) {
                             s.advance(abits);
