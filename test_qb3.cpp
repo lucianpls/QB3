@@ -115,7 +115,7 @@ void check_plus(vector<uint8_t>& image, const Raster& raster, uint64_t m, int ma
 }
 
 template<typename T>
-void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_band = 0, bool fast = 0) {
+void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_band = 0, bool fast = 0, uint64_t q = 1) {
     size_t xsize = raster.size.x;
     size_t ysize = raster.size.y;
     size_t bands = raster.size.c;
@@ -142,6 +142,11 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
                 cbands[i] = i;
         qb3_set_encoder_coreband(qenc, bands, cbands.data());
     }
+
+    // This is sufficient to trigger the quanta encoding
+    if (q > 1)
+        qb3_set_encoder_quanta(qenc, q, 0);
+
     t1 = high_resolution_clock::now();
     auto outsize = qb3_encode(qenc, static_cast<void *>(img.data()), outvec.data(), 
         fast ? qb3_mode::QB3_BASE : qb3_mode::QB3_BEST);
@@ -151,7 +156,7 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
     cout << outsize << '\t' << outsize * 100.0 / image.size() / sizeof(T) 
         << '\t' << time_span << '\t';
 
-    std::vector<T> re(xsize * ysize * bands);
+    std::vector<T> re(xsize * ysize * bands, 0);
 
     auto qdec = qb3_create_decoder(xsize, ysize, bands, tp);
     if (main_band != 1) {
@@ -161,6 +166,8 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
                 cbands[i] = i;
         qb3_set_decoder_coreband(qdec, bands, cbands.data());
     }
+    if (q > 1)
+        qb3_set_decoder_quanta(qdec, q);
     t1 = high_resolution_clock::now();
     qb3_decode(qdec, outvec.data(), outsize, re.data());
     t2 = high_resolution_clock::now();
@@ -170,7 +177,22 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
     if (fast)
         cout << "Fast";
 
-    if (img != re) {
+    if (q > 1) {
+        auto hq = T(q / 2); // precision
+        for (size_t i = 0; i < img.size(); i++) {
+            auto x = img[i];
+            auto y = re[i];
+            if (!((x == y) || ((x > y) && (y + hq >= x)) || ((y > x) && (x + hq >= y)))) {
+                cout << endl << "Difference at " << i << " "
+                    << uint64_t(img[i]) << " != " << uint64_t(re[i]);
+                cout << endl << "y = " << i / (xsize * bands) <<
+                    " x = " << (i / bands) % xsize <<
+                    " c = " << i % bands;
+                break;
+            }
+        }
+    }
+    else {
         for (size_t i = 0; i < img.size(); i++)
             if (img[i] != re[i]) {
                 cout << endl << "Difference at " << i << " "
@@ -382,6 +404,21 @@ int main(int argc, char **argv)
             // This is obvious because only differences are encoded
             // check_plus<uint8_t>(image, raster, 127, 1, 1);
             // cout << endl;
+
+            check<uint8_t>(image, raster, 1, 1, true, 2);
+            cout << endl;
+
+            check<uint8_t>(image, raster, 1, 1, true, 3);
+            cout << endl;
+
+            check<uint8_t>(image, raster, 1, 1, true, 4);
+            cout << endl;
+
+            check<uint8_t>(image, raster, 1, 1, true, 10);
+            cout << endl;
+
+            check<uint8_t>(image, raster, 1, 1, false, 10);
+            cout << endl;
 
             check<uint64_t>(image, raster, 5, 1);
             cout << endl;

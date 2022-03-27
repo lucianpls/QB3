@@ -251,7 +251,7 @@ static T rto0div(T x, T y) {
     static_assert(std::is_integral<T>(), "Integer types only");
     T r = x / y, m = x % y;
     y = (y >> 1);
-    return r + (~(x < 0) & (m > y)) - ((x < 0) & (m < -y));
+    return r + (!(x < 0) & (m > y)) - ((x < 0) & ((m + y) < 0));
 }
 
 // Round from Zero Division, no overflow
@@ -260,12 +260,12 @@ static T rfr0div(T x, T y) {
     static_assert(std::is_integral<T>(), "Integer types only");
     T r = x / y, m = x % y;
     y = (y >> 1) + (y & 1);
-    return r + (~(x < 0) & (m >= y)) - ((x < 0) & (m <= -y));
+    return r + (!(x < 0) & (m >= y)) - ((x < 0) & ((m + y) <= 0));
 }
 
 // Only basic encoding
 template<typename T>
-static int raw_encode_fast(const T* image, oBits& s, const encs &info)
+static int encode_fast(const T* image, oBits& s, encs &info)
 {
     static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
     const size_t xsize(info.xsize), ysize(info.ysize), bands(info.nbands), * cband(info.cband);
@@ -278,8 +278,14 @@ static int raw_encode_fast(const T* image, oBits& s, const encs &info)
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     // Running code length, start with nominal value
     std::vector<size_t> _runbits(bands, 0);
+    // Previous value, per band
+    std::vector<T> _prev(bands, T(0));
+    // Initialize state
+    for (size_t c = 0; c < bands; c++) {
+        _runbits[c] = info.runbits[c];
+        _prev[c] = static_cast<T>(info.prev[c]);
+    }
     auto runbits = _runbits.data();
-    std::vector<T> _prev(bands, T(0));      // Previous value, per band
     auto prev = _prev.data();
     size_t offsets[B2];
     for (size_t i = 0; i < B2; i++)
@@ -315,13 +321,20 @@ static int raw_encode_fast(const T* image, oBits& s, const encs &info)
             }
         }
     }
+
+    // Save the state
+    for (size_t c = 0; c < bands; c++) {
+        info.prev[c] = static_cast<size_t>(prev[c]);
+        info.runbits[c] = runbits[c];
+    }
+
     return 0;
 }
 
 // Returns error code or 0 if success
 // TODO: Error code mapping
 template <typename T = uint8_t>
-static int raw_encode_best(const T *image, oBits& s, const encs &info)
+static int encode_best(const T *image, oBits& s, encs &info)
 {
     static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
     const size_t xsize(info.xsize), ysize(info.ysize), bands(info.nbands), * cband(info.cband);
@@ -334,8 +347,13 @@ static int raw_encode_best(const T *image, oBits& s, const encs &info)
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     // Running code length, start with nominal value
     std::vector<size_t> _runbits(bands, 0);
+    // Previous value, per band
+    std::vector<T> _prev(bands, 0u);
+    for (size_t c = 0; c < bands; c++) {
+        _runbits[c] = info.runbits[c];
+        _prev[c] = static_cast<T>(info.prev[c]);
+    }
     auto runbits = _runbits.data();
-    std::vector<T> _prev(bands, 0u); // Previous value, per band
     auto prev = _prev.data();
     T group[B2]; // Current 2D group to encode, as array
     size_t offsets[B2];
@@ -388,19 +406,13 @@ static int raw_encode_best(const T *image, oBits& s, const encs &info)
             }
         }
     }
+    // Save the state
+    for (size_t c = 0; c < bands; c++) {
+        info.prev[c] = static_cast<size_t>(prev[c]);
+        info.runbits[c] = runbits[c];
+    }
+
     return 0;
 }
 
-// The entry points
-template<typename T>
-static int encode_fast(const T* image, oBits& s, const encs& info)
-{
-    return raw_encode_fast(image, s, info);
-}
-
-template<typename T>
-static int encode_best(const T* image, oBits& s, const encs& info)
-{
-    return raw_encode_best(image, s, info);
-}
 } // namespace

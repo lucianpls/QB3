@@ -89,10 +89,26 @@ struct encs {
     size_t quanta;
     // band which will be subtracted, by band
     size_t cband[QB3_MAXBANDS];
+
+    // end state
+    size_t prev[QB3_MAXBANDS];
+    size_t runbits[QB3_MAXBANDS];
+
     qb3_dtype type;
     bool away; // Round up instead of down when quantizing
-    bool sign; // Data is signed, used for quantizing
 };
+
+// Decoder control structure
+struct decs {
+    size_t xsize;
+    size_t ysize;
+    size_t nbands;
+    size_t quanta;
+    // band which will be subtracted, by band
+    size_t cband[QB3_MAXBANDS];
+    qb3_dtype type;
+};
+
 
 // Encode integers as magnitude and sign, with bit 0 for sign.
 // This encoding has the top bits always zero, regardless of sign
