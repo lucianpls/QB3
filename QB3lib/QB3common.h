@@ -109,6 +109,8 @@ struct decs {
     qb3_dtype type;
 };
 
+// in decode.cpp
+extern const int typesizes[8];
 
 // Encode integers as magnitude and sign, with bit 0 for sign.
 // This encoding has the top bits always zero, regardless of sign

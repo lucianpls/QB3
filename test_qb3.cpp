@@ -115,7 +115,10 @@ void check_plus(vector<uint8_t>& image, const Raster& raster, uint64_t m, int ma
 }
 
 template<typename T>
-void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_band = 0, bool fast = 0, uint64_t q = 1) {
+void check(vector<uint8_t> &image, const Raster &raster, 
+    uint64_t m, int main_band = 0, 
+    bool fast = 0, uint64_t q = 1, bool away = false) 
+{
     size_t xsize = raster.size.x;
     size_t ysize = raster.size.y;
     size_t bands = raster.size.c;
@@ -145,7 +148,7 @@ void check(vector<uint8_t> &image, const Raster &raster, uint64_t m, int main_ba
 
     // This is sufficient to trigger the quanta encoding
     if (q > 1)
-        qb3_set_encoder_quanta(qenc, q, 0);
+        qb3_set_encoder_quanta(qenc, q, away);
 
     t1 = high_resolution_clock::now();
     auto outsize = qb3_encode(qenc, static_cast<void *>(img.data()), outvec.data(), 
@@ -405,7 +408,10 @@ int main(int argc, char **argv)
             // check_plus<uint8_t>(image, raster, 127, 1, 1);
             // cout << endl;
 
-            check<uint8_t>(image, raster, 1, 1, true, 2);
+            check<int8_t>(image, raster, 1, 1, true, 2);
+            cout << endl;
+
+            check<uint8_t>(image, raster, 1, 1, true, 2, true);
             cout << endl;
 
             check<uint8_t>(image, raster, 1, 1, true, 3);

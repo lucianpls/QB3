@@ -81,7 +81,7 @@ bool qb3_set_encoder_quanta(encsp p, size_t q, bool away) {
 }
 
 // bytes per value by qb3_dtype, keep them in sync
-static const int typesizes[] = { 1, 1, 2, 2, 4, 4, 8, 8 };
+const int typesizes[8] = { 1, 1, 2, 2, 4, 4, 8, 8 };
 
 size_t qb3_max_encoded_size(const encsp p) {
     // Pad to 4 x 4
@@ -96,8 +96,12 @@ template<typename T>
 bool quantize(T* source, oBits& s, encs& p) {
     size_t nV = p.xsize * p.ysize * p.nbands; // Number of values
     T q = static_cast<T>(p.quanta);
-    for (size_t i = 0; i < nV; i++)
-        source[i] = QB3::rto0div(source[i], q);
+    if (p.away)
+        for (size_t i = 0; i < nV; i++)
+            source[i] = QB3::rfr0div(source[i], q);
+    else
+        for (size_t i = 0; i < nV; i++)
+            source[i] = QB3::rto0div(source[i], q);
     return 0;
 }
 

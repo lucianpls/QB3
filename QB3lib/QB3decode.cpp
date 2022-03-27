@@ -65,9 +65,6 @@ bool qb3_set_decoder_quanta(decsp p, size_t q) {
     return !error;
 }
 
-// bytes per value by qb3_dtype
-static const int typesizes[] = { 1, 2, 4, 8 };
-
 size_t qb3_decoded_size(const decsp p) {
     return p->xsize * p->ysize * p->nbands * typesizes[static_cast<int>(p->type)];
 }
@@ -77,7 +74,8 @@ template<typename T>
 static void multiply(T* data, size_t sz, T q) {
     T max_in = std::numeric_limits<T>::max() / q;
     for (size_t i = 0; i < sz; i++)
-        data[i] = (data[i] < max_in) * (data[i] * q) + (!(data[i] < max_in)) * std::numeric_limits<T>::max();
+        data[i] = (data[i] < max_in) * (data[i] * q) 
+            + (!(data[i] < max_in)) * std::numeric_limits<T>::max();
 }
 
 // The encode public API, returns 0 if an error is detected
@@ -87,7 +85,8 @@ size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination) {
     int error_code = 0;
     auto src = reinterpret_cast<uint8_t *>(source);
 
-#define DEC(T) QB3::decode(src, src_sz, reinterpret_cast<T*>(destination), p->xsize, p->ysize, p->nbands, p->cband)
+#define DEC(T) QB3::decode(src, src_sz, reinterpret_cast<T*>(destination), \
+    p->xsize, p->ysize, p->nbands, p->cband)
 
     switch (p->type) {
     case qb3_dtype::QB3_U8:
@@ -105,8 +104,6 @@ size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination) {
     default:
         error_code = 3; // Invalid type
     } // data type
-
-#undef DEC
 
     auto sz = qb3_decoded_size(p);
 #define MUL(T) multiply(reinterpret_cast<T *>(destination), sz / sizeof(T), static_cast<T>(p->quanta))
