@@ -69,13 +69,15 @@ size_t qb3_decoded_size(const decsp p) {
     return p->xsize * p->ysize * p->nbands * typesizes[static_cast<int>(p->type)];
 }
 
-// Integer multiply but don't overflow
+// Integer multiply but don't overflow, at least on the positive side
 template<typename T>
-static void multiply(T* data, size_t sz, T q) {
-    T max_in = std::numeric_limits<T>::max() / q;
+static void multiply(T* d, const decsp p) {
+    size_t sz = qb3_decoded_size(p) / sizeof(T);
+    T q = static_cast<T>(p->quanta);
+    T mo = std::numeric_limits<T>::max();
+    T mi = mo / q; // Last valid value
     for (size_t i = 0; i < sz; i++)
-        data[i] = (data[i] < max_in) * (data[i] * q) 
-            + (!(data[i] < max_in)) * std::numeric_limits<T>::max();
+        d[i] = (d[i] <= mi) * (d[i] * q) + (!(d[i] <= mi)) * mo;
 }
 
 // The encode public API, returns 0 if an error is detected
@@ -105,8 +107,7 @@ size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination) {
         error_code = 3; // Invalid type
     } // data type
 
-    auto sz = qb3_decoded_size(p);
-#define MUL(T) multiply(reinterpret_cast<T *>(destination), sz / sizeof(T), static_cast<T>(p->quanta))
+#define MUL(T) multiply(reinterpret_cast<T *>(destination), p)
     // We have a quanta, decode in place
     if (!error_code && p->quanta > 1) {
         switch (p->type) {
@@ -132,5 +133,5 @@ size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination) {
 
     }
 #undef MUL
-    return error_code ? 0 : sz;
+    return error_code ? 0 : qb3_decoded_size(p);
 }
