@@ -408,16 +408,29 @@ int main(int argc, char **argv)
             // check_plus<uint8_t>(image, raster, 127, 1, 1);
             // cout << endl;
 
+            // The sign really messes things up for normal images, because transitions through 128 are frequent
+            // and become massive
             check<int8_t>(image, raster, 1, 1, true, 2);
             cout << endl;
 
-            check<uint8_t>(image, raster, 1, 1, true, 2, true);
+            check<uint8_t>(image, raster, 1, 1, true, 2);
             cout << endl;
+
+            // Hardly any difference from the one above from rounding away from 0
+            //check<uint8_t>(image, raster, 1, 1, true, 2, true);
+            //cout << endl;
 
             check<uint8_t>(image, raster, 1, 1, true, 3);
             cout << endl;
 
+            // Same exact as above, for odd quanta there is no difference
+            //check<uint8_t>(image, raster, 1, 1, true, 3, true);
+            //cout << endl;
+
             check<uint8_t>(image, raster, 1, 1, true, 4);
+            cout << endl;
+
+            check<uint8_t>(image, raster, 1, 1, true, 4, true);
             cout << endl;
 
             check<uint8_t>(image, raster, 1, 1, true, 10);
