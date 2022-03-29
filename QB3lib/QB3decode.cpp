@@ -74,10 +74,16 @@ template<typename T>
 static void multiply(T* d, const decsp p) {
     size_t sz = qb3_decoded_size(p) / sizeof(T);
     T q = static_cast<T>(p->quanta);
-    T mo = std::numeric_limits<T>::max();
-    T mi = mo / q; // Last valid value
-    for (size_t i = 0; i < sz; i++)
-        d[i] = (d[i] <= mi) * (d[i] * q) + (!(d[i] <= mi)) * mo;
+    static const T maxt = std::numeric_limits<T>::max();
+    static const T mint = std::numeric_limits<T>::min();
+    T mai = maxt / q; // Top valid value
+    T mii = mint / q; // Bottom valid value
+    for (size_t i = 0; i < sz; i++) {
+        auto data = d[i];
+        d[i] = (data <= mai) * (data * q) + (!(data <= mai)) * maxt;
+        if (std::is_signed<T>() && (data < mii))
+            d[i] = mint;
+    }
 }
 
 // The encode public API, returns 0 if an error is detected
