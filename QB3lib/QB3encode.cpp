@@ -96,6 +96,16 @@ template<typename T>
 bool quantize(T* source, oBits& s, encs& p) {
     size_t nV = p.xsize * p.ysize * p.nbands; // Number of values
     T q = static_cast<T>(p.quanta);
+    if (q == 2) { // Easy to optimize for 2
+        if (p.away)
+            for (size_t i = 0; i < nV; i++)
+                source[i] = source[i] / 2 + source[i] % 2;
+        else
+            for (size_t i = 0; i < nV; i++)
+                source[i] /= 2;
+        return 0;
+    }
+
     if (p.away)
         for (size_t i = 0; i < nV; i++)
             source[i] = QB3::rfr0div(source[i], q);

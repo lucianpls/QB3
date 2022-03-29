@@ -410,15 +410,15 @@ int main(int argc, char **argv)
 
             // The sign really messes things up for normal images, because transitions through 128 are frequent
             // and become massive
-            check<int8_t>(image, raster, 1, 1, true, 2);
+            check<int8_t>(image, raster, 1, 1, true, 3);
             cout << endl;
 
             check<uint8_t>(image, raster, 1, 1, true, 2);
             cout << endl;
 
             // Hardly any difference from the one above from rounding away from 0
-            //check<uint8_t>(image, raster, 1, 1, true, 2, true);
-            //cout << endl;
+            check<uint8_t>(image, raster, 1, 1, true, 2, true);
+            cout << endl;
 
             check<uint8_t>(image, raster, 1, 1, true, 3);
             cout << endl;

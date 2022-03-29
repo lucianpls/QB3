@@ -71,7 +71,7 @@ size_t qb3_decoded_size(const decsp p) {
 
 // Integer multiply but don't overflow, at least on the positive side
 template<typename T>
-static void multiply(T* d, const decsp p) {
+static void dequantize(T* d, const decsp p) {
     size_t sz = qb3_decoded_size(p) / sizeof(T);
     T q = static_cast<T>(p->quanta);
     static const T maxt = std::numeric_limits<T>::max();
@@ -81,7 +81,7 @@ static void multiply(T* d, const decsp p) {
     for (size_t i = 0; i < sz; i++) {
         auto data = d[i];
         d[i] = (data <= mai) * (data * q) + (!(data <= mai)) * maxt;
-        if (std::is_signed<T>() && (data < mii))
+        if (std::is_signed<T>() && q > 2 && (data < mii))
             d[i] = mint;
     }
 }
@@ -112,8 +112,9 @@ size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination) {
     default:
         error_code = 3; // Invalid type
     } // data type
+#undef DEC
 
-#define MUL(T) multiply(reinterpret_cast<T *>(destination), p)
+#define MUL(T) dequantize(reinterpret_cast<T *>(destination), p)
     // We have a quanta, decode in place
     if (!error_code && p->quanta > 1) {
         switch (p->type) {
