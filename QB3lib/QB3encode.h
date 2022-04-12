@@ -64,10 +64,11 @@ static std::pair<size_t, uint64_t> qb3csz(uint64_t val, size_t rung) {
     assert(rung > 1); // Works for rungs 2+
     uint64_t nxt = (val >> (rung - 1)) & 1;
     uint64_t top = val >> rung;
+    uint64_t tb = 1ull << rung;
     return std::make_pair<size_t, uint64_t>(rung + top + (top | nxt),
-        + ((~0ull * (1 & top)) & (((val ^ (1ull << rung)) >> 2) | ((val & 0b11ull) << rung))) // 1 x LONG     -> 00
-        + ((~0ull * (1 & ~(top | nxt))) & (val + (1ull << (rung - 1))))                       // 0 0 SHORT    -> 1x
-        + ((~0ull * (1 & (~top & nxt))) & (val >> 1 | ((val & 1) << rung))));                 // 0 1 NOMINAL  -> 01
+        + ((~0ull * (1 & top)) & (((val ^ tb) << 2) | 0b11))                // 1 x LONG     -> _11
+        + ((~0ull * (1 & ~(top | nxt))) & (val << 1))                       // 0 0 SHORT    -> _x0
+        + ((~0ull * (1 & (~top & nxt))) & ((((val << 1) ^ tb) << 1) + 1))); // 0 1 NOMINAL  -> _01
 }
 
 // Single value QB3 encode, possibly using tables, works for all rungs
@@ -144,19 +145,19 @@ static void groupencode(T group[B2], T maxval, oBits& s,
     if (1 < sizeof(T)) { // This vanishes in 8 bit mode
         // Push the code switch for non-table encoding, not worth the hassle
         s.push(acc, abits);
-        if (63 != rung) {
+        if (sizeof(T) < 8 || 63 != rung) {
             for (int i = 0; i < B2; i++) {
                 auto p = qb3csz(group[i], rung);
                 s.push(p.second, p.first);
             }
         }
-        else { // rung 63 may overflow 64 bits, push the second val bit explicitly
+        else if(sizeof(T) == 8) { // rung 63 may overflow 64 bits, push bit 62 explicitly
             for (int i = 0; i < B2; i++) {
                 auto p = qb3csz(group[i], rung);
                 size_t ovf = p.first & (p.first >> 6); // overflow flag
                 s.push(p.second, p.first ^ ovf); // changes 65 in 64
                 if (ovf)
-                    s.push(1ull & (group[i] >> 1), ovf);
+                    s.push(1ull & (static_cast<uint64_t>(group[i]) >> 62), ovf);
             }
         }
     }

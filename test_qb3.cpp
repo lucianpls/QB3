@@ -410,34 +410,34 @@ int main(int argc, char **argv)
 
             // The sign really messes things up for normal images, because transitions through 128 are frequent
             // and become massive
-            check<int8_t>(image, raster, 1, 1, true, 3);
-            cout << endl;
-
-            check<uint8_t>(image, raster, 1, 1, true, 2);
-            cout << endl;
-
-            // Hardly any difference from the one above from rounding away from 0
-            check<uint8_t>(image, raster, 1, 1, true, 2, true);
-            cout << endl;
-
-            check<uint8_t>(image, raster, 1, 1, true, 3);
-            cout << endl;
-
-            // Same exact as above, for odd quanta there is no difference
-            //check<uint8_t>(image, raster, 1, 1, true, 3, true);
+            //check<int8_t>(image, raster, 1, 1, true, 3);
             //cout << endl;
 
-            check<uint8_t>(image, raster, 1, 1, true, 4);
-            cout << endl;
+            //check<uint8_t>(image, raster, 1, 1, true, 2);
+            //cout << endl;
 
-            check<uint8_t>(image, raster, 1, 1, true, 4, true);
-            cout << endl;
+            ////// Hardly any difference from the one above from rounding away from 0
+            //check<uint8_t>(image, raster, 1, 1, true, 2, true);
+            //cout << endl;
 
-            check<uint8_t>(image, raster, 1, 1, true, 10);
-            cout << endl;
+            //check<uint8_t>(image, raster, 1, 1, true, 3);
+            //cout << endl;
 
-            check<uint8_t>(image, raster, 1, 1, false, 10);
-            cout << endl;
+            //// Same exact as above, for odd quanta there is no difference
+            ////check<uint8_t>(image, raster, 1, 1, true, 3, true);
+            ////cout << endl;
+
+            //check<uint8_t>(image, raster, 1, 1, true, 4);
+            //cout << endl;
+
+            //check<uint8_t>(image, raster, 1, 1, true, 4, true);
+            //cout << endl;
+
+            //check<uint8_t>(image, raster, 1, 1, true, 10);
+            //cout << endl;
+
+            //check<uint8_t>(image, raster, 1, 1, false, 10);
+            //cout << endl;
 
             check<uint64_t>(image, raster, 5, 1);
             cout << endl;
@@ -474,7 +474,6 @@ int main(int argc, char **argv)
             cout << endl;
             check<uint8_t>(image, raster, 1, 1, true);
             cout << endl;
-
         }
         else if (raster.dt == ICDT_Int16 || raster.dt == ICDT_UInt16) {
             std::vector<uint16_t> image(params.get_buffer_size() / 2);
