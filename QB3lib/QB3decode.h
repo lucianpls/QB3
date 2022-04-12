@@ -24,17 +24,30 @@ Contributors:  Lucian Plesea
 #include "QB3common.h"
 
 namespace QB3 {
-    // Computed decode, does not work for rung 0 or 1
+
+// Computed decode, does not work for rung 0 or 1
+//static std::pair<size_t, uint64_t> qb3dsz(uint64_t val, size_t rung) {
+//    assert(rung > 1);
+//    uint64_t ntop = (~(val >> (rung - 1))) & 1;
+//    uint64_t rmsk = (1ull << rung) - 1;
+//    if (1 & ~ntop)
+//        return std::make_pair(rung, val & (rmsk >> 1));
+//    uint64_t nnxt = (~(val >> (rung - 2))) & 1;
+//    return std::make_pair(rung + 1 + nnxt,
+//        (((1 & ~nnxt) * ~0ull) & (((val << 1) & rmsk) | ((val >> rung) & 1)))
+//        + (((1 & nnxt) * ~0ull) & ((rmsk + 1) + ((val & (rmsk >> 1)) << 2) + ((val >> rung) & 0b11))));
+//}
+
 static std::pair<size_t, uint64_t> qb3dsz(uint64_t val, size_t rung) {
     assert(rung > 1);
-    uint64_t ntop = (~(val >> (rung - 1))) & 1;
-    uint64_t rmsk = (1ull << rung) - 1;
-    if (1 & ~ntop)
-        return std::make_pair(rung, val & (rmsk >> 1));
-    uint64_t nnxt = (~(val >> (rung - 2))) & 1;
-    return std::make_pair(rung + 1 + nnxt,
-        (((1 & ~nnxt) * ~0ull) & (((val << 1) & rmsk) | ((val >> rung) & 1)))
-        + (((1 & nnxt) * ~0ull) & ((rmsk + 1) + ((val & (rmsk >> 1)) << 2) + ((val >> rung) & 0b11))));
+    uint64_t rbit = 1ull << rung;
+    if (0 == (val & 1)) // Short
+        return std::make_pair(rung, (val & (rbit - 1)) >> 1);
+    uint64_t n = (val >> 1) & 1; // Next bit, long if set
+    val = (val >> 2) & (rbit - 1);
+    return std::make_pair(rung + 1 + n,
+        (((1 & ~n) * ~0ull)  & (val | (rbit >> 1))) // Nominal
+        + (((1 & n) * ~0ull) & (val | rbit)));    // Long
 }
 
 // Decode using tables when possible, works for all rungs
@@ -84,7 +97,7 @@ static bool gdecode(iBits &s, size_t rung, T * group, uint64_t acc, size_t abits
             for (size_t i = 0; i < 14; i += 2) {
                 auto v = DDRG2[acc & 0xff];
                 group[i] = v & 0x7;
-                group[i + 1] = (v >> 4) & 0x7;
+                group[i + 1] = (v >> 3) & 0x7;
                 abits += v >> 12;
                 acc >>= v >> 12;
             }
@@ -96,7 +109,7 @@ static bool gdecode(iBits &s, size_t rung, T * group, uint64_t acc, size_t abits
             // last pair
             auto v = DDRG2[acc & 0xff];
             group[14] = v & 0x7;
-            group[15] = (v >> 4) & 0x7;
+            group[15] = (v >> 3) & 0x7;
             s.advance(abits + (v >> 12));
         }
         else if (6 > rung) { // Table decode at 3,4 and 5, half of the values fit in accumulator
@@ -165,9 +178,9 @@ static bool gdecode(iBits &s, size_t rung, T * group, uint64_t acc, size_t abits
                 auto p = qb3dsz(s.peek(), rung);
                 auto ovf = p.first & (p.first >> 6);
                 group[i] = static_cast<T>(p.second);
-                s.advance(p.first - ovf);
-                if (ovf)
-                    group[i] |= s.get() << 1;
+                s.advance(p.first ^ ovf);
+                if (ovf) // The next to top bit got dropped
+                    group[i] |= s.get() << 62;
             }
         }
     }

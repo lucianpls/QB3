@@ -60,26 +60,32 @@ def decode(v, rung):
         v = v & ((1 << rung) -1)
         return (rung << 12) + (v >> 1)
 
+
+def print_table(t, s, formt : str):
+    'Output a C formatted table'
+    for v in t:
+        s += formt.format(v);
+        if len(s) > 120:
+            print(s)
+            s = ""
+    if len(s) == 0:
+        s = "  "
+    print(s[:-2] + "};")
+
 # tables for encoding, up to 11 bits
 def showencode():
     for rung in range(11):
-        s = f"static const uint16_t crg{rung}[] = {{"
+        out = []
         for v in range(2**(rung+1)):
-            s += f"0x{encode(v, rung):4x}, "
-            if len(s) > 120:
-                print(s)
-                s = ""
-        print(s[:-2] + "};")
+            out.append(encode(v, rung))
+        print_table(out, f"static const uint16_t crg{rung:x}[] = {{", "0x{:x}, ")
 
 def showdecode():
     for rung in range(11):
-        s = f"static const uint16_t drg{rung}[] = {{"
+        out = []
         for v in range(2**(rung + 2)):
-            s += f"0x{decode(v, rung):04x}, "
-            if len(s) > 120:
-                print(s)
-                s=""
-        print(s[:-2] + "};")
+            out.append(decode(v, rung))
+        print_table(out, f"static const uint16_t drg{rung:x}[] = {{", "0x{:x}, ")
 
 def trycodec():
     'Check encoding and decoding tables for all rungs'
@@ -118,23 +124,20 @@ def cs(v, u):
 def showcodeswitch():
     for ubits in (3, 4, 5, 6):
         # If delta is zero, there is no code switch, just send the 0 bit
-        s = f"static const uint16_t csw{ubits}[] = {{ 0x1000, "
+        out = [0x1000]
         for v in range(1, 2**ubits):
             v = cs(v, ubits) # the magsign value
             v = encode(v, ubits - 1)
             # Add the change bit, change code and length
             v =  ((v + 0x1000) & 0xf000) | ((v << 1) & 0xff) | 1
-            s += f"0x{v:04x}, "
-            if len(s) > 120:
-                print(s)
-                s = ""
-        print(s[:-2] + "};")
+            out.append(v)
+        print_table(out, f"static const uint16_t csw{ubits}[] = {{", "0x{:x}, ")
 
 # does not contain the change bit
 # Need special encoding for middle value
 def showdecodeswitch():
     for ubits in (3, 4, 5, 6):
-        s = f"static const uint16_t dsw{ubits}[] = {{ "
+        out = []
         for v in range(2**(ubits + 1)):
             v = decode(v, ubits - 1)
             # Account for the change bit
@@ -145,12 +148,8 @@ def showdecodeswitch():
                 v = (v + 1) & ((1 << (ubits - 1)) - 1)
             else:
                 v = v & ((1 << ubits) -1)
-            v |= sz << 12
-            s += f"0x{v:04x}, "
-            if len(s) > 120:
-                print(s)
-                s = ""
-        print(s[:-2] + "};")
+            out.append(v | (sz << 12))
+        print_table(out, f"static const uint16_t dsw{ubits}[] = {{", "0x{:x}, ")
 
 # Check the code switch encode-decode
 def trycs(ubits):
@@ -162,7 +161,7 @@ def trycs(ubits):
         v =  ((v + 0x1000) & 0xf000) | ((v << 1) & 0xff) | 1
         enct.append(v)
     dect = []
-    for v in range( 2**(ubits+1) ):
+    for v in range(2**(ubits+1)):
         v = decode(v, ubits -1)
         sz = 1 + (v >> 12)
         v = smag(v & 0xff)
@@ -173,59 +172,51 @@ def trycs(ubits):
         v |= sz << 12
         dect.append(v)
     # Try them
-    for d in range(1 << ubits):
-        print(f"{d} {enct[d]:04x} {dect[0xff & (enct[d] >> 1)]:04x}")
+    print(f"Ubits {ubits}, first and last column should be the same")
+    for d in range(1, 1 << ubits):
+        print(f"{d:04x} {enct[d]:04x} {dect[0xff & (enct[d] >> 1)]:x}")
 
 # signal code-switch value by ubits
 def showsame():
-    s = f"static const uint16_t SAME[] = {{ 0, 0, 0, "
+    out = [0, 0, 0]
     for ubits in range(3,7):
         v = cs(0, ubits)
         v = encode(v, ubits - 1)
         # Add the change bit, change code and length
         v =  ((v + 0x1000) & 0xf000) | ((v << 1) & 0xff) | 1
-        s += f"0x{v:04x}, "
-    print(s[:-2] + "};")
+        out.append(v)
+    print_table(out, "const uint16_t SIGNAL[] = {", "0x{:x}, ")
 
-def print_table(t, s, formt : str):
-    for v in t:
-        s += formt.format(v);
-        if len(s) > 120:
-            print(s)
-            s = ""
-    if len(s) == 0:
-        s = "  "
-    print(s[:-2] + " };")
-
-def show_dopio():
-    # rung 1 single shot as byte
-    single = (0x1000, 0x3002, 0x1000, 0x2001, 0x1000, 0x3003, 0x1000, 0x2001)
+def show_double1():
+    'Rung 1 double decoding table'
+    single = tuple(decode(v, 1) for v in range(8))
     out = []
     for i in range(2 ** 6):
         v = single[i & 0x7] # First value
         v1 = single[(i >> (v >> 12)) & 0x7]; # Second value
         out.append((((v + v1) & 0xf000) >> 8) + (v1 & 0x3) * 4 + (v & 0x3))
-    print_table(out, "static const uint8_t dopio[] = {{", "0x{:02x}, ")
+    print_table(out, "static const uint8_t DDRG1[] = {", "0x{:x}, ")
 
-def show_tripio():
-    # rung 2 single shot as byte
-    single = (0x4004, 0x3002, 0x2000, 0x2001, 0x4005, 0x3003, 0x2000, 0x2001, 0x4006, 0x3002, 0x2000, 0x2001,
-0x4007, 0x3003, 0x2000, 0x2001)
+def show_double2():
+    'Rung 2 double decoding table'
+    single = tuple(decode(v, 2) for v in range(16))
     out = []
     for i in range(2 ** 8):
         v = single[i & 0xf] # First value
         v1 = single[(i >> (v >> 12)) & 0xf]; # Second value
         out.append( ((v + v1) & 0xf000) + (v1 & 0x7) * 8 + (v & 0x7))
-    print_table(out, "static const uint8_t tripio[] = { ", "0x{:04x}, ")
+    print_table(out, "static const uint16_t DDRG2[] = {", "0x{:x}, ")
 
 if __name__ == "__main__":
-    showencode()
+    #trycodec()
+    #showencode()
     showdecode()
 
-    trycodec()
+    #for i in 3,4,5,6:
+    #    trycs(i)
+    #showcodeswitch()
+    #showdecodeswitch()
 
-    # showcodeswitch()
-    # showdecodeswitch()
-    # showsame()
-    # show_dopio()
-    # show_tripio()
+    #showsame()
+    #show_double1()
+    #show_double2()
