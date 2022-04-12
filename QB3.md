@@ -40,7 +40,7 @@ needed to determine the actual value.
 By contrast, the two's complement encoding is in sign-magnitude order (smag), although the magnitude of negative 
 numbers is encoded with flipped bit values.
 
-# MAGS QB3 prefix encoding
+# MAGS QB3 suffix encoding
 
 Let's assume that for encoding a block n bits per value are required, 
 which means that the rung is n - 1. Even within a 16 value block smaller values 
@@ -49,22 +49,22 @@ smaller output size. We split the possible values in three ranges, each range
 encoded with a different number of bits.
 
  - First range, short, is the first quarter of possible codes within a rung. These 
-are the values between 0 and 2^(n-2), which start with two zeros in the most 
-significant bits when stored as n bits. These can be encoded using n - 1 bits, 
-including a signal bit.
+are the values between 0 and 2^(n-2), which start with 00 in the two most 
+significant bits when stored on n bits. These can be encoded using n - 1 bits, 
+including a signal bit, so each such values saves one bit.
  - Second range, the nominal length values, are the second quarter of possible 
  codes, between 2^(n-2) and 2^(n-1). These values start with 01 in the two most 
-significant bits. These values need n - 2 bits plus two signaling bits.
+significant bits. These values need n - 2 bits plus two signaling bits, they don't save or add any bits.
  - Last type, long, are values between 2^(n-1) and 2^n. These represent the top 
- half of the possible values, which occur less often. These values start with 1 
- in the most significant bit in normal encoding. These values will need n bits 
+ half of the possible values, which occur less often. These values have a 1 
+ in the most significant bit in normal encoding. These values will need n + 1 bits 
  for storage, including two signal bits, since we know that the top bit has to be 1.
 
 The encoding type needs to be self-identifying, for every value. To do this, 
-the range values are prefixed by one or two signal bits:
- - 1x Short
- - 01 Nominal 
- - 00 Long
+the range values are suffixed by one or two bits which signal the size of the symbol:
+ - x0 Short
+ - x01 Nominal
+ - x11 Long
 
 This means that values within each range get encoded with a different number of bits, which include the prefix. 
 Considering that the normal encoding requires n bits, we have:
@@ -74,11 +74,11 @@ Considering that the normal encoding requires n bits, we have:
  - Long:    2 + (n-1) = n+1 bits
  
 Values in the long range take one more bit than the nominal size, while values in the short range take one bit less. 
-If the number of the short values in a group is larger than the number of long values, the overall size will be less 
-than if the values in the group are stored with the nominal size. This variable size encoding results in additional 
-compression.
+If the number of the short values in a group is larger than the number of long values, the overall stored size for the group 
+will be less than if the values in the group are stored with the nominal size. This variable size encoding results 
+in additional compression.
 
-# QB3 bitstream
+# QB3 Bitstream
 
 The QB3 bitstream is a concatenation of encoded groups, each encoded individually at a specific rung. In the case of multi 
 band rasters, the band for a given group are concatenated before going to the next group. 
@@ -101,45 +101,43 @@ The codeswitch itself is QB3 encoded, using a variable number of bits. For examp
 The codeswitch is then followed by the 16 group values, encoded in QB3 format. Special encoding are required at rung 0 and rung 1, where
 the normal QB3 doesn't apply (output codes can be shorter than the two prefix bits).
 
-## Rung 0 encoding
+## Rung 0 Encoding
 
-At rung zero, the values require a single bit. There is the special case when all the values within a block are zero. 
-This happens relatively often, when the input block is constant, so it deserves a special, shorter encoding. In this encoding, 
-the rung encoding is directly followed by a single zero. In this way, blocks in large areas of constant value will use only two bits, 
-both zero, the first one signifying that the block rung is the same as the one for the previous block (zero), while the next zero
-means that all the values within the block are zero.  
-For a normal zero rung block, where some of the values are ones, a 1 bit is stored (non-zero block), followed by the 16 bits for the
-16 values.
+At rung zero, each value requires a single bit, the QB3 ranges can't be used. There is however the special case when all the values 
+within a block are zero. This happens when the input block is constant, which is common so it deserves a special, shorter encoding.
+For this case, the rung encoding is directly followed by a single zero bit. Using this encoding, blocks in large areas of constant 
+value will use only two bits, both zero, the first one signifying that the block rung is the same as the one for the previous block 
+(zero), while the next zero means that all the values within the block are zero. Otherwise, for a normal zero rung block where some 
+of the values are ones, a 1 bit is stored (non-zero block), followed by the 16 bits for the 16 values.
 
-## Rung 1 encoding
-At rung 1, the low range is encoded using a single bit, and as such it cannot follow the normal QB3 
-encoding pattern.  
-The used:
- - 0 -> 0b0
- - 1 -> 0b11
- - 2 -> 0b001
- - 3 -> 0b101
+## Rung 1 Encoding
+At rung 1, the low range is encoded using a single bit, following the QB3 encoding pattern.  
+ - 0b00 -> 0b0
+ - 0b01 -> 0b10
+ - 0b10 -> 0b011
+ - 0b11 -> 0b111
 
-## Group Step encoding
+Decoding this rung has to be done slightly different from the higher rungs, testing each bit separately since the second bit might not exist.
+
+## Group Step Encoding
 
 The rung of a group is the highest bit set for any value within the group. This means that at least one of the values in 
 the group is in the long range of the respective group. The encoder will not generate an encoded group where
-all the values are in the nominal or short range. This would be a relatively small encoded group, an opportunity wasted.
+all the values are in the nominal or short range. This kind of block would be a relatively small encoded group, an opportunity wasted.
 Knowing this, it is possible to reduce one of the values in an unambiguous way, so it can be restored when decoding. In the case
 where the first value within the group is the only one in the long range, the top bit can be flipped to zero, which changes
-the range of that value to the nominal or low. On decoding, if no values in the decoded group are in the long range, it can be
-reasoned that the first value was reduced, and can be restored by setting the rung bit. This eliminates group encoding where
-the first value is the only one in the long range. This encoding can be used to reduce the second value in the group, if only the
-first two values are in the long range. This progresses all the way to last value in the group if all the values
-within the group are in the long range. This situation is the worst case, where the group would require 16 extra bits compared
-with the nominal. Using this reduction, the worst case scenario would require at most 15 extra bits, since the last value 
-will always be reduced.  
+the range of that value to the nominal or low. On decoding, if no value in the decoded group are in the long range, it can be
+reasoned that the first value was the one reduced, and the original value can be restored by setting the rung bit. This eliminates 
+group encoding where the first value is the only one in the long range. This encoding can then be used to reduce the second value in 
+the group, if only the first two values are in the long range. This logic progresses all the way to reducing the last value in the group 
+if all the values within the group are in the long range. This situation is the worst case, where the group would require 16 more bits 
+than the nominal. Using this reduction method, the worst case scenario requires at most 15 extra bits, since the last value will be reduced.  
 Another way to describe this is by looking at the squence of the rung bits across the group. If the first n values have the
 rung bit set while then rest of the values have it cleared, the last value with the bit set can be reduced on encoding and
 restored on decoding. We know that at least one rung bit is set, so it is not possible to have all the rung bits clear 
 initially. The sequnce of the rung bits is a step down function, going from 1 to 0, so this optimization is called 
-*step encoding*. if the rung-bit distribution is a step down, this optimization reduces the number of bits required to store 
-a group by 1 or 2 bits. This encoding applies to any rung except for rung 0, since the rung of a single bit can't be reduced.
+*step encoding*. This optimization reduces the number of bits required to store a group by 1 or 2 bits, if the sequence of the rung bit
+across the group is a step function. This encoding applies to all rungs except for rung 0.
 
 # Common Factor Group Encoding
 
