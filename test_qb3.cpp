@@ -24,7 +24,7 @@ Contributors:  Lucian Plesea
 
 // From https://github.com/lucianpls/libicd
 #include <icd_codecs.h>
-#include <QB3.h>
+#include "QB3lib/QB3.h"
 
 using namespace std;
 using namespace chrono;

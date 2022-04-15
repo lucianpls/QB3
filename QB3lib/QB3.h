@@ -21,7 +21,7 @@ Contributors:  Lucian Plesea
 #include <stddef.h>
 
 #if defined(_WIN32)
-#if defined(QB3_EXPORTS)
+#if defined(libQB3_EXPORTS)
 #define DLLEXPORT __declspec(dllexport)
 #else
 #define DLLEXPORT __declspec(dllimport)
