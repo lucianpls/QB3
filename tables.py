@@ -1,5 +1,4 @@
 # Generate C tables for QB3 encoding, for byte values
-
 # It's not that easy in python due to infinite precision
 
 # These only work for byte data, aka rung < 8

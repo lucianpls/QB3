@@ -1,5 +1,5 @@
 /*
-Copyright 2020-2021 Esri
+Copyright 2020-2022 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -26,18 +26,6 @@ Contributors:  Lucian Plesea
 namespace QB3 {
 
 // Computed decode, does not work for rung 0 or 1
-//static std::pair<size_t, uint64_t> qb3dsz(uint64_t val, size_t rung) {
-//    assert(rung > 1);
-//    uint64_t ntop = (~(val >> (rung - 1))) & 1;
-//    uint64_t rmsk = (1ull << rung) - 1;
-//    if (1 & ~ntop)
-//        return std::make_pair(rung, val & (rmsk >> 1));
-//    uint64_t nnxt = (~(val >> (rung - 2))) & 1;
-//    return std::make_pair(rung + 1 + nnxt,
-//        (((1 & ~nnxt) * ~0ull) & (((val << 1) & rmsk) | ((val >> rung) & 1)))
-//        + (((1 & nnxt) * ~0ull) & ((rmsk + 1) + ((val & (rmsk >> 1)) << 2) + ((val >> rung) & 0b11))));
-//}
-
 static std::pair<size_t, uint64_t> qb3dsz(uint64_t val, size_t rung) {
     assert(rung > 1);
     uint64_t rbit = 1ull << rung;
