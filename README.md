@@ -10,7 +10,7 @@ images, QB3 can take advange of band to band similarities to compress
 even better.  
 
 # QB3 Library
-The library, located in the [libQB3 folder](libQB3) provides the core QB3 
+The library, located in [QB3lib](QB3lib) provides the core QB3 
 algorithm implementation and provides a C language API.
 It is implemented in standard C++11 and can be build for various platforms using 
 cmake. It requires a little endian, two's complement architecture with 8, 16, 32 
@@ -19,7 +19,7 @@ Only 64bit builds should be used, since the implementation makes heavy use of 64
 bit values.
 
 # Use
-[QB3.h](libQB3/QB3.h) contains the public C API.  
+[QB3.h](QB3lib/QB3.h) contains the public C API.  
 Opaque encoder and decoder control structures have to be created, then options and 
 values can be set and querried and then the encode or decode functions can be 
 called.  
