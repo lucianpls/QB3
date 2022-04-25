@@ -30,7 +30,8 @@ encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt
     p->type = dt;
     p->quanta = 1; // No quantization
     p->away = false; // Round to zero
-    p->mode = QB3_DEFAULT; // Base
+    p->raw = false;  // Write image header
+    p->mode = QB3M_DEFAULT; // Base
     // Start with no inter-band differential
     for (size_t c = 0; c < bands; c++) {
         p->runbits[c] = 0;
@@ -40,6 +41,7 @@ encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt
     // For 3 or 4 bands we assume RGB(A) input and use R-G and B-G
     if (bands == 3 || bands == 4)
         p->cband[0] = p->cband[2] = 1;
+    p->error = 0;
     return p;
 }
 
@@ -47,16 +49,19 @@ void qb3_destroy_encoder(encsp p) {
     delete p;
 }
 
-bool qb3_set_encoder_coreband(encsp p, size_t bands, const size_t *cband) {
+bool qb3_set_encoder_coreband(encsp p, size_t bands, size_t *cband) {
     if (bands != p->nbands)
         return false; // Incorrect band number
     // Set it, make sure it's not out of spec
     for (size_t i = 0; i < bands; i++)
         p->cband[i] = (cband[i] < bands) ? cband[i] : i;
-    // Force any core band to be independent
+    // Force core bands to be independent
     for (size_t i = 0; i < bands; i++)
         if (p->cband[i] != i)
             p->cband[p->cband[i]] = p->cband[i];
+    // Return the possibly modified band mapping
+    for (size_t i = 0; i < bands; i++)
+        cband[i] = p->cband[i];
     return true;
 }
 
@@ -109,11 +114,14 @@ size_t qb3_max_encoded_size(const encsp p) {
     return 1024 + static_cast<size_t>(bits_per_value * nvalues / 8);
 }
 
-qb3_mode qb3_set_encoder_mode(encsp p, qb3_mode mode)
-{
-    if (mode <= qb3_mode::QB3_BEST)
+qb3_mode qb3_set_encoder_mode(encsp p, qb3_mode mode) {
+    if (mode <= qb3_mode::QB3M_BEST)
         p->mode = mode;
     return p->mode;
+}
+
+DLLEXPORT void qb3_set_encoder_raw(encsp p) {
+    p->raw = true;
 }
 
 // Quantize in place then encode the source, by type
@@ -153,7 +161,7 @@ static size_t encode_quanta(encsp p, void* source, void* destination, qb3_mode m
     auto src = reinterpret_cast<char*>(source);
 
 #define QENC(T) quantize(reinterpret_cast<T *>(buffer.data()), s, subimg);\
-                if (mode == qb3_mode::QB3_BEST) \
+                if (mode == qb3_mode::QB3M_BEST) \
                     QB3::encode_best(reinterpret_cast<std::make_unsigned_t<T> *>(buffer.data()), s, subimg);\
                 else\
                     QB3::encode_fast(reinterpret_cast<std::make_unsigned_t<T> *>(buffer.data()), s, subimg);\
@@ -175,22 +183,86 @@ static size_t encode_quanta(encsp p, void* source, void* destination, qb3_mode m
         src += linesize * B;
     }
 
-    return (s.size_bits() + 7) / 8;
+    return (s.position() + 7) / 8;
 #undef QENC
 }
 
+// Header
+// 
+//
+void static write_qb3_header(encsp p, oBits& s) {
+    static const size_t hdrsz = 4 + 2 + 2 + 8 + 8;
+    static const unsigned char sig[4] = {81, 66, 51, 128}; // QB3, last byte has the 7 bit set
+    // Signature
+    for (int i = 0; i < 4; i++)
+        s.push(sig[i], 8);
+    // Always start at byte boundary
+    size_t start_size = s.tobyte();
+    if (p->xsize == 0 || p->ysize == 0 
+        || p->xsize > 0xffff || p->ysize > 0xffff
+        || p->nbands > QB3_MAXBANDS
+        || p->type > QB3_U64
+        ) {
+        p->error = QB3E_EINV;
+        return;
+    }
+
+    // Write xmax, ymax, num bands in low endian
+    s.push((p->xsize - 1), 16); // 16 bits
+    s.push((p->ysize - 1), 16); // 16 bits
+    s.push((p->nbands - 1), 8); // 8 bits
+    s.push(static_cast<uint8_t>(p->type), 8);         // 8 bits
+
+    // Check the size
+    if (s.tobyte() - start_size != hdrsz * 8)
+        p->error = QB3E_ERR; // Internal error
+}
+
+// Are there any band mappings
+bool static is_banddiff(encsp p) {
+    for (int c = 0; c < p->nbands; c++)
+        if (p->cband[c] != c)
+            return true;
+    return false;
+}
+
+// Header for cbands, does nothing if not needed
+void static write_cband_header(encsp p, oBits& s) {
+    static const unsigned char sig[4] = {'C','B','N','D'};
+    size_t start_size = s.tobyte();
+    if (!is_banddiff(p))
+        return;
+    // Signature
+    for (int i = 0; i < 4; i++)
+        s.push(sig[i], 8);
+    // One byte per band, dump core band list
+    for (int i = 0; i < p->nbands; i++)
+        s.push(p->cband[i], 8); // 8 bits each
+    if(s.tobyte() - start_size != 4 + p->nbands)
+        p->error = QB3E_ERR; // Internal error
+}
+
 // The encode public API, returns 0 if an error is detected
-// TODO: Error reporting
 size_t qb3_encode(encsp p, void* source, void* destination) {
     auto mode = p->mode;
     if (p->quanta > 1)
         return encode_quanta(p, source, destination, mode);
     oBits s(reinterpret_cast<uint8_t*>(destination));
+    if (!p->raw) { // Need header
+        write_qb3_header(p, s);
+        if (p->error)
+            return 0;
+        // This might be a no-op
+        write_cband_header(p, s);
+        if (p->error)
+            return 0;
+    }
+
     int error_code = 0;
 #define ENC(T) QB3::encode_best(reinterpret_cast<const T*>(source), s, *p)
 
     switch (mode) {
-    case(qb3_mode::QB3_BEST):
+    case(qb3_mode::QB3M_BEST):
         switch (p->type) {
         case qb3_dtype::QB3_U8:
         case qb3_dtype::QB3_I8:
@@ -205,7 +277,7 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
         case qb3_dtype::QB3_I64:
             error_code = ENC(uint64_t); break;
         default:
-            error_code = 3; // Invalid type
+            error_code = QB3E_EINV; // Invalid type
         } // data type
 #undef ENC
         break;
@@ -226,11 +298,17 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
         case qb3_dtype::QB3_I64:
             error_code = ENC(uint64_t); break;
         default:
-            error_code = 3; // Invalid type
+            error_code = QB3E_EINV; // Invalid type
         } // data type
 #undef ENC
     } // Encoding mode
-    if (error_code)
-        return 0;
-    return (s.size_bits() + 7) / 8;
+    if (error_code) {
+        p->error = error_code;
+        return 0; // Another sign of failure
+    }
+    return s.tobyte();
+}
+
+int qb3_get_encoder_state(encsp p) {
+    return p->error;
 }

@@ -32,7 +32,7 @@ Contributors:  Lucian Plesea
 #endif
 
 // Keep this close to plain C so it can have a C API
-#define QB3_MAXBANDS 10
+#define QB3_MAXBANDS 16
 
 #if defined(__cplusplus)
 extern "C" {
@@ -43,8 +43,13 @@ typedef struct decs * decsp; // decoder
 // Types
 enum qb3_dtype { QB3_U8 = 0, QB3_I8, QB3_U16, QB3_I16, QB3_U32, QB3_I32, QB3_U64, QB3_I64 };
 // Encode mode
-enum qb3_mode { QB3_DEFAULT = 0, QB3_BASE = 0, QB3_BEST };
+enum qb3_mode { QB3M_DEFAULT = 0, QB3M_BASE = 0, QB3M_BEST };
 
+// Errors
+enum qb3_error { QB3E_OK = 0, 
+	QB3E_EINV, // Parameter invalid
+	QB3E_ERR   // Last, unspecified error
+};
 
 // In QB3encode.cpp
 
@@ -59,7 +64,8 @@ DLLEXPORT void qb3_destroy_encoder(encsp p);
 // equivalent to cbands = { 1, 1, 1 }
 // Returns false if band number differs from the one used to create p
 // Only values < bands are acceptable in cband array
-DLLEXPORT bool qb3_set_encoder_coreband(encsp p, size_t bands, const size_t *cband);
+// The cband array might be modified if core bands are not valid or iterrative
+DLLEXPORT bool qb3_set_encoder_coreband(encsp p, size_t bands, size_t *cband);
 
 // Sets quantization parameters, returns true on success
 // away = true -> round away from zero
@@ -72,11 +78,16 @@ DLLEXPORT size_t qb3_max_encoded_size(const encsp p);
 // If mode value is out of range, it returns the previous mode value of p
 DLLEXPORT qb3_mode qb3_set_encoder_mode(encsp p, qb3_mode mode);
 
+// Generate raw qb3 stream, no headers
+DLLEXPORT void qb3_set_encoder_raw(encsp p);
+
 // Encode the source into destination buffer, which should be at least qb3_max_encoded_size
 // Source organization is expected to be y major, then x, then band (interleaved)
 // Returns actual size, the encoder can be reused
 DLLEXPORT size_t qb3_encode(encsp p, void *source, void *destination);
 
+// Returns !0 if last encode call failed
+DLLEXPORT int qb3_get_encoder_state(encsp p);
 
 
 // In QB3decode.cpp

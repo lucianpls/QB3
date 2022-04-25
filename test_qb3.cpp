@@ -72,7 +72,7 @@ void check_plus(vector<uint8_t>& image, const Raster& raster, uint64_t m, int ma
     }
     t1 = high_resolution_clock::now();
     auto outsize = qb3_encode(qenc, static_cast<void*>(img.data()), outvec.data(),
-        fast ? qb3_mode::QB3_BASE : qb3_mode::QB3_BEST);
+        fast ? qb3_mode::QB3M_BASE : qb3_mode::QB3M_BEST);
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
 
@@ -149,13 +149,17 @@ void check(vector<uint8_t> &image, const Raster &raster,
     // This is sufficient to trigger the quanta encoding
     if (q > 1)
         qb3_set_encoder_quanta(qenc, q, away);
-    qb3_set_encoder_mode(qenc, fast ? qb3_mode::QB3_BASE : qb3_mode::QB3_BEST);
+    qb3_set_encoder_mode(qenc, fast ? qb3_mode::QB3M_BASE : qb3_mode::QB3M_BEST);
+    qb3_set_encoder_raw(qenc);
     t1 = high_resolution_clock::now();
     auto outsize = qb3_encode(qenc, static_cast<void *>(img.data()), outvec.data());
     time_span = duration_cast<duration<double>>(high_resolution_clock::now() - t1).count();
+    auto err = qb3_get_encoder_state(qenc);
 
     cout << outsize << '\t' << outsize * 100.0 / image.size() / sizeof(T) 
         << '\t' << time_span << '\t';
+    if (err)
+        cout << "\nFailed\n";
 
     std::vector<T> re(xsize * ysize * bands, 0);
 
@@ -222,7 +226,9 @@ void check(vector<uint16_t>& image, const Raster& raster, uint64_t m, int main_b
 
     //size_t bandmap[] = { 0, 1, 2, 3, 4, 5 };
     //qb3_set_encoder_coreband(qenc, 3, bandmap);
-    qb3_set_encoder_mode(qenc, fast ? qb3_mode::QB3_BASE : qb3_mode::QB3_BEST);
+    qb3_set_encoder_mode(qenc, fast ? qb3_mode::QB3M_BASE : qb3_mode::QB3M_BEST);
+    qb3_set_encoder_raw(qenc);
+
     t1 = high_resolution_clock::now();
     auto outsize = qb3_encode(qenc, img.data(), outvec.data());
     time_span = duration_cast<duration<double>>(high_resolution_clock::now() - t1).count();
