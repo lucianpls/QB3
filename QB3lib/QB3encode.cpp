@@ -164,21 +164,20 @@ static size_t encode_quanta(encsp p, void* source, void* destination, qb3_mode m
                 if (mode == qb3_mode::QB3M_BEST) \
                     QB3::encode_best(reinterpret_cast<std::make_unsigned_t<T> *>(buffer.data()), s, subimg);\
                 else\
-                    QB3::encode_fast(reinterpret_cast<std::make_unsigned_t<T> *>(buffer.data()), s, subimg);\
-                break
+                    QB3::encode_fast(reinterpret_cast<std::make_unsigned_t<T> *>(buffer.data()), s, subimg);
 
     for (size_t y = 0; y + B <= ysz; y += B) {
         memcpy(buffer.data(), src, buffer.size());
         switch (p->type) {
-        case qb3_dtype::QB3_U8:  QENC(uint8_t);
-        case qb3_dtype::QB3_I8:  QENC(int8_t);
-        case qb3_dtype::QB3_U16: QENC(uint16_t);
-        case qb3_dtype::QB3_I16: QENC(int16_t);
-        case qb3_dtype::QB3_U32: QENC(uint32_t);
-        case qb3_dtype::QB3_I32: QENC(int32_t);
-        case qb3_dtype::QB3_U64: QENC(uint64_t);
-        case qb3_dtype::QB3_I64: QENC(int64_t);
-        default: return 3;
+        case qb3_dtype::QB3_U8:  QENC(uint8_t);  break;
+        case qb3_dtype::QB3_I8:  QENC(int8_t);   break;
+        case qb3_dtype::QB3_U16: QENC(uint16_t); break;
+        case qb3_dtype::QB3_I16: QENC(int16_t);  break;
+        case qb3_dtype::QB3_U32: QENC(uint32_t); break;
+        case qb3_dtype::QB3_I32: QENC(int32_t);  break;
+        case qb3_dtype::QB3_U64: QENC(uint64_t); break;
+        case qb3_dtype::QB3_I64: QENC(int64_t);  break;
+        default: return QB3E_EINV;
         }
         src += linesize * B;
     }
@@ -189,7 +188,7 @@ static size_t encode_quanta(encsp p, void* source, void* destination, qb3_mode m
 
 // Header
 // 
-//
+// TODO: Needs compression style
 void static write_qb3_header(encsp p, oBits& s) {
     static const size_t hdrsz = 4 + 2 + 2 + 8 + 8;
     static const unsigned char sig[4] = {81, 66, 51, 128}; // QB3, last byte has the 7 bit set
@@ -208,10 +207,10 @@ void static write_qb3_header(encsp p, oBits& s) {
     }
 
     // Write xmax, ymax, num bands in low endian
-    s.push((p->xsize - 1), 16); // 16 bits
-    s.push((p->ysize - 1), 16); // 16 bits
-    s.push((p->nbands - 1), 8); // 8 bits
-    s.push(static_cast<uint8_t>(p->type), 8);         // 8 bits
+    s.push((p->xsize - 1), 16);
+    s.push((p->ysize - 1), 16);
+    s.push((p->nbands - 1), 8);
+    s.push(static_cast<uint8_t>(p->type), 8); // This is "style", all values are reserved
 
     // Check the size
     if (s.tobyte() - start_size != hdrsz * 8)
@@ -229,17 +228,16 @@ bool static is_banddiff(encsp p) {
 // Header for cbands, does nothing if not needed
 void static write_cband_header(encsp p, oBits& s) {
     static const unsigned char sig[4] = {'C','B','N','D'};
-    size_t start_size = s.tobyte();
     if (!is_banddiff(p))
-        return;
+        return; // Only write it if needed
     // Signature
     for (int i = 0; i < 4; i++)
         s.push(sig[i], 8);
+    // size of payload in bytes
+    s.push(p->nbands, 16);
     // One byte per band, dump core band list
     for (int i = 0; i < p->nbands; i++)
         s.push(p->cband[i], 8); // 8 bits each
-    if(s.tobyte() - start_size != 4 + p->nbands)
-        p->error = QB3E_ERR; // Internal error
 }
 
 // The encode public API, returns 0 if an error is detected
@@ -250,13 +248,11 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
     oBits s(reinterpret_cast<uint8_t*>(destination));
     if (!p->raw) { // Need header
         write_qb3_header(p, s);
-        if (p->error)
-            return 0;
-        // This might be a no-op
+        // This could be a noop
         write_cband_header(p, s);
-        if (p->error)
-            return 0;
     }
+    if (p->error)
+        return 0;
 
     int error_code = 0;
 #define ENC(T) QB3::encode_best(reinterpret_cast<const T*>(source), s, *p)
