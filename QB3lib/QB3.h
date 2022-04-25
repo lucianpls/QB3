@@ -45,7 +45,9 @@ enum qb3_dtype { QB3_U8 = 0, QB3_I8, QB3_U16, QB3_I16, QB3_U32, QB3_I32, QB3_U64
 // Encode mode
 enum qb3_mode { QB3_DEFAULT = 0, QB3_BASE = 0, QB3_BEST };
 
+
 // In QB3encode.cpp
+
 // Call before anything else
 DLLEXPORT encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt);
 // Call when done with the encoder
@@ -66,13 +68,19 @@ DLLEXPORT bool qb3_set_encoder_quanta(encsp p, size_t q, bool away);
 // Upper bound of encoded size, without taking the header into consideration
 DLLEXPORT size_t qb3_max_encoded_size(const encsp p);
 
+// Sets and returns the mode which will be used.
+// If mode value is out of range, it returns the previous mode value of p
+DLLEXPORT qb3_mode qb3_set_encoder_mode(encsp p, qb3_mode mode);
+
 // Encode the source into destination buffer, which should be at least qb3_max_encoded_size
 // Source organization is expected to be y major, then x, then band (interleaved)
 // Returns actual size, the encoder can be reused
-DLLEXPORT size_t qb3_encode(encsp p, void *source, void *destination, 
-	qb3_mode mode = qb3_mode::QB3_DEFAULT);
+DLLEXPORT size_t qb3_encode(encsp p, void *source, void *destination);
+
+
 
 // In QB3decode.cpp
+
 DLLEXPORT decsp qb3_create_decoder(size_t width, size_t height, size_t bands, qb3_dtype dt);
 
 DLLEXPORT void qb3_destroy_decoder(decsp p);

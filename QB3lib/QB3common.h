@@ -94,6 +94,7 @@ struct encs {
     size_t prev[QB3_MAXBANDS];
     size_t runbits[QB3_MAXBANDS];
 
+    qb3_mode mode;
     qb3_dtype type;
     bool away; // Round up instead of down when quantizing
 };

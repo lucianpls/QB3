@@ -30,6 +30,7 @@ encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt
     p->type = dt;
     p->quanta = 1; // No quantization
     p->away = false; // Round to zero
+    p->mode = QB3_DEFAULT; // Base
     // Start with no inter-band differential
     for (size_t c = 0; c < bands; c++) {
         p->runbits[c] = 0;
@@ -108,6 +109,13 @@ size_t qb3_max_encoded_size(const encsp p) {
     return 1024 + static_cast<size_t>(bits_per_value * nvalues / 8);
 }
 
+qb3_mode qb3_set_encoder_mode(encsp p, qb3_mode mode)
+{
+    if (mode <= qb3_mode::QB3_BEST)
+        p->mode = mode;
+    return p->mode;
+}
+
 // Quantize in place then encode the source, by type
 template<typename T>
 bool quantize(T* source, oBits& s, encs& p) {
@@ -173,7 +181,8 @@ static size_t encode_quanta(encsp p, void* source, void* destination, qb3_mode m
 
 // The encode public API, returns 0 if an error is detected
 // TODO: Error reporting
-size_t qb3_encode(encsp p, void* source, void* destination, qb3_mode mode) {
+size_t qb3_encode(encsp p, void* source, void* destination) {
+    auto mode = p->mode;
     if (p->quanta > 1)
         return encode_quanta(p, source, destination, mode);
     oBits s(reinterpret_cast<uint8_t*>(destination));
