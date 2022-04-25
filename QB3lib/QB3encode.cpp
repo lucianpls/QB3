@@ -248,61 +248,33 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
     oBits s(reinterpret_cast<uint8_t*>(destination));
     if (!p->raw) { // Need header
         write_qb3_header(p, s);
-        // This could be a noop
         write_cband_header(p, s);
     }
     if (p->error)
         return 0;
 
-    int error_code = 0;
-#define ENC(T) QB3::encode_best(reinterpret_cast<const T*>(source), s, *p)
+#define ENC(T) (mode == QB3M_BEST) ? \
+              QB3::encode_best(reinterpret_cast<const T*>(source), s, *p)\
+            : QB3::encode_fast(reinterpret_cast<const T*>(source), s, *p);
 
-    switch (mode) {
-    case(qb3_mode::QB3M_BEST):
-        switch (p->type) {
-        case qb3_dtype::QB3_U8:
-        case qb3_dtype::QB3_I8:
-            error_code = ENC(uint8_t); break;
-        case qb3_dtype::QB3_U16:
-        case qb3_dtype::QB3_I16:
-            error_code = ENC(uint16_t); break;
-        case qb3_dtype::QB3_U32:
-        case qb3_dtype::QB3_I32:
-            error_code = ENC(uint32_t); break;
-        case qb3_dtype::QB3_U64:
-        case qb3_dtype::QB3_I64:
-            error_code = ENC(uint64_t); break;
-        default:
-            error_code = QB3E_EINV; // Invalid type
-        } // data type
+    switch (p->type) {
+    case qb3_dtype::QB3_U8:
+    case qb3_dtype::QB3_I8:
+        p->error = ENC(uint8_t); break;
+    case qb3_dtype::QB3_U16:
+    case qb3_dtype::QB3_I16:
+        p->error = ENC(uint16_t); break;
+    case qb3_dtype::QB3_U32:
+    case qb3_dtype::QB3_I32:
+        p->error = ENC(uint32_t); break;
+    case qb3_dtype::QB3_U64:
+    case qb3_dtype::QB3_I64:
+        p->error = ENC(uint64_t); break;
+    default:
+        p->error = QB3E_EINV; // Invalid type
+    } // data type
 #undef ENC
-        break;
-
-    default: // encoding mode
-#define ENC(T) QB3::encode_fast(reinterpret_cast<const T*>(source), s, *p)
-        switch (p->type) {
-        case qb3_dtype::QB3_U8:
-        case qb3_dtype::QB3_I8:
-            error_code = ENC(uint8_t); break;
-        case qb3_dtype::QB3_U16:
-        case qb3_dtype::QB3_I16:
-            error_code = ENC(uint16_t); break;
-        case qb3_dtype::QB3_U32:
-        case qb3_dtype::QB3_I32:
-            error_code = ENC(uint32_t); break;
-        case qb3_dtype::QB3_U64:
-        case qb3_dtype::QB3_I64:
-            error_code = ENC(uint64_t); break;
-        default:
-            error_code = QB3E_EINV; // Invalid type
-        } // data type
-#undef ENC
-    } // Encoding mode
-    if (error_code) {
-        p->error = error_code;
-        return 0; // Another sign of failure
-    }
-    return s.tobyte();
+    return (p->error) ? 0 : s.tobyte();
 }
 
 int qb3_get_encoder_state(encsp p) {
