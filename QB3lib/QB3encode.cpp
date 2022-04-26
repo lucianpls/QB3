@@ -151,8 +151,8 @@ bool quantize(T* source, oBits& s, encs& p) {
 // Main header, fixed size
 // 
 void static write_qb3_header(encsp p, oBits& s) {
-    constexpr size_t hdrsz = 4 + 2 + 2 + 8 + 8;
-    constexpr unsigned char sig[4] = { 81, 66, 51, 128 }; // QB3, last byte has the 7 bit set
+    constexpr size_t hdrsz = 4 + 2 + 2 + 1 + 1;
+    constexpr unsigned char sig[4] = {'Q', 'B', '3', 128}; // QB3, last byte has the 7 bit set
     s.tobyte();
     for (int i = 0; i < 4; i++)
         s.push(sig[i], 8);

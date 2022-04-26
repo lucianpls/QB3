@@ -28,6 +28,7 @@ decsp qb3_create_decoder(size_t width, size_t height, size_t bands, qb3_dtype dt
     p->nbands = bands;
     p->type = dt;
     p->quanta = 0;
+    p->raw = false;
     // Start with no inter-band differential
     for (size_t c = 0; c < bands; c++)
         p->cband[c] = c;
@@ -103,12 +104,62 @@ static void dequantize(T* d, const decsp p) {
     }
 }
 
+// Check a 4 byte signature
+bool check_sig(uint64_t val, const uint8_t *sig) {
+    for (int i = 0; i < 4; i++) {
+        if (static_cast<uint8_t>(val & 0xff) != sig[i])
+            return false;
+        val >>= 8;
+    }
+    return true;
+}
+
+bool read_headers(decsp p, iBits& s) {
+    p->error = QB3E_OK;
+    auto val = s.peek();
+    constexpr uint8_t qb3sig[] = {'Q', 'B', '3', 128};
+    if (!check_sig(val, qb3sig))
+        return false;
+    val >>= 32;
+    p->xsize = val & 0xffffull;
+    p->xsize++;
+    val >>= 16;
+    p->ysize = val & 0xffffull;
+    p->ysize++;
+    s.advance(64);
+    val = s.peek();
+    p->nbands = val & 0xff;
+    if (p->nbands >= QB3_MAXBANDS) {
+        p->nbands = 0;
+        p->error = QB3E_EINV;
+        return false;
+    }
+    val >>= 8;
+    p->mode = static_cast<qb3_mode>(val & 0xff);
+    if (p->mode > QB3M_BEST) {
+        p->error = QB3E_EINV;
+        p->mode = QB3M_DEFAULT;
+        return false;
+    }
+    s.advance(16); // Two bytes
+    // Need a few headers
+    do {
+
+    } while (QB3E_OK != p->error && !s.empty());
+    return true;
+}
+
 // The encode public API, returns 0 if an error is detected
 // TODO: Error reporting
 size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination) {
 
     int error_code = 0;
     auto src = reinterpret_cast<uint8_t *>(source);
+    if (!p->raw) {
+        iBits s(src, src_sz);
+        if (!read_headers(p, s))
+            return 0;
+    }
 
 #define DEC(T) QB3::decode(src, src_sz, reinterpret_cast<T*>(destination), \
     p->xsize, p->ysize, p->nbands, p->cband)

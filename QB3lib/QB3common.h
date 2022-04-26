@@ -109,7 +109,10 @@ struct decs {
     size_t quanta;
     // band which will be subtracted, by band
     size_t cband[QB3_MAXBANDS];
+    qb3_mode mode;
     qb3_dtype type;
+    int error;
+    bool raw;
 };
 
 // in decode.cpp
