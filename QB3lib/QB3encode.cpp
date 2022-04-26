@@ -148,8 +148,90 @@ bool quantize(T* source, oBits& s, encs& p) {
     return 0;
 }
 
+// Main header, fixed size
+// 
+void static write_qb3_header(encsp p, oBits& s) {
+    constexpr size_t hdrsz = 4 + 2 + 2 + 8 + 8;
+    constexpr unsigned char sig[4] = { 81, 66, 51, 128 }; // QB3, last byte has the 7 bit set
+    s.tobyte();
+    for (int i = 0; i < 4; i++)
+        s.push(sig[i], 8);
+    // Always start at byte boundary
+    if (p->xsize == 0 || p->ysize == 0
+        || p->xsize > 0xffff || p->ysize > 0xffff
+        || p->nbands > QB3_MAXBANDS
+        || p->type > QB3_U64
+        ) {
+        p->error = QB3E_EINV;
+        return;
+    }
+
+    // Write xmax, ymax, num bands in low endian
+    s.push((p->xsize - 1), 16);
+    s.push((p->ysize - 1), 16);
+    s.push((p->nbands - 1), 8);
+    s.push(static_cast<uint8_t>(p->type), 8); // This is "style", all values are reserved
+}
+
+// Are there any band mappings
+bool static is_banddiff(encsp p) {
+    for (int c = 0; c < p->nbands; c++)
+        if (p->cband[c] != c)
+            return true;
+    return false;
+}
+
+// Header for cbands, does nothing if not needed
+void static write_cband_header(encsp p, oBits& s) {
+    constexpr unsigned char sig[4] = { 'C','B','N','D' };
+    if (!is_banddiff(p))
+        return; // Only write it if needed
+    s.tobyte();
+    for (int i = 0; i < 4; i++)
+        s.push(sig[i], 8);
+    s.push(p->nbands, 16); // Payload bytes
+    // One byte per band, dump core band list
+    for (int i = 0; i < p->nbands; i++)
+        s.push(p->cband[i], 8); // 8 bits each
+}
+
+// Header for step, if used
+void static write_step_header(encsp p, oBits& s) {
+    constexpr unsigned char sig[4] = { 'S','T','E','P' };
+    if (p->quanta > 1)
+        return;
+    s.tobyte();
+    for (int i = 0; i < 4; i++)
+        s.push(sig[i], 8);
+    size_t qbits = (p->quanta <= 0xffull) ? 1 :
+        (p->quanta <= 0xffffull) ? 2 :
+        (p->quanta <= 0xffffffffull) ? 4 : 8;
+    s.push(qbits, 16); // Payload bytes
+    s.push(p->quanta, qbits);
+}
+
+// Data header has no knwon size
+void static write_idat_header(encsp p, oBits& s) {
+    constexpr unsigned char sig[4] = { 'I','D','A','T' };
+    s.tobyte();
+    for (int i = 0; i < 4; i++)
+        s.push(sig[i], 8);
+}
+
+void static write_headers(encsp p, oBits& s) {
+    write_qb3_header(p, s);
+    write_cband_header(p, s);
+    write_step_header(p, s);
+    write_idat_header(p, s);
+}
+
+// Separate because it needs to operate on strips to avoid excessive memory consumption
+// It might still not be sufficient
 static size_t encode_quanta(encsp p, void* source, void* destination, qb3_mode mode) {
     oBits s(reinterpret_cast<uint8_t*>(destination));
+    if (!p->raw) write_headers(p, s);
+    if (p->error) return 0;
+
     encs subimg(*p);
     // Stripe at a time, in a temporary buffer that can be modified
     auto ysz(p->ysize);
@@ -186,59 +268,6 @@ static size_t encode_quanta(encsp p, void* source, void* destination, qb3_mode m
 #undef QENC
 }
 
-// Header
-// 
-// TODO: Needs compression style
-void static write_qb3_header(encsp p, oBits& s) {
-    static const size_t hdrsz = 4 + 2 + 2 + 8 + 8;
-    static const unsigned char sig[4] = {81, 66, 51, 128}; // QB3, last byte has the 7 bit set
-    // Signature
-    for (int i = 0; i < 4; i++)
-        s.push(sig[i], 8);
-    // Always start at byte boundary
-    size_t start_size = s.tobyte();
-    if (p->xsize == 0 || p->ysize == 0 
-        || p->xsize > 0xffff || p->ysize > 0xffff
-        || p->nbands > QB3_MAXBANDS
-        || p->type > QB3_U64
-        ) {
-        p->error = QB3E_EINV;
-        return;
-    }
-
-    // Write xmax, ymax, num bands in low endian
-    s.push((p->xsize - 1), 16);
-    s.push((p->ysize - 1), 16);
-    s.push((p->nbands - 1), 8);
-    s.push(static_cast<uint8_t>(p->type), 8); // This is "style", all values are reserved
-
-    // Check the size
-    if (s.tobyte() - start_size != hdrsz * 8)
-        p->error = QB3E_ERR; // Internal error
-}
-
-// Are there any band mappings
-bool static is_banddiff(encsp p) {
-    for (int c = 0; c < p->nbands; c++)
-        if (p->cband[c] != c)
-            return true;
-    return false;
-}
-
-// Header for cbands, does nothing if not needed
-void static write_cband_header(encsp p, oBits& s) {
-    static const unsigned char sig[4] = {'C','B','N','D'};
-    if (!is_banddiff(p))
-        return; // Only write it if needed
-    // Signature
-    for (int i = 0; i < 4; i++)
-        s.push(sig[i], 8);
-    // size of payload in bytes
-    s.push(p->nbands, 16);
-    // One byte per band, dump core band list
-    for (int i = 0; i < p->nbands; i++)
-        s.push(p->cband[i], 8); // 8 bits each
-}
 
 // The encode public API, returns 0 if an error is detected
 size_t qb3_encode(encsp p, void* source, void* destination) {
@@ -246,12 +275,8 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
     if (p->quanta > 1)
         return encode_quanta(p, source, destination, mode);
     oBits s(reinterpret_cast<uint8_t*>(destination));
-    if (!p->raw) { // Need header
-        write_qb3_header(p, s);
-        write_cband_header(p, s);
-    }
-    if (p->error)
-        return 0;
+    if (!p->raw) write_headers(p, s);
+    if (p->error) return 0;
 
 #define ENC(T) (mode == QB3M_BEST) ? \
               QB3::encode_best(reinterpret_cast<const T*>(source), s, *p)\
