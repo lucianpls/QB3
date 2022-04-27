@@ -148,14 +148,17 @@ bool quantize(T* source, oBits& s, encs& p) {
     return 0;
 }
 
+// Assumes char is ASCII
+void static push_sig(const char* sig, oBits& s) {
+    s.tobyte(); // Always at byte boundary
+    s.push(*reinterpret_cast<const uint32_t *>(sig), 32);
+}
+
 // Main header, fixed size
 // 
 void static write_qb3_header(encsp p, oBits& s) {
     constexpr size_t hdrsz = 4 + 2 + 2 + 1 + 1;
-    constexpr unsigned char sig[4] = {'Q', 'B', '3', 128}; // QB3, last byte has the 7 bit set
-    s.tobyte();
-    for (int i = 0; i < 4; i++)
-        s.push(sig[i], 8);
+    push_sig("QB3\200", s);
     // Always start at byte boundary
     if (p->xsize == 0 || p->ysize == 0
         || p->xsize > 0xffff || p->ysize > 0xffff
@@ -183,12 +186,9 @@ bool static is_banddiff(encsp p) {
 
 // Header for cbands, does nothing if not needed
 void static write_cband_header(encsp p, oBits& s) {
-    constexpr unsigned char sig[4] = { 'C','B','N','D' };
-    if (!is_banddiff(p))
-        return; // Only write it if needed
-    s.tobyte();
-    for (int i = 0; i < 4; i++)
-        s.push(sig[i], 8);
+    if (!is_banddiff(p)) // Is it needed
+        return;
+    push_sig("CBND", s);
     s.push(p->nbands, 16); // Payload bytes
     // One byte per band, dump core band list
     for (int i = 0; i < p->nbands; i++)
@@ -197,25 +197,17 @@ void static write_cband_header(encsp p, oBits& s) {
 
 // Header for step, if used
 void static write_step_header(encsp p, oBits& s) {
-    constexpr unsigned char sig[4] = { 'S','T','E','P' };
-    if (p->quanta > 1)
+    if (p->quanta < 2) // Is it needed
         return;
-    s.tobyte();
-    for (int i = 0; i < 4; i++)
-        s.push(sig[i], 8);
-    size_t qbits = (p->quanta <= 0xffull) ? 1 :
-        (p->quanta <= 0xffffull) ? 2 :
-        (p->quanta <= 0xffffffffull) ? 4 : 8;
-    s.push(qbits, 16); // Payload bytes
-    s.push(p->quanta, qbits);
+    push_sig("STEP", s);
+    size_t qbytes = 1 + topbit(p->quanta) / 8;
+    s.push(qbytes, 16); // Payload bytes, 0 < v < 5
+    s.push(p->quanta, qbytes);
 }
 
 // Data header has no knwon size
 void static write_idat_header(encsp p, oBits& s) {
-    constexpr unsigned char sig[4] = { 'I','D','A','T' };
-    s.tobyte();
-    for (int i = 0; i < 4; i++)
-        s.push(sig[i], 8);
+    push_sig("IDAT", s);
 }
 
 void static write_headers(encsp p, oBits& s) {

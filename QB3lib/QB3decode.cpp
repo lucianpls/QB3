@@ -105,7 +105,7 @@ static void dequantize(T* d, const decsp p) {
 }
 
 // Check a 4 byte signature
-bool check_sig(uint64_t val, const uint8_t *sig) {
+static bool check_sig(uint64_t val, const char *sig) {
     for (int i = 0; i < 4; i++) {
         if (static_cast<uint8_t>(val & 0xff) != sig[i])
             return false;
@@ -117,8 +117,7 @@ bool check_sig(uint64_t val, const uint8_t *sig) {
 bool read_headers(decsp p, iBits& s) {
     p->error = QB3E_OK;
     auto val = s.peek();
-    constexpr uint8_t qb3sig[] = {'Q', 'B', '3', 128};
-    if (!check_sig(val, qb3sig))
+    if (!check_sig(val, "QB3\200"))
         return false;
     val >>= 32;
     p->xsize = val & 0xffffull;
@@ -143,10 +142,47 @@ bool read_headers(decsp p, iBits& s) {
     }
     s.advance(16); // Two bytes
     // Need a few headers
+    bool seen_idat = false;
     do {
-
-    } while (QB3E_OK != p->error && !s.empty());
-    return true;
+        val = s.peek();
+        // Chunks are fixed 32bit values, low endian
+        auto chunk = val & 0xffffffffull;
+        val >>= 32; // leftover bits
+        // size of chunk, if available
+        uint16_t len = uint16_t(val & 0xffffu);
+        if (check_sig(chunk, "STEP")) {
+            if (len > 4 || len < 1) {
+                p->error = QB3E_EINV;
+                break;
+            }
+            s.advance(32 + 16); // Skip the ones we read
+            p->quanta = s.pull(len * 8);
+        }
+        else if (check_sig(chunk, "CBND")) {
+            // One byte per band, check
+            if (len != p->nbands) {
+                p->error = QB3E_EINV;
+                break;
+            }
+            s.advance(32 + 16);
+            for (size_t i = 0; i < p->nbands; i++) {
+                p->cband[i] = 0xff & s.pull(8);
+                if (p->cband[i] >= p->nbands)
+                    p->error = QB3E_EINV;
+            }
+            // Should we check the mapping?
+        }
+        else if (check_sig(chunk, "IDAT")) {
+            seen_idat = true;
+            s.advance(32);
+        }
+        else { // Unknown chunk
+            p->error = QB3E_UNKN;
+        }
+    } while (!seen_idat && QB3E_OK == p->error && !s.empty());
+    if (QB3E_OK == p->error && !seen_idat) // Should be s.empty()
+        p->error = QB3E_EINV; // not expected
+    return QB3E_OK == p->error;
 }
 
 // The encode public API, returns 0 if an error is detected
