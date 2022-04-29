@@ -78,6 +78,7 @@ public:
     size_t avail() const { return len - bitp; }
     bool empty() const { return avail() == 0; }
 
+    // Position in bits
     size_t position() const {
         return bitp;
     }

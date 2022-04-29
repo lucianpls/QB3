@@ -86,7 +86,7 @@ void check_plus(vector<uint8_t>& image, const Raster& raster, uint64_t m, int ma
 
     std::vector<T> re(xsize * ysize * bands);
 
-    auto qdec = qb3_create_decoder(xsize, ysize, bands, tp);
+    auto qdec = qb3_create_raw_decoder(xsize, ysize, bands, tp);
     if (main_band != 1) {
         std::vector<size_t> cbands(bands);
         if (-1 == main_band)
@@ -163,7 +163,7 @@ void check(vector<uint8_t> &image, const Raster &raster,
 
     std::vector<T> re(xsize * ysize * bands, 0);
 
-    auto qdec = qb3_create_decoder(xsize, ysize, bands, tp);
+    auto qdec = qb3_create_raw_decoder(xsize, ysize, bands, tp);
     if (main_band != 1) {
         std::vector<size_t> cbands(bands);
         if (-1 == main_band)
@@ -238,7 +238,7 @@ void check(vector<uint16_t>& image, const Raster& raster, uint64_t m, int main_b
 
     std::vector<T> re(xsize * ysize * bands);
 
-    auto qdec = qb3_create_decoder(xsize, ysize, bands, tp);
+    auto qdec = qb3_create_raw_decoder(xsize, ysize, bands, tp);
     //qb3_set_decoder_coreband(qdec, 3, bandmap);
     t1 = high_resolution_clock::now();
     qb3_decode(qdec, outvec.data(), outsize, re.data());

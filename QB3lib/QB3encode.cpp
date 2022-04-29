@@ -148,17 +148,17 @@ bool quantize(T* source, oBits& s, encs& p) {
     return 0;
 }
 
-// Assumes char is ASCII
+// A chunk signature is two characters
 void static push_sig(const char* sig, oBits& s) {
     s.tobyte(); // Always at byte boundary
-    s.push(*reinterpret_cast<const uint32_t *>(sig), 32);
+    s.push(*reinterpret_cast<const uint16_t *>(sig), 16);
 }
 
 // Main header, fixed size
 // 
 void static write_qb3_header(encsp p, oBits& s) {
-    constexpr size_t hdrsz = 4 + 2 + 2 + 1 + 1;
-    push_sig("QB3\200", s);
+    // QB3 signature is 4 bytes
+    s.push(*reinterpret_cast<const uint32_t*>("QB3\200"), 32);
     // Always start at byte boundary
     if (p->xsize == 0 || p->ysize == 0
         || p->xsize > 0xffff || p->ysize > 0xffff
@@ -188,33 +188,33 @@ bool static is_banddiff(encsp p) {
 void static write_cband_header(encsp p, oBits& s) {
     if (!is_banddiff(p)) // Is it needed
         return;
-    push_sig("CBND", s);
-    s.push(p->nbands, 16); // Payload bytes
+    push_sig("CB", s);
+    s.push(p->nbands, 16); // size of payload
     // One byte per band, dump core band list
     for (int i = 0; i < p->nbands; i++)
         s.push(p->cband[i], 8); // 8 bits each
 }
 
 // Header for step, if used
-void static write_step_header(encsp p, oBits& s) {
+void static  write_quanta_header(encsp p, oBits& s) {
     if (p->quanta < 2) // Is it needed
         return;
-    push_sig("STEP", s);
+    push_sig("QV", s);
     size_t qbytes = 1 + topbit(p->quanta) / 8;
     s.push(qbytes, 16); // Payload bytes, 0 < v < 5
     s.push(p->quanta, qbytes);
 }
 
 // Data header has no knwon size
-void static write_idat_header(encsp p, oBits& s) {
-    push_sig("IDAT", s);
+void static write_data_header(encsp p, oBits& s) {
+    push_sig("DT", s);
 }
 
 void static write_headers(encsp p, oBits& s) {
     write_qb3_header(p, s);
     write_cband_header(p, s);
-    write_step_header(p, s);
-    write_idat_header(p, s);
+    write_quanta_header(p, s);
+    write_data_header(p, s);
 }
 
 // Separate because it needs to operate on strips to avoid excessive memory consumption

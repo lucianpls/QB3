@@ -94,7 +94,7 @@ DLLEXPORT int qb3_get_encoder_state(encsp p);
 
 // In QB3decode.cpp
 
-DLLEXPORT decsp qb3_create_decoder(size_t width, size_t height, size_t bands, qb3_dtype dt);
+DLLEXPORT decsp qb3_create_raw_decoder(size_t width, size_t height, size_t bands, qb3_dtype dt);
 
 DLLEXPORT void qb3_destroy_decoder(decsp p);
 
