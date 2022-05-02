@@ -114,13 +114,13 @@ static bool check_sig(uint64_t val, const char *sig) {
 // Starts reading a formatted QB3 source
 // returns nullptr if it fails, usually because the source is not in the correct format
 // If successful, size containts 3 values, x size, y size and number of bands
-decsp qb3_read_start(void* source, size_t source_size, size_t size) {
-    if (source_size < QB3_HDRSZ + 4)
+decsp qb3_read_start(void* source, size_t source_size, size_t *image_size) {
+    if (source_size < QB3_HDRSZ + 4 || nullptr == image_size)
         return nullptr; // Too short to be a QB3 format stream
     auto p = new decs;
     memset(p, 0, sizeof(decs));
     iBits s(reinterpret_cast<uint8_t*>(source), source_size);
-    auto val = s.peek();
+    auto val = s.pull(64);
     if (!check_sig(val, "QB") || !check_sig(val >> 16, "3\200")) {
         free(p);
         return nullptr;
@@ -147,7 +147,13 @@ decsp qb3_read_start(void* source, size_t source_size, size_t size) {
     }
     p->raw = false;
     p->s_in = static_cast<uint8_t*>(source) + QB3_HDRSZ;
-    p->s_size = size - QB3_HDRSZ;
+    p->s_size = source_size - QB3_HDRSZ;
+
+    // Pass back the image size
+    image_size[0] = p->xsize;
+    image_size[1] = p->ysize;
+    image_size[2] = p->nbands;
+
     p->error = QB3E_OK;
     p->state = 1; // Read main header
     return p; // Looks reasonable
@@ -189,7 +195,7 @@ bool qb3_read_info(decsp p) {
                 p->error = QB3E_EINV;
                 break;
             }
-            s.advance(16 + 16);
+            s.advance(16 + 16); // CHUNK + LEN
             for (size_t i = 0; i < p->nbands; i++) {
                 p->cband[i] = 0xff & s.pull(8);
                 if (p->cband[i] >= p->nbands)
@@ -211,7 +217,7 @@ bool qb3_read_info(decsp p) {
             p->error = QB3E_UNKN;
         }
     } while (p->state != 2 && QB3E_OK == p->error && !s.empty());
-    if (QB3E_OK == p->error && 2 == p->state) // Should be s.empty()
+    if (QB3E_OK == p->error && 2 != p->state) // Should be s.empty()
         p->error = QB3E_EINV; // not expected
     return QB3E_OK == p->error;
 }

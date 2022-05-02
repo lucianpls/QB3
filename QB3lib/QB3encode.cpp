@@ -20,14 +20,15 @@ Contributors:  Lucian Plesea
 #include <limits>
 
 // constructor
-encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt) {
-    if (width > 0x10000ul || height > 0x10000ul || bands == 0 || bands > QB3_MAXBANDS)
+encsp qb3_create_encoder(size_t width, size_t height, size_t bands, int dt) {
+    if (width > 0x10000ul || height > 0x10000ul || bands == 0 
+        || bands > QB3_MAXBANDS || dt > int(QB3_I64))
         return nullptr;
     auto p = new encs;
     p->xsize = width;
     p->ysize = height;
     p->nbands = bands;
-    p->type = dt;
+    p->type = static_cast<qb3_dtype>(dt);
     p->quanta = 1; // No quantization
     p->away = false; // Round to zero
     p->raw = false;  // Write image header
@@ -173,7 +174,8 @@ void static write_qb3_header(encsp p, oBits& s) {
     s.push((p->xsize - 1), 16);
     s.push((p->ysize - 1), 16);
     s.push((p->nbands - 1), 8);
-    s.push(static_cast<uint8_t>(p->type), 8); // This is "style", all values are reserved
+    s.push(static_cast<uint8_t>(p->type), 8); // all values are reserved
+    s.push(static_cast<uint8_t>(p->mode), 8);  // Encoding style, all values are reserved
 }
 
 // Are there any band mappings

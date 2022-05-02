@@ -97,6 +97,7 @@ void check_plus(vector<uint8_t>& image, const Raster& raster, uint64_t m, int ma
     t1 = high_resolution_clock::now();
     qb3_decode(qdec, outvec.data(), outsize, re.data());
     t2 = high_resolution_clock::now();
+    qb3_destroy_decoder(qdec);
 
     time_span = duration_cast<duration<double>>(t2 - t1).count();
     cout << time_span;
@@ -117,7 +118,8 @@ void check_plus(vector<uint8_t>& image, const Raster& raster, uint64_t m, int ma
 template<typename T>
 void check(vector<uint8_t> &image, const Raster &raster, 
     uint64_t m, int main_band = 0, 
-    bool fast = 0, uint64_t q = 1, bool away = false) 
+    bool fast = 0, uint64_t q = 1, bool away = false,
+    bool headers = true) 
 {
     size_t xsize = raster.size.x;
     size_t ysize = raster.size.y;
@@ -150,11 +152,20 @@ void check(vector<uint8_t> &image, const Raster &raster,
     if (q > 1)
         qb3_set_encoder_quanta(qenc, q, away);
     qb3_set_encoder_mode(qenc, fast ? qb3_mode::QB3M_BASE : qb3_mode::QB3M_BEST);
-    qb3_set_encoder_raw(qenc);
+
+    if (headers) { // Anything to do here?
+
+    }
+    else {
+        qb3_set_encoder_raw(qenc);
+    }
+
     t1 = high_resolution_clock::now();
     auto outsize = qb3_encode(qenc, static_cast<void *>(img.data()), outvec.data());
     time_span = duration_cast<duration<double>>(high_resolution_clock::now() - t1).count();
     auto err = qb3_get_encoder_state(qenc);
+    qb3_destroy_encoder(qenc);
+    qenc = nullptr;
 
     cout << outsize << '\t' << outsize * 100.0 / image.size() / sizeof(T) 
         << '\t' << time_span << '\t';
@@ -163,19 +174,48 @@ void check(vector<uint8_t> &image, const Raster &raster,
 
     std::vector<T> re(xsize * ysize * bands, 0);
 
-    auto qdec = qb3_create_raw_decoder(xsize, ysize, bands, tp);
-    if (main_band != 1) {
-        std::vector<size_t> cbands(bands);
-        if (-1 == main_band)
-            for (size_t i = 0; i < bands; i++)
-                cbands[i] = i;
-        qb3_set_decoder_coreband(qdec, bands, cbands.data());
+    decsp qdec = nullptr;
+    try {
+        
+        if (headers) { // If the output is formatted, the process is different
+            size_t image_size[3]; // Space for output values
+            qdec = qb3_read_start(outvec.data(), outsize, image_size);
+            if (!qdec)
+                throw "Can't read formatted stream header";
+            // Check the size
+            if (xsize != image_size[0] || ysize != image_size[1] || bands != image_size[2])
+                throw "Wrong decoded size";
+            if (!qb3_read_info(qdec))
+                throw "Reading QB3 headers failed";
+            // Could query metadata here
+            if (re.size() * sizeof(T) != qb3_decoded_size(qdec))
+                throw "Wrong expected decoded size";
+            t1 = high_resolution_clock::now();
+            if (!qb3_read_data(qdec, re.data()))
+                throw "Reading QB3 data failed";
+            t2 = high_resolution_clock::now();
+        }
+        else {
+            auto qdec = qb3_create_raw_decoder(xsize, ysize, bands, tp);
+            if (main_band != 1) {
+                std::vector<size_t> cbands(bands);
+                if (-1 == main_band)
+                    for (size_t i = 0; i < bands; i++)
+                        cbands[i] = i;
+                qb3_set_decoder_coreband(qdec, bands, cbands.data());
+            }
+            if (q > 1)
+                qb3_set_decoder_quanta(qdec, q);
+            t1 = high_resolution_clock::now();
+            qb3_decode(qdec, outvec.data(), outsize, re.data());
+            t2 = high_resolution_clock::now();
+        }
     }
-    if (q > 1)
-        qb3_set_decoder_quanta(qdec, q);
-    t1 = high_resolution_clock::now();
-    qb3_decode(qdec, outvec.data(), outsize, re.data());
-    t2 = high_resolution_clock::now();
+    catch (const char* error) {
+        cerr << "Error: " << error << endl;
+
+    }
+    qb3_destroy_decoder(qdec);
 
     time_span = duration_cast<duration<double>>(t2 - t1).count();
     cout << time_span << '\t' << sizeof(T) << '\t' << m << '\t';
@@ -211,7 +251,7 @@ void check(vector<uint8_t> &image, const Raster &raster,
 }
 
 template<typename T>
-void check(vector<uint16_t>& image, const Raster& raster, uint64_t m, int main_band = 0, bool fast = 0) {
+void check(vector<uint16_t>& image, const Raster& raster, uint64_t m, int main_band = 0, bool fast = 0, bool headers = 1) {
     size_t xsize = raster.size.x;
     size_t ysize = raster.size.y;
     size_t bands = raster.size.c;
@@ -224,10 +264,13 @@ void check(vector<uint16_t>& image, const Raster& raster, uint64_t m, int main_b
     auto qenc = qb3_create_encoder(xsize, ysize, bands, tp);
     vector<uint8_t> outvec(qb3_max_encoded_size(qenc));
 
-    //size_t bandmap[] = { 0, 1, 2, 3, 4, 5 };
-    //qb3_set_encoder_coreband(qenc, 3, bandmap);
     qb3_set_encoder_mode(qenc, fast ? qb3_mode::QB3M_BASE : qb3_mode::QB3M_BEST);
-    qb3_set_encoder_raw(qenc);
+    if (headers) { // Anything to do here?
+
+    }
+    else {
+        qb3_set_encoder_raw(qenc);
+    }
 
     t1 = high_resolution_clock::now();
     auto outsize = qb3_encode(qenc, img.data(), outvec.data());
@@ -239,10 +282,11 @@ void check(vector<uint16_t>& image, const Raster& raster, uint64_t m, int main_b
     std::vector<T> re(xsize * ysize * bands);
 
     auto qdec = qb3_create_raw_decoder(xsize, ysize, bands, tp);
-    //qb3_set_decoder_coreband(qdec, 3, bandmap);
     t1 = high_resolution_clock::now();
     qb3_decode(qdec, outvec.data(), outsize, re.data());
     t2 = high_resolution_clock::now();
+    qb3_destroy_decoder(qdec);
+    qdec = nullptr;
 
     time_span = duration_cast<duration<double>>(t2 - t1).count();
     cout << time_span;

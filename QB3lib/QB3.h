@@ -56,7 +56,7 @@ enum qb3_error {
 // In QB3encode.cpp
 
 // Call before anything else
-DLLEXPORT encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt);
+DLLEXPORT encsp qb3_create_encoder(size_t width, size_t height, size_t bands, int dt);
 // Call when done with the encoder
 DLLEXPORT void qb3_destroy_encoder(encsp p);
 
@@ -94,9 +94,13 @@ DLLEXPORT int qb3_get_encoder_state(encsp p);
 
 // In QB3decode.cpp
 
+// To be used by raw and formatted QB3 streams
+DLLEXPORT void qb3_destroy_decoder(decsp p);
+
+// Raw functions
 DLLEXPORT decsp qb3_create_raw_decoder(size_t width, size_t height, size_t bands, qb3_dtype dt);
 
-DLLEXPORT void qb3_destroy_decoder(decsp p);
+DLLEXPORT size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination);
 
 // TODO: remove once the decoder can auto-detect the band deltas
 DLLEXPORT bool qb3_set_decoder_coreband(decsp p, size_t bands, const size_t* cband);
@@ -106,7 +110,18 @@ DLLEXPORT bool qb3_set_decoder_quanta(decsp p, size_t q);
 
 DLLEXPORT size_t qb3_decoded_size(const decsp p);
 
-DLLEXPORT size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination);
+// Formatted stream decode functions
+
+// Starts reading a formatted QB3 source. Reads the main header, which only contains the output size information
+// returns nullptr if it fails, usually because the source is not in the correct format
+// If successful, size containts 3 values, x size, y size and number of bands
+DLLEXPORT decsp qb3_read_start(void* source, size_t source_size, size_t* image_size);
+
+// Call after qb3_read_start, reads all headers until the raster data, returns false if it fails
+DLLEXPORT bool qb3_read_info(decsp p);
+
+// Call after qb3_read_info, reads all the data, returns bytes read
+DLLEXPORT size_t qb3_read_data(decsp p, void* destination);
 
 #if defined(__cplusplus)
 }
