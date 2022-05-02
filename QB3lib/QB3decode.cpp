@@ -18,8 +18,8 @@ Contributors:  Lucian Plesea
 #include "QB3common.h"
 #include "QB3decode.h"
 
-// constructor
-decsp qb3_create_decoder(size_t width, size_t height, size_t bands, qb3_dtype dt) {
+// Builds a decoder control structure for raw qb3 input
+decsp qb3_create_raw_decoder(size_t width, size_t height, size_t bands, qb3_dtype dt) {
     if (width > 0x10000ul || height > 0x10000ul || bands == 0 || bands > QB3_MAXBANDS)
         return nullptr;
     auto p = new decs;
@@ -28,6 +28,7 @@ decsp qb3_create_decoder(size_t width, size_t height, size_t bands, qb3_dtype dt
     p->nbands = bands;
     p->type = dt;
     p->quanta = 0;
+    p->raw = true;
     // Start with no inter-band differential
     for (size_t c = 0; c < bands; c++)
         p->cband[c] = c;
@@ -101,6 +102,136 @@ static void dequantize(T* d, const decsp p) {
         if (std::is_signed<T>() && q > 2 && (data < mii))
             d[i] = mint;
     }
+}
+
+// Check a 4 byte signature, in the lower 316its of val
+static bool check_sig(uint64_t val, const char *sig) {
+    uint8_t c0 = static_cast<uint8_t>(sig[0]);
+    uint8_t c1 = static_cast<uint8_t>(sig[1]);
+    return (val & 0xff) == c0 && ((val >> 8) & 0xff) == c1;
+}
+
+// Starts reading a formatted QB3 source
+// returns nullptr if it fails, usually because the source is not in the correct format
+// If successful, size containts 3 values, x size, y size and number of bands
+decsp qb3_read_start(void* source, size_t source_size, size_t *image_size) {
+    if (source_size < QB3_HDRSZ + 4 || nullptr == image_size)
+        return nullptr; // Too short to be a QB3 format stream
+    auto p = new decs;
+    memset(p, 0, sizeof(decs));
+    iBits s(reinterpret_cast<uint8_t*>(source), source_size);
+    auto val = s.pull(64);
+    if (!check_sig(val, "QB") || !check_sig(val >> 16, "3\200")) {
+        free(p);
+        return nullptr;
+    }
+    val >>= 32;
+    p->xsize = 1 + (val & 0xffff);
+    val >>= 16;
+    p->ysize = 1 + (val & 0xffff);
+    val = s.peek();
+    p->nbands = 1 + (val & 0xff);
+    val >>= 8; // Got 56 bits left
+    p->type = qb3_dtype(val & 0xff);
+    val >>= 8; // 48 bits left
+    // Compression mode
+    p->mode = static_cast<qb3_mode>(val & 0xff);
+    val >>= 8; // 40 bits left
+    // Also check that the next 2 bytes are a signature
+    if (p->nbands > QB3_MAXBANDS 
+        || p->mode > qb3_mode::QB3M_BEST
+        || 0 != (val & 0x8080) 
+        || p->type > qb3_dtype::QB3_I64) {
+        free(p);
+        return nullptr;
+    }
+    p->raw = false;
+    p->s_in = static_cast<uint8_t*>(source) + QB3_HDRSZ;
+    p->s_size = source_size - QB3_HDRSZ;
+
+    // Pass back the image size
+    image_size[0] = p->xsize;
+    image_size[1] = p->ysize;
+    image_size[2] = p->nbands;
+
+    p->error = QB3E_OK;
+    p->state = 1; // Read main header
+    return p; // Looks reasonable
+}
+
+// read the rest of the qb3 stream metadata
+// Returns true if no failure is detected and (first) IDAT is found
+bool qb3_read_info(decsp p) {
+    // Check that the input structure is in the correct state
+    if (p->state != 1 || p->error || p->raw || !p->s_in || p->s_size < 4) {
+        if (QB3E_OK == p->error)
+            p->error = QB3E_EINV;
+        return false; // Didn't work
+    }
+
+    iBits s(p->s_in, p->s_size);
+    // Need to partse the headers
+    do {
+        auto val = s.peek();
+        // Chunks are fixed 16bit values, low endian
+        auto chunk = val & 0xffff;
+        val >>= 16; // leftover bits
+        // size of chunk, if available
+        uint16_t len = uint16_t(val & 0xffffu);
+        if (check_sig(chunk, "QV")) { // Quanta
+            if (len > 4 || len < 1) {
+                p->error = QB3E_EINV;
+                break;
+            }
+            s.advance(16 + 16); // Skip the bytes we read
+            p->quanta = s.pull(len * 8);
+            // Could check that the quanta is consistent with the data type
+            if (p->quanta < 2)
+                p->error = QB3E_EINV;
+        }
+        else if (check_sig(chunk, "CB")) { // Core bands
+            // check that is matches the band count
+            if (len != p->nbands) {
+                p->error = QB3E_EINV;
+                break;
+            }
+            s.advance(16 + 16); // CHUNK + LEN
+            for (size_t i = 0; i < p->nbands; i++) {
+                p->cband[i] = 0xff & s.pull(8);
+                if (p->cband[i] >= p->nbands)
+                    p->error = QB3E_EINV;
+            }
+            // Should we check the mapping?
+        }
+        else if (check_sig(chunk, "DT")) {
+            s.advance(16);
+            // Update the position
+            size_t used = s.position() / 8;
+            if (p->s_size > used) { // Should have some data
+                p->s_in += used;
+                p->s_size -= used;
+                p->state = 2; // Seen data header
+            }
+        }
+        else { // Unknown chunk
+            p->error = QB3E_UNKN;
+        }
+    } while (p->state != 2 && QB3E_OK == p->error && !s.empty());
+    if (QB3E_OK == p->error && 2 != p->state) // Should be s.empty()
+        p->error = QB3E_EINV; // not expected
+    return QB3E_OK == p->error;
+}
+
+// Call after read_header to read the actual data
+size_t qb3_read_data(decsp p, void* destination) {
+    // Check that it was a QB3 file
+    if (p->state != 2 || p->error != QB3E_OK || p->raw 
+        || p->s_in == nullptr || p->s_size == 0) {
+        if (p->error == QB3E_OK)
+            p->error = QB3E_EINV;
+        return 0; // Error signal
+    }
+    return qb3_decode(p, p->s_in, p->s_size, destination);
 }
 
 // The encode public API, returns 0 if an error is detected

@@ -78,6 +78,7 @@ public:
     size_t avail() const { return len - bitp; }
     bool empty() const { return avail() == 0; }
 
+    // Position in bits
     size_t position() const {
         return bitp;
     }
@@ -94,10 +95,6 @@ private:
 class oBits {
 public:
     oBits(uint8_t * data) : v(data), bitp(0) {}
-
-    size_t size_bits() const {
-        return bitp;
-    }
 
     // Do not call with val having bits above "nbits" set, the results will be corrupt
     template<typename T>
@@ -117,6 +114,14 @@ public:
 
     size_t position() const {
         return bitp;
+    }
+
+    // Round position to byte boundary
+    size_t tobyte() {
+        size_t ebits = position() & 0x7;
+        if (0 != ebits)
+            bitp += 8 - ebits;
+        return position() >> 3; // In bytes
     }
 
 private:

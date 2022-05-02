@@ -96,7 +96,9 @@ struct encs {
 
     qb3_mode mode;
     qb3_dtype type;
+    int error; // Holds the code for error, 0 if everything is fine
     bool away; // Round up instead of down when quantizing
+    bool raw;  // Write QB3 raw stream
 };
 
 // Decoder control structure
@@ -107,8 +109,25 @@ struct decs {
     size_t quanta;
     // band which will be subtracted, by band
     size_t cband[QB3_MAXBANDS];
+    qb3_mode mode;
     qb3_dtype type;
+    int error;
+    int state;
+    bool raw;
+
+    // Input buffer
+    uint8_t* s_in;
+    size_t s_size;
 };
+
+// Main header
+// 4 sig
+// 2 xsize
+// 2 ysize
+// 1 nbands
+// 1 data type
+// 1 mode
+constexpr size_t QB3_HDRSZ = 4 + 2 + 2 + 1 + 1 + 1;
 
 // in decode.cpp
 extern const int typesizes[8];
