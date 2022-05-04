@@ -17,6 +17,8 @@ Contributors:  Lucian Plesea
 
 #include "QB3common.h"
 #include "QB3decode.h"
+// For memset
+#include <cstring>
 
 // Builds a decoder control structure for raw qb3 input
 decsp qb3_create_raw_decoder(size_t width, size_t height, size_t bands, qb3_dtype dt) {
@@ -122,7 +124,7 @@ decsp qb3_read_start(void* source, size_t source_size, size_t *image_size) {
     iBits s(reinterpret_cast<uint8_t*>(source), source_size);
     auto val = s.pull(64);
     if (!check_sig(val, "QB") || !check_sig(val >> 16, "3\200")) {
-        free(p);
+        delete p;
         return nullptr;
     }
     val >>= 32;
@@ -142,7 +144,7 @@ decsp qb3_read_start(void* source, size_t source_size, size_t *image_size) {
         || p->mode > qb3_mode::QB3M_BEST
         || 0 != (val & 0x8080) 
         || p->type > qb3_dtype::QB3_I64) {
-        free(p);
+        delete p;
         return nullptr;
     }
     p->raw = false;

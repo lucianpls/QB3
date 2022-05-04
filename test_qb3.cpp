@@ -70,9 +70,9 @@ void check_plus(vector<uint8_t>& image, const Raster& raster, uint64_t m, int ma
                 cbands[i] = i;
         qb3_set_encoder_coreband(qenc, bands, cbands.data());
     }
+    qb3_set_encoder_mode(qenc, fast ? qb3_mode::QB3M_BASE : qb3_mode::QB3M_BEST);
     t1 = high_resolution_clock::now();
-    auto outsize = qb3_encode(qenc, static_cast<void*>(img.data()), outvec.data(),
-        fast ? qb3_mode::QB3M_BASE : qb3_mode::QB3M_BEST);
+    auto outsize = qb3_encode(qenc, static_cast<void*>(img.data()), outvec.data());
     t2 = high_resolution_clock::now();
     time_span = duration_cast<duration<double>>(t2 - t1).count();
 
@@ -309,8 +309,8 @@ void check(vector<uint16_t>& image, const Raster& raster, uint64_t m, int main_b
 }
 
 int test(string fname) {
-    FILE* f;
-    if (fopen_s(&f, fname.c_str(), "rb") || !f) {
+    FILE* f = fopen(fname.c_str(), "rb");
+    if (!f) {
         cerr << "Can't open input file\n";
         exit(errno);
     }
@@ -418,8 +418,8 @@ int main(int argc, char **argv)
         }
 
         string fname = argv[1];
-        FILE* f;
-        if (fopen_s(&f, fname.c_str(), "rb") || !f) {
+        FILE* f = fopen(fname.c_str(), "rb");
+        if (!f) {
             cerr << "Can't open input file\n";
             exit(errno);
         }

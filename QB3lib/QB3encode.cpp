@@ -18,6 +18,8 @@ Contributors:  Lucian Plesea
 #include "QB3common.h"
 #include "QB3encode.h"
 #include <limits>
+// For memcpy
+#include <cstring>
 
 // constructor
 encsp qb3_create_encoder(size_t width, size_t height, size_t bands, int dt) {
@@ -238,9 +240,9 @@ static size_t encode_quanta(encsp p, void* source, void* destination, qb3_mode m
 
 #define QENC(T) quantize(reinterpret_cast<T *>(buffer.data()), s, subimg);\
                 if (mode == qb3_mode::QB3M_BEST) \
-                    QB3::encode_best(reinterpret_cast<std::make_unsigned_t<T> *>(buffer.data()), s, subimg);\
+                    QB3::encode_best(reinterpret_cast<std::make_unsigned<T>::type *>(buffer.data()), s, subimg);\
                 else\
-                    QB3::encode_fast(reinterpret_cast<std::make_unsigned_t<T> *>(buffer.data()), s, subimg);
+                    QB3::encode_fast(reinterpret_cast<std::make_unsigned<T>::type *>(buffer.data()), s, subimg);
 
     for (size_t y = 0; y + B <= ysz; y += B) {
         memcpy(buffer.data(), src, buffer.size());
