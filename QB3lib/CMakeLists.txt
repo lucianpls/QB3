@@ -25,6 +25,7 @@ target_sources(${PROJECT_NAME}
 set_target_properties(${PROJECT_NAME} PROPERTIES 
     PUBLIC_HEADER QB3.h
     DEBUG_POSTFIX "d"
+    PREFIX ""
 )
 
 include(GNUInstallDirs)
