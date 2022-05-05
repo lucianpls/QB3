@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.5)
 cmake_policy(SET CMP0076 NEW)
 
+# Has to be before project()
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release" CACHE STRING
+        "Choose type of build, options are: Debug Release RelWithDebInfo MinSizeRel")
+endif(NOT CMAKE_BUILD_TYPE)
+
 project(libQB3 
     DESCRIPTION "QB3 Raster Compression Library"
     VERSION 0.9.1
@@ -12,12 +18,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(BUILD_SHARED_LIBS "Library style" ON)
 
 set(namespace "QB3")
-
-if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE "Release" CACHE STRING
-        "Choose type of build, options are: Debug Release RelWithDebInfo MinSizeRel")
-endif(NOT CMAKE_BUILD_TYPE)
-
 add_library(${PROJECT_NAME})
 target_sources(${PROJECT_NAME} 
     PRIVATE QB3encode.cpp QB3encode.h QB3decode.cpp QB3decode.h QB3tables.cpp QB3tables.h QB3common.h bitstream.h QB3.h
