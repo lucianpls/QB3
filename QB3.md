@@ -61,7 +61,7 @@ significant bits. These values need n - 2 bits plus two signaling bits, they don
  for storage, including two signal bits, since we know that the top bit has to be 1.
 
 The encoding type needs to be self-identifying, for every value. To do this, 
-the range values are suffixed by one or two bits which signal the size of the symbol:
+the range values end by one or two signa bits which determine the size of the symbol:
  - x0 Short
  - x01 Nominal
  - x11 Long
