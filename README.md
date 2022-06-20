@@ -11,7 +11,7 @@ even better.
 # QB3 Library
 The library, located in [QB3lib](QB3lib) provides the core QB3 
 algorithm implementation and provides a C language API.
-It is implemented in standard C++11 and can be build for various platforms using 
+It is implemented in standard C++11 and can be built for various platforms using 
 cmake. It requires a little endian, two's complement architecture with 8, 16, 32 
 and 64 bit integers, which includes the common AMD64 and ARM64 platforms. 
 Only 64bit builds should be used, since the implementation makes heavy use of 64 
