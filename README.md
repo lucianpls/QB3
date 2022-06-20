@@ -1,13 +1,12 @@
 # QB3: Fast and Efficient Raster Compression
 
 QB3 is a raster specific lossless compression that usually achieves better compression 
-ratio than PNG while being extremely fast for both compression and decompression. 
-In addition, it requires almost no memory during operation making it very suitable 
-for vectorization and parallelization.
+ratio than PNG for natural images while being extremely fast, for both compression and decompression. 
+It requires almost no memory during operation.
 QB3 handles integer values, signed and unsigned, up to 64bit per value. 
 If multiple bands are to be compressed together, as is usually the case for color 
 images, QB3 can take advange of band to band similarities to compress 
-even better.  
+even better.
 
 # QB3 Library
 The library, located in [QB3lib](QB3lib) provides the core QB3 
@@ -21,10 +20,10 @@ bit values.
 # Use
 The easiest way to try it out is to build [GDAL](https://github.com/OSGeo/GDAL) and
 enable QB3 in MRF.  
-[QB3.h](QB3lib/QB3.h) contains the public C API.  
+[QB3.h](QB3lib/QB3.h) contains the public C API.
 Opaque encoder and decoder control structures have to be created, then options and 
 values can be set and querried and then the encode or decode functions can be 
-called.  
+called.
 The data type size can be 8, 16, 32 or 64 bit integer, signed or unsigned.
 There are two QB3 encoder modes. The default one is the fastest. The second 
 encoder tries an additional way of encoding which may result in better compression 
