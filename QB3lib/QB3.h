@@ -47,10 +47,10 @@ enum qb3_mode { QB3M_DEFAULT = 0, QB3M_BASE = 0, QB3M_BEST };
 
 // Errors
 enum qb3_error {
-	QB3E_OK = 0,
-	QB3E_EINV, // Parameter invalid
-	QB3E_UNKN, // Unknown 
-	QB3E_ERR   // Last, unspecified error
+    QB3E_OK = 0,
+    QB3E_EINV, // Parameter invalid
+    QB3E_UNKN, // Unknown 
+    QB3E_ERR   // Last, unspecified error
 };
 
 // In QB3encode.cpp
