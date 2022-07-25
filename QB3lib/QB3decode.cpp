@@ -172,7 +172,7 @@ bool qb3_read_info(decsp p) {
     }
 
     iBits s(p->s_in, p->s_size);
-    // Need to partse the headers
+    // Need to parse the headers
     do {
         auto val = s.peek();
         // Chunks are fixed 16bit values, low endian
