@@ -499,12 +499,78 @@ int main(int argc, char** argv) {
 #include <vector>
 #include <algorithm>
 
+void save_pgm(void *src, size_t x, size_t y, size_t maxval, char *fname) {
+    if (!fname) return;
+    FILE* f = fopen(fname, "wb");
+    char buffer[1024];
+    sprintf(buffer, "P5 %d %d %d\n", int(x), int(y), int(maxval));
+    fwrite(buffer, strlen(buffer), 1, f);
+    size_t linesz = x * (maxval < 256 ? 1: 2);
+    fwrite(src, linesz, y, f);
+    fclose(f);
+}
+
+size_t qcomp(const std::vector<int32_t> &data, size_t xsize, size_t ysize, std::vector<uint8_t> &outvec, int ordinal) {
+
+    auto minmax = std::minmax_element(data.data(), data.data() + data.size());
+    auto minval = *minmax.first;
+    auto maxval = *minmax.second;
+    auto range = maxval - minval + 1;
+    auto rot = minval;
+
+    printf("%02o -> range %d, rotated %d, %d %d\n", ordinal, range, rot, minval, maxval);
+    qb3_dtype dt = range <= 256 ? QB3_U8 : range <= 65536 ? QB3_U16 : QB3_U32;
+    size_t dtsz = dt == QB3_U8 ? 1 : QB3_U16 ? 2 : 4;
+
+    char fname[1024];
+    sprintf(fname, "comp%d%d.pgm", ordinal % 8, ordinal / 8);
+
+    auto encoder = qb3_create_encoder(xsize, ysize, 1, dt);
+    // qb3_set_encoder_mode(encoder, QB3M_BEST);
+    auto maxsize = qb3_max_encoded_size(encoder);
+    std::vector<uint8_t> blob(maxsize);
+
+    static std::vector<uint8_t> workspace(xsize * ysize * 4); // Big enough for 32bit int
+
+    if (dt == QB3_U8) {
+        for (int i = 0; i < data.size(); i++)
+            workspace[i] = static_cast<uint8_t>(data[i] - rot);
+        save_pgm(workspace.data(), xsize, ysize, 255, fname);
+    }
+    else if (dt == QB3_U16) {
+        auto dst = reinterpret_cast<uint16_t*>(workspace.data());
+        for (int i = 0; i < data.size(); i++)
+            *dst++ = static_cast<uint16_t>(data[i] - rot);
+        save_pgm(workspace.data(), xsize, ysize, 65535, fname); // Max val
+    }
+    else {
+        auto dst = reinterpret_cast<uint32_t*>(workspace.data());
+        for (int i = 0; i < data.size(); i++)
+            *dst++ = static_cast<uint32_t>(data[i] - rot);
+    }
+
+    // The histogram shows that gaps exist, but eliminating them doesn't change compressibility significantly
+
+    // Estimate, save as bitmap
+    //if (range == 1)
+    //    return 20;
+
+    auto outsize = qb3_encode(encoder, workspace.data(), blob.data());
+    qb3_destroy_encoder(encoder);
+    outvec.insert(outvec.end(), blob.data(), blob.data() + outsize);
+    return outsize;
+}
+
 int main(int argc, char** argv) {
 
     constexpr uint32_t NBITS = 8;
     constexpr uint32_t MAXVAL = (1 << NBITS) - 1;
 
-    FILE *f = fopen(argv[1], "rb");
+    char fname[] = "ko.pgm";
+    uint32_t xsize = 768;
+    uint32_t ysize = 512;
+
+    FILE *f = fopen(fname, "rb");
     if (!f) {
         fprintf(stderr, "Can't open test input file named \"%s\"\n", argv[1]);
         return 1;
@@ -523,11 +589,6 @@ int main(int argc, char** argv) {
     }
     fclose(f);
 
-    // Hardcoded for now
-    //uint32_t xsize = 3072;
-    //uint32_t ysize = 2048;
-    uint32_t xsize = 7200;
-    uint32_t ysize = 5408;
     uint8_t* data = filebuff.data() + filebuff.size() - xsize * ysize; //
 
     // Prepare the quantization table for forward DCT
@@ -599,70 +660,16 @@ int main(int argc, char** argv) {
     fwrite(redone.data(), redone.size(), 1, f);
     fclose(f);
 
-    std::vector<int32_t> minvals, maxvals, rotation, delta;
-    for (int i = 0; i < DCTSIZE2; i++) {
-        auto minmax =
-        std::minmax_element(component[i].data(), component[i].data() + component[i].size());
-        minvals.push_back(*minmax.first);
-        maxvals.push_back(*minmax.second);
-        delta.push_back(1 + maxvals.back() - minvals.back());
-        rotation.push_back(-minvals.back());
-        printf("%d -> range %d, rotated %d, %d %d\n", i, delta.back(), rotation.back(), *minmax.first, *minmax.second);
-    }
-
-    // Let's convert them to correct type
-    size_t total_size = 0;
-    std::vector<uint8_t> jq3;
+    size_t prev_size(0), total_size(0);
+    std::vector<uint8_t> jq3; // For the QB3 compressed bands
 
     for (int i = 0; i < DCTSIZE2; i++) {
-        if (delta[i] <= 256) { // Byte is sufficient
-            std::vector<uint8_t> workspace;
-            auto rot = rotation[i];
-            for (auto v : component[i])
-                workspace.push_back(static_cast<uint8_t>(v - rot));
-            auto encoder = qb3_create_encoder(xsize / DCTSIZE, ysize / DCTSIZE, 1, QB3_U8);
-            qb3_set_encoder_mode(encoder, QB3M_BEST);
-            auto maxsize = qb3_max_encoded_size(encoder);
-            std::vector<uint8_t> blob(maxsize);
-            auto outsize = qb3_encode(encoder, workspace.data(), blob.data());
-            qb3_destroy_encoder(encoder);
-            total_size += outsize;
-            printf("8  Output size is %zu instead of %zu\n", outsize, workspace.size());
-            jq3.insert(jq3.end(), blob.data(), blob.data() + outsize);
-        }
-        else if (delta[i] <= 65536) {
-            std::vector<uint16_t> workspace;
-            auto rot = rotation[i];
-            for (auto v : component[i])
-                workspace.push_back(static_cast<uint16_t>(v - rot));
-            auto encoder = qb3_create_encoder(xsize / DCTSIZE, ysize / DCTSIZE, 1, QB3_U16);
-            qb3_set_encoder_mode(encoder, QB3M_BEST);
-            auto maxsize = qb3_max_encoded_size(encoder);
-            std::vector<uint8_t> blob(maxsize);
-            auto outsize = qb3_encode(encoder, workspace.data(), blob.data());
-            total_size += outsize;
-            qb3_destroy_encoder(encoder);
-            printf("16 Output size is %zu instead of %zu\n", outsize, workspace.size()*2);
-            jq3.insert(jq3.end(), blob.data(), blob.data() + outsize);
-        }
-        else { // Ugh, hardly ever
-            std::vector<uint32_t> workspace;
-            auto rot = rotation[i];
-            for (auto v : component[i])
-                workspace.push_back(static_cast<uint32_t>(static_cast<int64_t>(v) - rot));
-            auto encoder = qb3_create_encoder(xsize / DCTSIZE, ysize / DCTSIZE, 1, QB3_U32);
-            qb3_set_encoder_mode(encoder, QB3M_BEST);
-            auto maxsize = qb3_max_encoded_size(encoder);
-            std::vector<uint8_t> blob(maxsize);
-            auto outsize = qb3_encode(encoder, workspace.data(), blob.data());
-            total_size += outsize;
-            qb3_destroy_encoder(encoder);
-            printf("32 Output size is %llu instead of %zu\n", outsize, workspace.size()*4);
-            jq3.insert(jq3.end(), blob.data(), blob.data() + outsize);
-        }
+        total_size += qcomp(component[i], xsize / DCTSIZE, ysize / DCTSIZE, jq3, i);
+        printf("%02o Size: %zu\n", i, total_size - prev_size);
+        prev_size = total_size;
     }
 
-    fprintf(stdout, "Total compressed size %zu %zu\n", total_size, jq3.size());
+    fprintf(stdout, "Total compressed size %zu\n", total_size);
     // Write the jq3 blob
     f = fopen("JQ3.qb3", "wb");
     fwrite(jq3.data(), jq3.size(), 1, f);
