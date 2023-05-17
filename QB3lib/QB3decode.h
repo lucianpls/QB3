@@ -173,11 +173,9 @@ static bool gdecode(iBits &s, size_t rung, T * group, uint64_t acc, size_t abits
         }
     }
     if ((0 == (group[B2 - 1] >> rung)) && (rung > 0)) {
-        auto p = step(group, rung);
-        if (p < B2)
-            group[p] ^= static_cast<T>(1) << rung;
-        else if (p == B2)
-            return false;
+        auto stepp = step(group, rung);
+        if (stepp < B2)
+            group[stepp] ^= static_cast<T>(1ull << rung);
     }
     return true;
 }
@@ -293,15 +291,25 @@ static bool decode(uint8_t *src, size_t len, T* image,
                 for (int i = 0; i < B2; i++)
                     image[loc + c + offset[i]] = prv += smag(group[i]);
                 prev[c] = prv;
-            }
-            for (int c = 0; c < bands; c++)
-                if (cband[c] != c)
-                    for (size_t i = 0; i < B2; i++)
-                        image[loc + c + offset[i]] += image[loc + cband[c] + offset[i]];
+            } // Per band per block
             if (failed) break;
-        }
+        } // per block
         if (failed) break;
-    }
+
+        // Apply band delta per block line, linear
+        // It could be done per block or for the whole image, this seems to
+        // keep the data in cache, depending on the image size
+        for (int c = 0; c < bands; c++) {
+            if (cband[c] == c)
+                continue;
+            auto dimg = image + bands * xsize * y + c;
+            auto simg = image + bands * xsize * y + cband[c];
+            for (size_t iy = y; iy < y + B; iy++)
+                for (size_t x = 0; x < xsize; x++, dimg += bands, simg += bands)
+                    *dimg += *simg;
+        }
+
+    } // per block line
     return failed;
 }
 } // Namespace

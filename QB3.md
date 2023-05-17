@@ -2,7 +2,7 @@
 
 **Incomplete**
 
-# Group Encoding
+## Group Encoding
 
 This is the basic encoding for raster data, in groups of 4x4, scanned in bit interleaved order. 
 Within a band, blocks are in normal, row-major order, not in bit interleaved order. 
@@ -40,7 +40,7 @@ needed to determine the actual value.
 By contrast, the two's complement encoding is in sign-magnitude order (smag), although the magnitude of negative 
 numbers is encoded with flipped bit values.
 
-# MAGS QB3 suffix encoding
+## MAGS QB3 suffix encoding
 
 Let's assume that for encoding a block n bits per value are required, 
 which means that the rung is n - 1. Even within a 16 value block smaller values 
@@ -78,7 +78,7 @@ If the number of the short values in a group is larger than the number of long v
 will be less than if the values in the group are stored with the nominal size. This variable size encoding results 
 in additional compression.
 
-# QB3 Bitstream
+## QB3 Bitstream
 
 The QB3 bitstream is a concatenation of encoded groups, each encoded individually at a specific rung. In the case of multi 
 band rasters, the band for a given group are concatenated before going to the next group. 
@@ -101,7 +101,7 @@ The codeswitch itself is QB3 encoded, using a variable number of bits. For examp
 The codeswitch is then followed by the 16 group values, encoded in QB3 format. Special encoding are required at rung 0 and rung 1, where
 the normal QB3 doesn't apply (output codes can be shorter than the two prefix bits).
 
-## Rung 0 Encoding
+### Rung 0 Encoding
 
 At rung zero, each value requires a single bit, the QB3 ranges can't be used. There is however the special case when all the values 
 within a block are zero. This happens when the input block is constant, which is common so it deserves a special, shorter encoding.
@@ -110,7 +110,7 @@ value will use only two bits, both zero, the first one signifying that the block
 (zero), while the next zero means that all the values within the block are zero. Otherwise, for a normal zero rung block where some 
 of the values are ones, a 1 bit is stored (non-zero block), followed by the 16 bits for the 16 values.
 
-## Rung 1 Encoding
+### Rung 1 Encoding
 At rung 1, the low range is encoded using a single bit, following the QB3 encoding pattern.  
  - 0b00 -> 0b0
  - 0b01 -> 0b10
@@ -119,7 +119,7 @@ At rung 1, the low range is encoded using a single bit, following the QB3 encodi
 
 Decoding this rung has to be done slightly different from the higher rungs, testing each bit separately since the second bit might not exist.
 
-## Group Step Encoding
+### Group Step Encoding
 
 The rung of a group is the highest bit set for any value within the group. This means that at least one of the values in 
 the group is in the long range of the respective group. The encoder will not generate an encoded group where
@@ -139,7 +139,7 @@ initially. The sequnce of the rung bits is a step down function, going from 1 to
 *step encoding*. This optimization reduces the number of bits required to store a group by 1 or 2 bits, if the sequence of the rung bit
 across the group is a step function. This encoding applies to all rungs except for rung 0.
 
-# Common Factor Group Encoding
+### Common Factor Group Encoding
 
 This encoding is only used by the *best* mode of libQB3. It uses integer division and multiplication, operations which 
 are not used in the default case.  

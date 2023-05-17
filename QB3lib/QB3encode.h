@@ -103,10 +103,10 @@ static void groupencode(T group[B2], T maxval, oBits& s,
     }
     // Flip the last set rung bit if the rung bit sequence is a step down
     // At least one rung bit has to be set, so it can't return 0
-    if (step(group, rung) <= B2) {
-        assert(step(group, rung) > 0); // At least one rung bit should be set
-        group[step(group, rung) - 1] ^= static_cast<T>(1ull << rung);
-    }
+    auto stepp = step(group, rung);
+    assert(stepp > 0); // At least one rung bit should be set
+    if (stepp <= B2)
+        group[stepp - 1] ^= static_cast<T>(1ull << rung);
     if (6 > rung) { // Half of the group fits in 64 bits
         auto t = CRG[rung];
         for (size_t i = 0; i < B2 / 2; i++) {

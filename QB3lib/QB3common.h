@@ -158,16 +158,12 @@ static T magsabs(T val) {
 // If the rung bits of the input values match 1*0*, returns the index of first 0, otherwise B2 + 1
 template<typename T>
 static size_t step(const T* const v, size_t rung) {
-    // We are looking for 1*0* pattern on the B2 bits
-    uint64_t acc = ~0ull;
+    uint64_t acc = 0ull;
+    // Accumulate flipped rung bits
     for (size_t i = 0; i < B2; i++)
-        acc = (acc << 1) | (1 & (v[i] >> rung));
-    // Flip bits so the top ones are 0 and bottom ones are 1
-    acc = ~acc;
-    auto s = setbits16(acc);
-    if (0 == s) // don't call topbit if acc is empty
-        return B2;
-    if (topbit(acc) != s - 1)
-        return B2 + 1;
-    return B2 - s;
+        acc = (acc << 1) | (1 ^ (v[i] >> rung));
+    // pattern is now 0*1*, with at least one 1 set
+    // s is 1 if distribution is a down step, 0 otherwise
+    bool s = ((acc & (acc + 1)) != 0);
+    return B2 + s - !s * setbits16(acc);
 }
