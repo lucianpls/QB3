@@ -276,7 +276,6 @@ static int encode_fast(const T* image, oBits& s, encs &info)
     for (size_t c = 0; c < bands; c++)
         if (cband[c] >= bands)
             return 2; // Band mapping error
-    constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     // Running code length, start with nominal value
     std::vector<size_t> _runbits(bands, 0);
     // Previous value, per band

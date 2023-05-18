@@ -93,16 +93,15 @@ size_t qb3_decoded_size(const decsp p) {
 template<typename T>
 static void dequantize(T* d, const decsp p) {
     size_t sz = qb3_decoded_size(p) / sizeof(T);
-    T q = static_cast<T>(p->quanta);
-    static const T maxt = std::numeric_limits<T>::max();
-    static const T mint = std::numeric_limits<T>::min();
-    T mai = maxt / q; // Top valid value
-    T mii = mint / q; // Bottom valid value
+    const T q = static_cast<T>(p->quanta);
+    const T mai = std::numeric_limits<T>::max() / q; // Top valid value
+    const T mii = std::numeric_limits<T>::min() / q; // Bottom valid value
     for (size_t i = 0; i < sz; i++) {
         auto data = d[i];
-        d[i] = (data <= mai) * (data * q) + (!(data <= mai)) * maxt;
+        d[i] = (data <= mai) * (data * q) 
+            + (!(data <= mai)) * std::numeric_limits<T>::max();
         if (std::is_signed<T>() && q > 2 && (data < mii))
-            d[i] = mint;
+            d[i] = std::numeric_limits<T>::min();
     }
 }
 
