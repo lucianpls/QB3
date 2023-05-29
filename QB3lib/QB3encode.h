@@ -1,5 +1,5 @@
 /*
-Copyright 2020-2022 Esri
+Copyright 2020-2023 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -113,11 +113,12 @@ static void groupencode(T group[B2], T maxval, oBits& s,
             acc |= (TBLMASK & t[group[i]]) << abits;
             abits += t[group[i]] >> 12;
         }
-        // At rung 1, 2 and 3 this push can be skipped, if the accum has enough space
-        if (!((rung == 1) || (rung == 2 && abits < 33))) {
+        // No need to push accumulator at rung 1 and sometimes 2
+        if (rung != 1 && (rung != 2 || abits > 32)) {
             s.push(acc, abits);
             acc = abits = 0;
         }
+
         for (size_t i = B2 / 2; i < B2; i++) {
             acc |= (TBLMASK & t[group[i]]) << abits;
             abits += t[group[i]] >> 12;
@@ -129,35 +130,49 @@ static void groupencode(T group[B2], T maxval, oBits& s,
     // Encoded data fits in 256 bits, 4 way interleaved
     if ((sizeof(CRG) / sizeof(*CRG)) > rung) {
         auto t = CRG[rung];
-        uint64_t a[4] = { acc, 0, 0, 0 };
-        size_t asz[4] = { abits, 0, 0, 0 };
-        for (size_t i = 0; i < B; i++)
+        uint64_t a[4] = {acc, 0, 0, 0};
+        size_t asz[4] = {abits, 0, 0, 0};
+        for (size_t i = 0; i < B; i++) {
             for (size_t j = 0; j < B; j++) {
                 auto v = t[group[j * B + i]];
                 a[j] |= (TBLMASK & v) << asz[j];
                 asz[j] += v >> 12;
             }
+        }
         for (size_t i = 0; i < B; i++)
             s.push(a[i], asz[i]);
         return;
     }
     // Computed encoding, slower, works for rung > 1
     if (1 < sizeof(T)) { // This vanishes in 8 bit mode
-        // Push the code switch for non-table encoding, not worth the hassle
-        s.push(acc, abits);
-        if (sizeof(T) < 8 || 63 != rung) {
+        if (sizeof(T) < 8 || rung < 31) { // low rung, can reuse acc
             for (int i = 0; i < B2; i++) {
                 auto p = qb3csz(group[i], rung);
-                s.push(p.second, p.first);
+                if (p.first + abits > 64) {
+                    s.push(acc, abits);
+                    acc = abits = 0;
+                }
+                acc |= p.second << abits;
+                abits += p.first;
             }
+            s.push(acc, abits);
         }
-        else if(sizeof(T) == 8) { // rung 63 may overflow 64 bits, push bit 62 explicitly
-            for (int i = 0; i < B2; i++) {
-                auto p = qb3csz(group[i], rung);
-                size_t ovf = p.first & (p.first >> 6); // overflow flag
-                s.push(p.second, p.first ^ ovf); // changes 65 in 64
-                if (ovf)
-                    s.push(1ull & (static_cast<uint64_t>(group[i]) >> 62), ovf);
+        else { // sizeof(T) == 8
+            s.push(acc, abits);
+            if (rung < 63) { // high rung, no overflow
+                for (int i = 0; i < B2; i++) {
+                    auto p = qb3csz(group[i], rung);
+                    s.push(p.second, p.first); // changes 65 in 64
+                }
+            }
+            else { // top rung, might overflow
+                for (int i = 0; i < B2; i++) {
+                    auto p = qb3csz(group[i], rung);
+                    size_t ovf = p.first & (p.first >> 6); // overflow flag
+                    s.push(p.second, p.first ^ ovf); // changes 65 in 64
+                    if (ovf)
+                        s.push(1ull & (static_cast<uint64_t>(group[i]) >> 62), ovf);
+                }
             }
         }
     }
