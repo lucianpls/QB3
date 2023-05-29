@@ -12,6 +12,11 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libQB3", "QB3lib\QB3lib.vcx
 EndProject
 Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "build_tables", "build_tables.pyproj", "{08FF3989-3055-4E0B-83E0-19C7C3211A0A}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cqb3", "cqb3\cqb3.vcxproj", "{76B676D3-29E2-453F-B218-ED43BC00B67D}"
+	ProjectSection(ProjectDependencies) = postProject
+		{89294CE7-22BC-4F63-BF51-2724E2683860} = {89294CE7-22BC-4F63-BF51-2724E2683860}
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -40,6 +45,14 @@ Global
 		{08FF3989-3055-4E0B-83E0-19C7C3211A0A}.Debug|x64.ActiveCfg = Debug|Any CPU
 		{08FF3989-3055-4E0B-83E0-19C7C3211A0A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{08FF3989-3055-4E0B-83E0-19C7C3211A0A}.Release|x64.ActiveCfg = Release|Any CPU
+		{76B676D3-29E2-453F-B218-ED43BC00B67D}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{76B676D3-29E2-453F-B218-ED43BC00B67D}.Debug|Any CPU.Build.0 = Debug|x64
+		{76B676D3-29E2-453F-B218-ED43BC00B67D}.Debug|x64.ActiveCfg = Debug|x64
+		{76B676D3-29E2-453F-B218-ED43BC00B67D}.Debug|x64.Build.0 = Debug|x64
+		{76B676D3-29E2-453F-B218-ED43BC00B67D}.Release|Any CPU.ActiveCfg = Release|x64
+		{76B676D3-29E2-453F-B218-ED43BC00B67D}.Release|Any CPU.Build.0 = Release|x64
+		{76B676D3-29E2-453F-B218-ED43BC00B67D}.Release|x64.ActiveCfg = Release|x64
+		{76B676D3-29E2-453F-B218-ED43BC00B67D}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
