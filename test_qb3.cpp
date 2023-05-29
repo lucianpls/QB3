@@ -1,5 +1,5 @@
 /*
-Copyright 2020-2021 Esri
+Copyright 2020-2023 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -116,10 +116,10 @@ void check_plus(vector<uint8_t>& image, const Raster& raster, uint64_t m, int ma
 }
 
 template<typename T>
-void check(vector<uint8_t> &image, const Raster &raster, 
-    uint64_t m, int main_band = 0, 
+void check(vector<uint8_t> &image, const Raster &raster,
+    uint64_t m, int main_band = 0,
     bool fast = 0, uint64_t q = 1, bool away = false,
-    bool headers = true) 
+    bool headers = true)
 {
     size_t xsize = raster.size.x;
     size_t ysize = raster.size.y;
@@ -168,7 +168,7 @@ void check(vector<uint8_t> &image, const Raster &raster,
     qenc = nullptr;
 
     cout << outsize << '\t' << outsize * 100.0 / image.size() / sizeof(T) 
-        << '\t' << time_span << '\t';
+        << '\t' << image.size() * sizeof(T) / time_span / 1024 / 1024 << '\t' << time_span << '\t';
     if (err)
         cout << "\nFailed\n";
 
@@ -218,7 +218,7 @@ void check(vector<uint8_t> &image, const Raster &raster,
     qb3_destroy_decoder(qdec);
 
     time_span = duration_cast<duration<double>>(t2 - t1).count();
-    cout << time_span << '\t' << sizeof(T) << '\t' << m << '\t';
+    cout << sizeof(T) * image.size() /time_span / 1024 / 1024 << '\t' << time_span << '\t' << sizeof(T) << '\t' << m << '\t';
     if (fast)
         cout << "Fast";
 
@@ -337,70 +337,9 @@ int test(string fname) {
     return 0;
 }
 
-int main(int argc, char **argv) 
+int main(int argc, char **argv)
 {
-    bool test_bitmap = false;
     bool test_QB3 = true;
-
-    if (test_bitmap) {
-        //int sx = 200, sy = 299;
-        //BMap bm(sx, sy);
-
-        ////std::cout << bm.bit(7, 8);
-        ////bm.clear(7, 8);
-        ////std::cout << bm.bit(7, 8);
-        //////bm.set(7, 8);
-        //////std::cout << bm.bit(7, 8);
-        ////std::cout << std::endl;
-
-        //// a rectangle
-        //for (int y = 30; y < 60; y++)
-        //    for (int x = 123; x < 130; x++)
-        //        bm.clear(x, y);
-
-        //// circles
-        //int cx = 150, cy = 76, cr = 34;
-        //for (int y = 0; y < sy; y++)
-        //    for (int x = 0; x < sx; x++)
-        //        if (((x - cx) * (x - cx) + (y - cy) * (y - cy)) < cr * cr)
-        //            bm.clear(x, y);
-
-        //cx = 35; cy = 212; cr = 78;
-        //for (int y = 0; y < sy; y++)
-        //    for (int x = 0; x < sx; x++)
-        //        if (((x - cx) * (x - cx) + (y - cy) * (y - cy)) < cr * cr)
-        //            bm.clear(x, y);
-
-        //cx = 79; cy = 235; cr = 135;
-        //for (int y = 0; y < sy; y++)
-        //    for (int x = 0; x < sx; x++)
-        //        if (((x - cx) * (x - cx) + (y - cy) * (y - cy)) < cr * cr)
-        //            bm.clear(x, y);
-
-        //vector<uint8_t> values((sx * sy + 7) / 8);
-        //oBits s(values.data());
-        //cout << endl << "Raw " << bm.dsize() * 8 << endl;
-        //bm.pack(s);
-        //cout << "Packed " << s.size_bits() << endl;
-
-        //vector<uint8_t> v;
-        //RLE(values, v);
-        //cout << "RLE " << v.size() * 8 << endl;
-        //vector<uint8_t> outv(sx * sy);
-        //oBits outs(outv.data());
-        //unRLE(v, outv);
-        //cout << "UnRLE " << outs.size_bits() << std::endl;
-        //if (memcmp(values.data(), outv.data(), outv.size()))
-        //    cerr << "RLE error" << endl;
-
-        //BMap bm1(sx, sy);
-        //iBits ins(outv.data());
-        //bm1.unpack(ins);
-        //if (!bm1.compare(bm))
-        //    cerr << "Bitmap packing error" << endl;
-        //else
-        //    cout << "Bitmap Success" << endl;
-    }
 
     if (test_QB3) {
         if (argc < 2) {
@@ -447,9 +386,9 @@ int main(int argc, char **argv)
             auto t = high_resolution_clock::now();
             stride_decode(params, source, image.data());
             auto time_span = duration_cast<duration<double>>(high_resolution_clock::now() - t).count();
-            cout << "Decode time " << time_span << endl;
+            cout << "Decode time " << time_span << " rate " << image.size() / time_span / 1024 / 1024 << " MB/s" << endl;
 
-            cout << "Compressed\tRatio\tEncode\tDecode\tType\n\n";
+            cout << "Size\tRatio %\tEnc (MB/s)\t(s)\tDec (MB/s)\t(s)\tT_Size\n\n";
 
             // Check that offsetting the input around max doesn't really change the compression
             // This is obvious because only differences are encoded
