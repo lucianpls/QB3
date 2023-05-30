@@ -18,8 +18,6 @@ Contributors:  Lucian Plesea
 #pragma once
 #include <vector>
 #include <utility>
-#include <functional>
-#include <algorithm>
 #include <type_traits>
 #include "bitstream.h"
 #include "QB3common.h"
@@ -28,11 +26,12 @@ namespace QB3 {
 // integer divide val(in magsign) by cf(normal)
 template<typename T> static T magsdiv(T val, T cf) {return ((magsabs(val) / cf) << 1) - (val & 1);}
 
-// return greatest common factor (absolute) of a B2 sized vector of mag-sign values
-// T is always unsigned
-template<typename T>
-static T gcf(const T* group) {
-    // Work with actual absolute values
+// return greatest common factor (absolute) of a B2 sized vector of mag-sign values, Euclid algorithm
+// Lots of early returns, optimize for them
+template<typename T> static T gcf(const T* group) 
+{
+    static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
+    // Work with actual absolute values, on local copy of data
     T v[B2] = {0}; // Only the first value has to be zero
     int sz = 0;
     for (int i = 0; i < B2; i++) { // skip the zeros
@@ -42,14 +41,20 @@ static T gcf(const T* group) {
             return 1; // No common factor
     }
     while (sz > 1) {
-        std::swap(v[0], *std::min_element(v, v + sz));
-        int j = 1;
-        const T m = v[0];
-        for (int i = 1; i < sz; i++) { // skip the zeros
+        // Find the minimum value
+        int j = 0;
+        T m = v[0];
+        for (int i = 1; i < sz; i++)
+            if (m > v[i])
+                m = v[j = i];
+        // Place it at v[0]
+        v[j] = v[0];
+        v[0] = m;
+        for (int i = j = 1; i < sz; i++) {
             if (1 < v[i] % m)
                 v[j++] = v[i] % m;
             else if (1 == v[i] % m)
-                return 1; // No common factor
+                return 1; // no common factor
         }
         sz = j; // Never zero
     }
