@@ -53,8 +53,7 @@ static std::pair<size_t, uint64_t> qb3dsztbl(uint64_t val, size_t rung) {
 template<typename T>
 static bool gdecode(iBits &s, size_t rung, T * group, uint64_t acc, size_t abits) {
     assert(abits <= 8);
-    if (abits)
-        acc >>= abits;
+    acc >>= abits;
     if (0 == rung) { // single bits, direct decoding
         if (0 != (acc & 1)) {
             abits += B2;
@@ -67,9 +66,9 @@ static bool gdecode(iBits &s, size_t rung, T * group, uint64_t acc, size_t abits
             for (size_t i = 0; i < B2; i++)
                 group[i] = static_cast<T>(0);
         s.advance(abits + 1);
-        return true;
+        return 1;
     }
-    // Byte decoding is always done with tables
+    // Table decoding
     if (sizeof(T) == 1 || rung < (sizeof(DRG) / sizeof(*DRG))) {
         if (1 == rung) { // double barrel
             for (size_t i = 0; i < B2; i += 2) {
@@ -137,8 +136,8 @@ static bool gdecode(iBits &s, size_t rung, T * group, uint64_t acc, size_t abits
             }
         }
     }
-    else {     // Large types and high rung Computed decoding, one stream read per value
-        if (sizeof(T) < 8 || rung < 32) { // 16 and 32 bits may reuse accumulator at times
+    else { // computed decoding
+        if (sizeof(T) < 8 || rung < 32) { // 16 and 32 bits may reuse accumulator
             for (int i = 0; i < B2; i++) {
                 if (abits + rung > 62) {
                     s.advance(abits);
@@ -160,19 +159,19 @@ static bool gdecode(iBits &s, size_t rung, T * group, uint64_t acc, size_t abits
                 s.advance(p.first);
             }
         }
-        else { // May need 65 bits, worst case
+        else { // Rung 63 might need 65 bits
             s.advance(abits);
             for (int i = 0; i < B2; i++) {
                 auto p = qb3dsz(s.peek(), rung);
                 auto ovf = p.first & (p.first >> 6);
                 group[i] = static_cast<T>(p.second);
                 s.advance(p.first ^ ovf);
-                if (ovf) // The next to top bit got dropped
+                if (ovf) // The next to top bit got dropped, rare
                     group[i] |= s.get() << 62;
             }
         }
     }
-    if ((0 == (group[B2 - 1] >> rung)) && (rung > 0)) {
+    if (0 == (group[B2 - 1] >> rung)) {
         auto stepp = step(group, rung);
         if (stepp < B2)
             group[stepp] ^= static_cast<T>(1ull << rung);
@@ -180,7 +179,7 @@ static bool gdecode(iBits &s, size_t rung, T * group, uint64_t acc, size_t abits
     return true;
 }
 
-// integer multiply val(in magsign) by cf(normal)
+// integer multiply val(in magsign) by cf(normal, positive)
 template<typename T>
 static T magsmul(T val, T cf) {
     return magsabs(val) * (cf << 1) - (val & 1);
@@ -205,8 +204,8 @@ static bool decode(uint8_t *src, size_t len, T* image,
     bool failed(false);
     for (size_t y = 0; (y + B) <= ysize; y += B) {
         for (size_t x = 0; (x + B) <= xsize; x += B) {
-            size_t loc = (y * xsize + x) * bands;
             for (int c = 0; c < bands; c++) {
+                T* const imgloc = image + (y * xsize + x) * bands + c;
                 uint64_t cs(0), abits(1), acc(s.peek());
                 if ((acc & 1) != 0) { // Rung change
                     cs = DSW[UBITS][(acc >> 1) & ((1ull << (UBITS + 1)) - 1)];
@@ -287,16 +286,17 @@ static bool decode(uint8_t *src, size_t len, T* image,
                         runbits[c] = topbit(maxval | 1); // Still, don't call topbit with 0
                     }
                 }
+                // Undo the delta encoding
                 auto prv = prev[c];
                 for (int i = 0; i < B2; i++)
-                    image[loc + c + offset[i]] = prv += smag(group[i]);
+                    imgloc[offset[i]] = prv += smag(group[i]);
                 prev[c] = prv;
             } // Per band per block
             if (failed) break;
         } // per block
         if (failed) break;
 
-        // Apply band delta per block line, linear
+        // Apply band delta per block stip, in linear order
         // It could be done per block or for the whole image, this seems to
         // keep the data in cache, depending on the image size
         for (int c = 0; c < bands; c++) {
