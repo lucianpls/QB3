@@ -1,6 +1,6 @@
 /*
 
-Basic QB3 image encode, uses libicd for input
+Basic QB3 image encode and decode, uses libicd for input
 
 Copyright 2023 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,13 +18,9 @@ Contributors:  Lucian Plesea
 
 #include <cstdint>
 #include <iostream>
-//#include <cmath>
-//#include <algorithm>
 #include <chrono>
 #include <string>
 #include <vector>
-//#include <cassert>
-//#include <type_traits>
 
 // From https://github.com/lucianpls/libicd
 #include <icd_codecs.h>
@@ -35,12 +31,18 @@ using namespace chrono;
 using namespace ICD;
 
 struct options {
-    options() : best(false), verbose(false) {};
+    options() : 
+        best(false), 
+        verbose(false), 
+        decode(false) 
+    {};
+
     string in_fname;
     string out_fname;
     string error;
     bool best;
     bool verbose;
+    bool decode;
 };
 
 int Usage(const options &opt) {
@@ -49,11 +51,19 @@ int Usage(const options &opt) {
         << "Options:\n"
         << "\t-v : verbose\n"
         << "\t-b : best compression\n"
+        << "\t-d : decode QB3\n"
         ;    
     return 1;
 }
 
 bool parse_args(int argc, char** argv, options& opt) {
+    // Look at the executable name, it could be decode
+    string codename(argv[0]);
+    for (auto& c : codename)
+        c = tolower(c);
+    if (codename.find("dqb3") != string::npos)
+        opt.decode = true;
+
     for (int i = 1; i < argc; i++) {
         if (strlen(argv[i]) > 1 && argv[i][0] == '-') {
             // Option
@@ -63,6 +73,9 @@ bool parse_args(int argc, char** argv, options& opt) {
                 break;
             case 'b':
                 opt.best = true;
+                break;
+            case 'd':
+                opt.decode = true;
                 break;
             default:
                 opt.error = "Uknown option provided";
@@ -94,6 +107,7 @@ bool parse_args(int argc, char** argv, options& opt) {
         opt.error = "Need at least the input file name";
         return false;
     }
+
     // If output file name is not provided, extract from input file name
     if (opt.out_fname.empty()) {
         string fname(opt.in_fname);
@@ -102,8 +116,9 @@ bool parse_args(int argc, char** argv, options& opt) {
             fname = fname.substr(fname.find_last_of("\\/") + 1);
         // Strip input extension
         fname = fname.substr(0, fname.find_first_of("."));
-        opt.out_fname = fname + ".qb3";
+        opt.out_fname = fname + (opt.decode ? ".png" : ".qb3");
     }
+
     // If the output name is a folder, append a derived fname
     if (opt.out_fname.find_last_of("\\/") == opt.out_fname.size()) {
         string fname(opt.in_fname);
@@ -112,17 +127,12 @@ bool parse_args(int argc, char** argv, options& opt) {
             fname = fname.substr(fname.find_last_of("\\/") + 1);
         // Strip extension
         fname = fname.substr(0, fname.find_first_of("."));
-        opt.out_fname += fname + ".qb3";
+        opt.out_fname += fname + (opt.decode ? ".png" : ".qb3");
     }
     return true;
 }
 
-int main(int argc, char** argv)
-{
-    options opts;
-    if (!parse_args(argc, argv, opts))
-        return Usage(opts);
-
+int decode_main(options& opts) {
     string fname = opts.in_fname;
     FILE* f = fopen(fname.c_str(), "rb");
     if (!f) {
@@ -131,7 +141,107 @@ int main(int argc, char** argv)
     }
     fseek(f, 0, SEEK_END);
     auto fsize = ftell(f);
-    fseek(f, 0, SEEK_SET);
+    rewind(f);
+    std::vector<uint8_t> src(fsize);
+    fread(src.data(), fsize, 1, f);
+    fclose(f);
+
+    // Decode the qb3
+    size_t image_size[3];
+    auto qdec = qb3_read_start(src.data(), fsize, image_size);
+    vector<uint8_t> raw;
+    double time_span(0);
+
+    if (!qdec) {
+        cerr << "Input not recognized as a valid qb3 raster\n";
+        return 2;
+    }
+    try {
+        if (!qb3_read_info(qdec)) {
+            opts.error = "Can't read qb3 file headers";
+            throw 2;
+        }
+        if (opts.verbose) {
+            cout << "Input:\nSize " << src.size() << " Image "
+                << image_size[0] << "x" << image_size[1] << "@"
+                << image_size[2] << endl;
+        }
+        raw.resize(qb3_decoded_size(qdec));
+        auto t1 = high_resolution_clock::now();
+        auto rbytes = qb3_read_data(qdec, raw.data());
+        auto t2 = high_resolution_clock::now();
+        time_span = duration_cast<duration<double>>(t2 - t1).count();
+    }
+    catch (const int err_code) {
+        cerr << opts.error << endl;
+        qb3_destroy_decoder(qdec);
+        return err_code;
+    }
+
+    // Query metadata before getting rid of the decoder
+    auto dt = qb3_get_type(qdec);
+    qb3_destroy_decoder(qdec);
+    if (opts.verbose) {
+        cerr << "Decode time: " << time_span << " rate: "
+            << raw.size() / time_span / 1024 / 1024 << " MB/s\n";
+    }
+
+    if (dt != QB3_U8) {
+        cerr << "Only byte PNG supported as output";
+        return 1;
+    }
+
+    // Convert to PNG using libicd
+    Raster image;
+    image.dt = ICD::ICDT_Byte;
+    image.size.x = image_size[0];
+    image.size.y = image_size[1];
+    image.size.c = image_size[2];
+    image.size.l = 0;
+    image.size.z = 1;
+    
+    png_params params(image);
+    //params.compression_level = 9;
+
+    storage_manager png_src(raw.data(), raw.size());
+    vector<uint8_t> png_buffer(raw.size() + raw.size() / 10); // Pad by 10%
+    storage_manager png_blob(png_buffer.data(), png_buffer.size());
+    auto t1 = high_resolution_clock::now();
+    auto err_message = png_encode(params, png_src, png_blob);
+    time_span = duration_cast<duration<double>>(high_resolution_clock::now() - t1).count();
+    if (opts.error.size()) {
+        cerr << "PNG encoding failed: " << err_message << endl;
+        return 2;
+    }
+    if (opts.verbose) {
+        cerr << "Output PNG:\nSize " << png_blob.size 
+            << " Ratio: " << 100.0 * png_blob.size / src.size() << "%\n"
+            << "Encode time: " << time_span << " rate: "
+            << raw.size() / time_span / 1024 / 1024 << " MB/s\n";
+    }
+
+    // Write the output file
+    f = fopen(opts.out_fname.c_str(), "wb");
+    if (!f) {
+        cerr << "Can't open output file\n";
+        exit(errno);
+    }
+    fwrite(png_blob.buffer, png_blob.size, 1, f);
+    fclose(f);
+
+    return 0;
+}
+
+int encode_main(options& opts) {
+    string fname = opts.in_fname;
+    FILE* f = fopen(fname.c_str(), "rb");
+    if (!f) {
+        cerr << "Can't open input file\n";
+        return errno;
+    }
+    fseek(f, 0, SEEK_END);
+    auto fsize = ftell(f);
+    rewind(f);
     std::vector<uint8_t> src(fsize);
     storage_manager source = { src.data(), src.size() };
     fread(source.buffer, fsize, 1, f);
@@ -140,7 +250,7 @@ int main(int argc, char** argv)
     auto error_message = image_peek(source, raster);
     if (error_message) {
         cerr << error_message << endl;
-        exit(1);
+        return 1;
     }
     if (opts.verbose)
         cerr << "Size " << fsize << ", Image " << raster.size.x << "x" << raster.size.y << "@" << raster.size.c << endl;
@@ -156,7 +266,7 @@ int main(int argc, char** argv)
     auto time_span = duration_cast<duration<double>>(high_resolution_clock::now() - t).count();
     if (opts.verbose)
         cerr << "Decode time: " << time_span << " rate: " 
-            << image.size() / time_span / 1024 / 1024 << " MB/s" << endl;
+            << image.size() / time_span / 1024 / 1024 << " MB/s\n";
 
     size_t xsize = raster.size.x;
     size_t ysize = raster.size.y;
@@ -164,14 +274,21 @@ int main(int argc, char** argv)
     high_resolution_clock::time_point t1, t2;
 
     auto qenc = qb3_create_encoder(xsize, ysize, bands, QB3_U8);
-    vector<uint8_t> outvec(qb3_max_encoded_size(qenc));
-    for (auto& v : outvec)
-        v = 0;
-    qb3_set_encoder_mode(qenc, opts.best ? qb3_mode::QB3M_BEST : qb3_mode::QB3M_BASE);
-    t1 = high_resolution_clock::now();
-    auto outsize = qb3_encode(qenc, static_cast<void*>(image.data()), outvec.data());
-    t2 = high_resolution_clock::now();
-    time_span = duration_cast<duration<double>>(t2 - t1).count();
+    vector<uint8_t> outvec(qb3_max_encoded_size(qenc), 0);
+    size_t outsize(0);
+    try {
+        qb3_set_encoder_mode(qenc, opts.best ? qb3_mode::QB3M_BEST : qb3_mode::QB3M_BASE);
+        t1 = high_resolution_clock::now();
+        outsize = qb3_encode(qenc, static_cast<void*>(image.data()), outvec.data());
+        t2 = high_resolution_clock::now();
+        time_span = duration_cast<duration<double>>(t2 - t1).count();
+    }
+    catch (int err_code) {
+        cerr << opts.error << endl;
+        qb3_destroy_encoder(qenc);
+        return err_code;
+    }
+    qb3_destroy_encoder(qenc);
 
     if (opts.verbose)
         cerr << "Output\nSize: " << outsize << " Ratio " << outsize * 100.0 / fsize << "%, encode time : " 
@@ -186,4 +303,12 @@ int main(int argc, char** argv)
     fwrite(outvec.data(), outsize, 1, f);
     fclose(f);
 	return 0;
+}
+
+int main(int argc, char** argv)
+{
+    options opts;
+    if (!parse_args(argc, argv, opts))
+        return Usage(opts);
+    return opts.decode ? decode_main(opts) : encode_main(opts);
 }
