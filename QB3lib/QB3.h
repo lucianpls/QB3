@@ -102,13 +102,9 @@ DLLEXPORT decsp qb3_create_raw_decoder(size_t width, size_t height, size_t bands
 
 DLLEXPORT size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination);
 
-// TODO: remove once the decoder can auto-detect the band deltas
-DLLEXPORT bool qb3_set_decoder_coreband(decsp p, size_t bands, const size_t* cband);
-
-// Sets quantization parameters, returns true on success
-DLLEXPORT bool qb3_set_decoder_quanta(decsp p, size_t q);
-
 DLLEXPORT size_t qb3_decoded_size(const decsp p);
+
+DLLEXPORT qb3_dtype qb3_get_type(const decsp p);
 
 // Formatted stream decode functions
 

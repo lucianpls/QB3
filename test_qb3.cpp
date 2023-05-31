@@ -197,15 +197,8 @@ void check(vector<uint8_t> &image, const Raster &raster,
         }
         else {
             auto qdec = qb3_create_raw_decoder(xsize, ysize, bands, tp);
-            if (main_band != 1) {
-                std::vector<size_t> cbands(bands);
-                if (-1 == main_band)
-                    for (size_t i = 0; i < bands; i++)
-                        cbands[i] = i;
-                qb3_set_decoder_coreband(qdec, bands, cbands.data());
-            }
-            if (q > 1)
-                qb3_set_decoder_quanta(qdec, q);
+            //if (q > 1)
+            //    qb3_set_decoder_quanta(qdec, q);
             t1 = high_resolution_clock::now();
             qb3_decode(qdec, outvec.data(), outsize, re.data());
             t2 = high_resolution_clock::now();

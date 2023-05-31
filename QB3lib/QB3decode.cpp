@@ -89,6 +89,10 @@ size_t qb3_decoded_size(const decsp p) {
     return p->xsize * p->ysize * p->nbands * typesizes[static_cast<int>(p->type)];
 }
 
+qb3_dtype qb3_get_type(const decsp p) {
+    return p->type;
+}
+
 // Integer multiply but don't overflow, at least on the positive side
 template<typename T>
 static void dequantize(T* d, const decsp p) {
