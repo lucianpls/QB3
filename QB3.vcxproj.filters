@@ -29,4 +29,9 @@
       <Filter>Extras</Filter>
     </None>
   </ItemGroup>
+  <ItemGroup>
+    <Text Include="CMakeLists.txt">
+      <Filter>Extras</Filter>
+    </Text>
+  </ItemGroup>
 </Project>

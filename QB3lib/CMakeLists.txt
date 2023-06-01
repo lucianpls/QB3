@@ -19,6 +19,8 @@ option(BUILD_SHARED_LIBS "Library style" ON)
 
 set(namespace "QB3")
 add_library(${PROJECT_NAME})
+target_compile_options(${PROJECT_NAME} PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/arch:AVX2>)
+target_compile_options(${PROJECT_NAME} PRIVATE $<$<CXX_COMPILER_ID:GNU>:-mavx2>)
 target_sources(${PROJECT_NAME} 
     PRIVATE QB3encode.cpp QB3encode.h QB3decode.cpp QB3decode.h QB3tables.cpp QB3tables.h QB3common.h bitstream.h QB3.h
 )
