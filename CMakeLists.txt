@@ -23,7 +23,8 @@ if (MSVC)
     add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 endif (MSVC)
 
-target_compile_options(cqb3 PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/arch:AVX2>)
-target_compile_options(cqb3 PRIVATE $<$<CXX_COMPILER_ID:GNU>:-mavx2>)
+# On AMD64 uncomment to use avx2 -> faster code
+# target_compile_options(cqb3 PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/arch:AVX2>)
+# target_compile_options(cqb3 PRIVATE $<$<CXX_COMPILER_ID:GNU>:-mavx2>)
 
 target_link_libraries(cqb3 PRIVATE AHTSE::libicd libQB3)
