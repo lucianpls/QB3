@@ -93,7 +93,7 @@ bool parse_args(int argc, char** argv, options& opt) {
             // file name
             if (opt.in_fname.empty())
                 opt.in_fname = val;
-            else if (opt.in_fname.empty())
+            else if (opt.out_fname.empty())
                 opt.out_fname = val;
             else { // Too many positional args
                 opt.error = "Too many positional arguments provided";
