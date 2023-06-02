@@ -186,14 +186,17 @@ int decode_main(options& opts) {
             << raw.size() / time_span / 1024 / 1024 << " MB/s\n";
     }
 
-    if (dt != QB3_U8) {
-        cerr << "Only byte PNG supported as output";
+    if (dt != QB3_U8 && dt != QB3_U16) {
+        cerr << "Only 8 and 16 bit PNG supported as output";
         return 1;
     }
 
     // Convert to PNG using libicd
     Raster image;
     image.dt = ICD::ICDT_Byte;
+    // This assumes little endian
+    if (dt == QB3_U16)
+        image.dt = ICD::ICDT_UInt16;
     image.size.x = image_size[0];
     image.size.y = image_size[1];
     image.size.c = image_size[2];
@@ -252,14 +255,23 @@ int encode_main(options& opts) {
         cerr << error_message << endl;
         return 1;
     }
-    if (opts.verbose)
-        cerr << "Size " << fsize << ", Image " << raster.size.x << "x" << raster.size.y << "@" << raster.size.c << endl;
-    codec_params params(raster);
-
-    if (raster.dt != ICDT_Byte) {
-        cerr << "Only conversion from byte data implemented\n";
+    if (opts.verbose) {
+        cerr << "Size " << fsize << ", Image " << raster.size.x << "x" << raster.size.y << "@" << raster.size.c;
+        if (raster.dt != ICDT_Byte)
+            cerr << " 16bit";
+        cerr << endl;
+    }
+    if (raster.size.x % 4 or raster.size.y % 4) {
+        cerr << "QB3 requires input size to be a multiple of 4\n";
         return 2;
     }
+    codec_params params(raster);
+
+    if (raster.dt != ICDT_Byte && raster.dt != ICDT_UInt16 && raster.dt != ICDT_Short) {
+        cerr << "Only conversion from 8 and 16 bit data implemented\n";
+        return 2;
+    }
+
     std::vector<uint8_t> image(params.get_buffer_size());
     auto t = high_resolution_clock::now();
     stride_decode(params, source, image.data());
@@ -272,8 +284,9 @@ int encode_main(options& opts) {
     size_t ysize = raster.size.y;
     size_t bands = raster.size.c;
     high_resolution_clock::time_point t1, t2;
-
-    auto qenc = qb3_create_encoder(xsize, ysize, bands, QB3_U8);
+    int dt = raster.dt == ICDT_Byte ? QB3_U8 :
+        ICDT_UInt16 ? QB3_U16 : QB3_I16;
+    auto qenc = qb3_create_encoder(xsize, ysize, bands, dt);
     vector<uint8_t> outvec(qb3_max_encoded_size(qenc), 0);
     size_t outsize(0);
     try {
