@@ -65,7 +65,7 @@ bool parse_args(int argc, char** argv, options& opt) {
         opt.decode = true;
 
     for (int i = 1; i < argc; i++) {
-        if (strlen(argv[i]) > 1 && argv[i][0] == '-') {
+        if (argv[i][0] == '-' && argv[i][1] != 0) {
             // Option
             switch (argv[i][1]) {
             case 'v':
