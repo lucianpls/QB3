@@ -52,7 +52,6 @@ static std::pair<size_t, uint64_t> qb3dsztbl(uint64_t val, size_t rung) {
 template<typename T>
 static bool gdecode(iBits &s, size_t rung, T * group, uint64_t acc, size_t abits) {
     assert(abits <= 8);
-    acc >>= abits;
     if (0 == rung) { // single bits, direct decoding
         if (0 != (acc & 1)) {
             abits += B2;
@@ -192,10 +191,8 @@ static bool decode(uint8_t *src, size_t len, T* image,
     constexpr size_t UBITS(sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6);
     constexpr auto LONG_MASK((1ull << (UBITS + 1)) - 1);
     constexpr auto NORM_MASK(LONG_MASK >> 1);
-    T prev[QB3_MAXBANDS] = {};
-    T group[B2] = {};
-    size_t runbits[QB3_MAXBANDS] = {};
-    size_t offset[B2] = {};
+    T prev[QB3_MAXBANDS] = {}, group[B2] = {};
+    size_t runbits[QB3_MAXBANDS] = {}, offset[B2] = {};
     for (size_t i = 0; i < B2; i++)
         offset[i] = (xsize * ylut[i] + xlut[i]) * bands;
     const uint16_t* dsw(sizeof(T) == 1 ? DSW[3] : sizeof(T) == 2 ? DSW[4] : sizeof(T) == 4 ? DSW[5] : DSW[6]);
@@ -206,9 +203,13 @@ static bool decode(uint8_t *src, size_t len, T* image,
         for (size_t x = 0; (x + B) <= xsize; x += B) {
             for (int c = 0; c < bands; c++) {
                 uint64_t cs(0), abits(1), acc(s.peek());
-                if ((acc & 1) != 0) { // Rung change
+                if (0 == (acc & 1)) {
+                    acc >>= 1;
+                }
+                else { // Rung change
                     cs = dsw[(acc >> 1) & LONG_MASK];
-                    abits = static_cast<size_t>(cs >> 12);
+                    abits = cs >> 12;
+                    acc >>= abits;
                 }
                 
                 if (0 == cs || 0 != (cs & TBLMASK)) { // Normal decoding, not a signal
@@ -216,22 +217,23 @@ static bool decode(uint8_t *src, size_t len, T* image,
                     failed |= !gdecode(s, rung, group, acc, abits);
                     runbits[c] = rung;
                 }
-                else { // signal, cf decoding
-                    // The rung switch for the values
-                    auto same_rung = (acc >> abits) & 1;
-                    cs = dsw[(acc >> (abits + 1)) & LONG_MASK];
+                else { // signal, cf decodind
+                    bool read_cfrung = !(acc & 1); // No cfrung flag
+                    cs = dsw[(acc >> 1) & LONG_MASK];
                     auto rung = (runbits[c] + cs) & NORM_MASK;
                     auto cfrung(rung);
                     failed |= (rung == 63); // can't be 63 since CF encoding looses at least one rung
-                    abits += static_cast<size_t>(cs >> 12);
-                    if (0 == same_rung) { // read cfrung separately, no code switch flag
-                        cs = dsw[(acc >> abits) & LONG_MASK];
-                        abits += static_cast<size_t>(cs >> 12) - 1;
+                    abits += cs >> 12;
+                    acc >>= cs >> 12;
+                    if (read_cfrung) { // read cfrung separately, no code switch flag
+                        cs = dsw[acc & LONG_MASK];
+                        abits += (cs >> 12) - 1;
+                        acc >>= (cs >> 12) - 1;
                         cfrung = (rung + cs) & NORM_MASK;
                         failed |= (rung == cfrung);
                     }
-                    if (0 == (rung | cfrung)) { // single bit for everything, decode here
-                        acc >>= abits;
+                    
+                    if (0 == (rung | cfrung)) { // single bit for everything, decode right here
                         runbits[c] = 1ull + (acc & 1);
                         if (acc & 1)
                             for (int i = 0; i < B2; i++) {
@@ -254,25 +256,25 @@ static bool decode(uint8_t *src, size_t len, T* image,
                         }
                         // There is no overflow possible here, cfrung is < 63 and > 0
                         if (cfrung == rung) { // standard encoding
-                            auto p = qb3dsztbl(acc >> abits, cfrung);
+                            auto p = qb3dsztbl(acc, cfrung);
                             cf += static_cast<T>(p.second);
                             abits += p.first;
+                            acc >>= p.first;
                         }
                         else { // cfrung is different, thus the encoded value is always in long range
                             if (cfrung > 1) {
-                                auto p = qb3dsztbl(acc >> abits, cfrung - 1);
+                                auto p = qb3dsztbl(acc, cfrung - 1);
                                 cf += static_cast<T>(p.second + (1ull << cfrung));
                                 abits += p.first;
+                                acc >>= p.first;
                             }
-                            else // stored as single bit, 2 - 5 inclusive
-                                cf += static_cast<T>(((acc >> abits++) & 1) + cfrung * 2);
+                            else { // stored as single bit, 2 - 5 inclusive
+                                cf += static_cast<T>((acc & 1) + cfrung * 2);
+                                abits += 1;
+                            }
                         }
-                        if (abits > 8) {
-                            s.advance(abits);
-                            acc = s.peek();
-                            abits = 0;
-                        }
-                        failed |= !gdecode(s, rung, group, acc, abits);
+                        s.advance(abits);
+                        failed |= !gdecode(s, rung, group, s.peek(), 0);
                         // Multiply with CF and get the maxval for the actual group rung
                         T maxval = magsmul(group[0], cf);
                         group[0] = maxval;
