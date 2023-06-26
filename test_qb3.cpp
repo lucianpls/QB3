@@ -211,7 +211,8 @@ void check(vector<uint8_t> &image, const Raster &raster,
     qb3_destroy_decoder(qdec);
 
     time_span = duration_cast<duration<double>>(t2 - t1).count();
-    cout << sizeof(T) * image.size() /time_span / 1024 / 1024 << '\t' << time_span << '\t' << sizeof(T) << '\t' << m << '\t';
+    cout << sizeof(T) * image.size() /time_span / 1024 / 1024 << '\t'
+        << time_span << '\t' << sizeof(T) << '\t' << m << '\t';
     if (fast)
         cout << "Fast";
 

@@ -17,6 +17,7 @@ Contributors:  Lucian Plesea
 */
 
 #include <cstdint>
+#include <cstdlib>
 #include <iostream>
 #include <chrono>
 #include <string>
@@ -40,6 +41,7 @@ struct options {
     string in_fname;
     string out_fname;
     string error;
+    string mapping; // band mapping, if provided
     bool best;
     bool verbose;
     bool decode;
@@ -54,6 +56,16 @@ int Usage(const options &opt) {
         << "\t-d : decode QB3\n"
         ;    
     return 1;
+}
+
+
+// A bandlist contains only digits and commas
+bool isbandmap(const string& s) {
+    const string valid("01234567890,");
+    for (auto c : s) 
+        if (valid.find(c) == valid.npos)
+            return false;
+    return true;
 }
 
 bool parse_args(int argc, char** argv, options& opt) {
@@ -76,6 +88,12 @@ bool parse_args(int argc, char** argv, options& opt) {
                 break;
             case 'd':
                 opt.decode = true;
+                break;
+            case 'm':
+                // The next parameter is a comma separated band list if it starts with a digit
+                opt.mapping = "-"; // Disable mapping
+                if (i < argc && isbandmap(argv[i + 1]))
+                    opt.mapping = argv[++i];
                 break;
             default:
                 opt.error = "Uknown option provided";
@@ -289,6 +307,30 @@ int encode_main(options& opts) {
     auto qenc = qb3_create_encoder(xsize, ysize, bands, dt);
     vector<uint8_t> outvec(qb3_max_encoded_size(qenc), 0);
     size_t outsize(0);
+    if (!opts.mapping.empty()) {
+        // Modify band mapping
+        size_t bmap[QB3_MAXBANDS];
+        if (opts.mapping == "-") {
+            for (int i = 0; i < bands; i++)
+                bmap[i] = i;
+        }
+        else {
+            string mapping(opts.mapping);
+            for (int i = 0; i < bands; i++) {
+                if (mapping.empty()) {
+                    bmap[i] = i; // identity
+                    continue;
+                }
+                char* end(nullptr);
+                bmap[i] = strtoul(mapping.c_str(), &end, 10);
+                while (',' == *end) end++; // Skip commas
+                mapping = end; // The unparsed part
+            }
+        }
+        auto success = qb3_set_encoder_coreband(qenc, bands, bmap);
+        if (!success)
+            cerr << "Invalid band mapping, adjusted\n";
+    }
     try {
         qb3_set_encoder_mode(qenc, opts.best ? qb3_mode::QB3M_BEST : qb3_mode::QB3M_BASE);
         t1 = high_resolution_clock::now();
