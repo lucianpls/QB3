@@ -19,7 +19,6 @@ Contributors:  Lucian Plesea
 #include "bitstream.h"
 #include <cinttypes>
 #include <utility>
-#include <vector>
 #include <type_traits>
 #include "QB3common.h"
 
@@ -48,12 +47,16 @@ static std::pair<size_t, uint64_t> qb3dsztbl(uint64_t val, size_t rung) {
 }
 
 // Decode a B2 sized group of QB3 values from s and acc
-// Accumulator should be valid and almost full
+// Accumulator should be valid and have at least 56 valid bits
+// For rung 0, it works with 17bits or more
+// For rung 1, it works with 47bits or more
 // returns false on failure
 template<typename T>
 static bool gdecode(iBits &s, size_t rung, T * group, uint64_t acc, size_t abits) {
-    assert(abits <= 8);
-    acc >>= abits;
+     assert(((rung > 1) && (abits <= 8))
+         || ((rung == 1) && (abits <= 17)) // B2 + 1
+         || ((rung == 0) && (abits <= 47)) // 3 * B2 - 1
+     );
     if (0 == rung) { // single bits, direct decoding
         if (0 != (acc & 1)) {
             abits += B2;
@@ -99,7 +102,7 @@ static bool gdecode(iBits &s, size_t rung, T * group, uint64_t acc, size_t abits
             group[15] = (v >> 3) & 0x7;
             s.advance(abits + (v >> 12));
         }
-        else if (6 > rung) { // Table decode at 3,4 and 5, half of the values fit in accumulator
+        else if (6 > rung) { // Table decode at 3,4 and 5, half of the values per accumulator
             auto drg = DRG[rung];
             const auto m = (1ull << (rung + 2)) - 1;
             for (size_t i = 0; i < B2 / 2; i++) {
@@ -190,126 +193,101 @@ static bool decode(uint8_t *src, size_t len, T* image,
     size_t xsize, size_t ysize, size_t bands, size_t *cband)
 {
     static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
-    constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-    iBits s(src, len);
-    // vectors as fixed size buffers
-    std::vector<T> _prev(bands, 0);
-    std::vector<size_t> _runbits(bands, 0);
-    auto prev = _prev.data();
-    auto runbits = _runbits.data();
-    T group[B2];
-    size_t offset[B2];
+    constexpr size_t UBITS(sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6);
+    constexpr auto LONG_MASK((1ull << (UBITS + 1)) - 1);
+    constexpr auto NORM_MASK(LONG_MASK >> 1);
+    T prev[QB3_MAXBANDS] = {}, group[B2] = {};
+    size_t runbits[QB3_MAXBANDS] = {}, offset[B2] = {};
     for (size_t i = 0; i < B2; i++)
         offset[i] = (xsize * ylut[i] + xlut[i]) * bands;
+    const uint16_t* dsw(sizeof(T) == 1 ? DSW[3] : sizeof(T) == 2 ? DSW[4] : sizeof(T) == 4 ? DSW[5] : DSW[6]);
+    iBits s(src, len);
+
     bool failed(false);
     for (size_t y = 0; (y + B) <= ysize; y += B) {
         for (size_t x = 0; (x + B) <= xsize; x += B) {
             for (int c = 0; c < bands; c++) {
-                T* const imgloc = image + (y * xsize + x) * bands + c;
                 uint64_t cs(0), abits(1), acc(s.peek());
-                if ((acc & 1) != 0) { // Rung change
-                    cs = DSW[UBITS][(acc >> 1) & ((1ull << (UBITS + 1)) - 1)];
-                    abits = static_cast<size_t>(cs >> 12);
+                if (acc & 1) { // Rung change
+                    cs = dsw[(acc >> 1) & LONG_MASK];
+                    abits = cs >> 12;
                 }
-                if (abits == 1 || 0 != (cs & TBLMASK)) { // Normal decoding, not a signal
-                    runbits[c] = (runbits[c] + cs) & ((1ull << UBITS) - 1);
-                    failed |= !gdecode(s, runbits[c], group, acc, abits);
+                acc >>= abits;
+                
+                if (0 == cs || 0 != (cs & TBLMASK)) { // Normal decoding, not a signal
+                    // abits is never > 8, so it's safe to call gdecode
+                    auto rung = (runbits[c] + cs) & NORM_MASK;
+                    failed |= !gdecode(s, rung, group, acc, abits);
+                    runbits[c] = rung;
                 }
-                else { // signal, cf decoding
-                    T cf;
-                    size_t cfrung;
-                    // The rung switch for the values
-                    cs = DSW[UBITS][(acc >> (abits + 1)) & ((1ull << (UBITS + 1)) - 1)];
-                    auto rung = (runbits[c] + cs) & ((1ull << UBITS) - 1);
+                else { // signal, cf decodind
+                    bool read_cfrung = !(acc & 1); // No cfrung flag
+                    cs = dsw[(acc >> 1) & LONG_MASK];
+                    auto rung = (runbits[c] + cs) & NORM_MASK;
+                    auto cfrung(rung);
                     failed |= (rung == 63); // can't be 63 since CF encoding looses at least one rung
-                    if ((acc >> abits) & 1) { // same rung for cf and values
-                        abits += static_cast<size_t>(cs >> 12);
-                        cfrung = rung;
-                    }
-                    else { // cfrung is separate, it doesn't include the code switch
-                        abits += static_cast<size_t>(cs >> 12);
-                        cs = DSW[UBITS][(acc >> abits) & ((1ull << (UBITS + 1)) - 1)];
-                        abits += static_cast<size_t>(cs >> 12) - 1;
-                        cfrung = (rung + cs) & ((1ull << UBITS) - 1);
+                    abits += cs >> 12;
+                    acc >>= cs >> 12;
+                    if (read_cfrung) { // read cfrung separately, no code switch flag
+                        cs = dsw[acc & LONG_MASK];
+                        abits += (cs >> 12) - 1;
+                        acc >>= (cs >> 12) - 1;
+                        cfrung = (rung + cs) & NORM_MASK;
                         failed |= (rung == cfrung);
                     }
-                    if (0 == (rung | cfrung)) { // single bit for everything, decode here
-                        acc >>= abits;
-                        runbits[c] = 1ull + (acc & 1);
-                        if (acc & 1)
-                            for (int i = 0; i < B2; i++) {
-                                acc >>= 1;
-                                group[i] = static_cast<T>((acc & 1) * 0b101);
-                            }
-                        else
-                            for (int i = 0; i < B2; i++) {
-                                acc >>= 1;
-                                group[i] = static_cast<T>((acc & 1) * 0b11);
-                            }
-                        s.advance(abits + B2 + 1);
-                    }
-                    else {
-                        if (cfrung + abits > 62) {
+                    
+                    if (rung | cfrung) { // 1 <= cfrung <= 62
+                        if (sizeof(T) == 8 && (cfrung + abits) > 62) {
                             s.advance(abits);
                             acc = s.peek();
                             abits = 0;
                         }
-                        // There is no overflow possible here, cfrung is < 63 and > 0
-                        if (cfrung == rung) { // standard encoding
-                            auto p = qb3dsztbl(acc >> abits, cfrung);
-                            cf = static_cast<T>(p.second);
-                            abits += p.first;
-                        }
-                        else { // cfrung is different, thus the encoded value is always in long range
-                            if (cfrung > 1) {
-                                auto p = qb3dsztbl(acc >> abits, cfrung - 1);
-                                cf = static_cast<T>(p.second + (1ull << cfrung));
-                                abits += p.first;
-                            }
-                            else // single bit
-                                cf = static_cast<T>(((acc >> abits++) & 1) + cfrung * 2);
-                        }
-                        if (abits > 8) {
-                            s.advance(abits);
-                            acc = s.peek();
-                            abits = 0;
-                        }
-                        failed |= !gdecode(s, rung, group, acc, abits);
-                        // Multiply with CF and get the maxval for the actual group rung
-                        T maxval = 0;
-                        for (int i = 0; i < B2; i++) {
-                            auto v = magsmul(group[i], T(cf + 2));
-                            maxval = std::max(maxval, v);
-                            group[i] = v;
+                        // when rung != cfrung, cfrung is encoded one rung below and the rung bit is set
+                        auto p = qb3dsztbl(acc, cfrung - T(read_cfrung));
+                        T cf = static_cast<T>(p.second + 2 + (T(read_cfrung) << cfrung));
+                        s.advance(abits + p.first);
+                        failed |= !gdecode(s, rung, group, s.peek(), 0);
+                        // Multiply by CF and get the max for the actual rung
+                        T maxval = magsmul(group[0], cf);
+                        group[0] = maxval;
+                        for (int i = 1; i < B2; i++) {
+                            auto val = magsmul(group[i], cf);
+                            if (maxval < val) maxval = val;
+                            group[i] = val;
                         }
                         failed |= (2 > maxval);
-                        runbits[c] = topbit(maxval | 1); // Still, don't call topbit with 0
+                        runbits[c] = topbit(maxval | 1);
+                    }
+                    else { // rung == cfrung == 0, directly decode here
+                        runbits[c] = 1ull + (acc & 1);
+                        T val((0b10 << (acc & 1)) + 1); // -2 or -3, premultiplied
+                        for (int i = 0; i < B2; i++) {
+                            acc >>= 1;
+                            group[i] = (acc & 1) ? val : 0;
+                        }
+                        s.advance(abits + B2 + 1);
                     }
                 }
-                // Undo the delta encoding
+                // Undo the delta encoding for this block
                 auto prv = prev[c];
+                T* const blockp = image + (y * xsize + x) * bands + c;
                 for (int i = 0; i < B2; i++)
-                    imgloc[offset[i]] = prv += smag(group[i]);
+                    blockp[offset[i]] = prv += smag(group[i]);
                 prev[c] = prv;
             } // Per band per block
             if (failed) break;
         } // per block
         if (failed) break;
 
-        // Apply band delta per block stip, in linear order
-        // It could be done per block or for the whole image, this seems to
-        // keep the data in cache, depending on the image size
+        // For performance apply band delta per block stip, in linear order
         for (int c = 0; c < bands; c++) {
-            if (cband[c] == c)
-                continue;
+            if (c == cband[c]) continue;
             auto dimg = image + bands * xsize * y + c;
             auto simg = image + bands * xsize * y + cband[c];
-            for (size_t iy = y; iy < y + B; iy++)
-                for (size_t x = 0; x < xsize; x++, dimg += bands, simg += bands)
-                    *dimg += *simg;
+            for (int i = 0; i < B * xsize; i++, dimg += bands, simg += bands)
+                *dimg += *simg;
         }
-
-    } // per block line
+    } // per block strip
     return failed;
 }
 } // Namespace

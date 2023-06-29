@@ -273,12 +273,10 @@ int encode_main(options& opts) {
         cerr << error_message << endl;
         return 1;
     }
-    if (opts.verbose) {
-        cerr << "Size " << fsize << ", Image " << raster.size.x << "x" << raster.size.y << "@" << raster.size.c;
-        if (raster.dt != ICDT_Byte)
-            cerr << " 16bit";
-        cerr << endl;
-    }
+    if (opts.verbose)
+        cerr << "Image " << raster.size.x << "x" << raster.size.y << "@" 
+            << raster.size.c << "\nSize " << fsize
+            << ((raster.dt != ICDT_Byte) ? " 16bit\n" : "\n");
     if (raster.size.x % 4 or raster.size.y % 4) {
         cerr << "QB3 requires input size to be a multiple of 4\n";
         return 2;
@@ -294,9 +292,6 @@ int encode_main(options& opts) {
     auto t = high_resolution_clock::now();
     stride_decode(params, source, image.data());
     auto time_span = duration_cast<duration<double>>(high_resolution_clock::now() - t).count();
-    if (opts.verbose)
-        cerr << "Decode time: " << time_span << " rate: " 
-            << image.size() / time_span / 1024 / 1024 << " MB/s\n";
 
     size_t xsize = raster.size.x;
     size_t ysize = raster.size.y;
@@ -304,6 +299,11 @@ int encode_main(options& opts) {
     high_resolution_clock::time_point t1, t2;
     int dt = raster.dt == ICDT_Byte ? QB3_U8 :
         ICDT_UInt16 ? QB3_U16 : QB3_I16;
+
+    if (opts.verbose)
+        cerr << "Decode time: " << time_span << "s\nRatio " << fsize * 100.0 / image.size() << "%, rate: "
+        << image.size() / time_span / 1024 / 1024 << " MB/s\n";
+
     auto qenc = qb3_create_encoder(xsize, ysize, bands, dt);
     vector<uint8_t> outvec(qb3_max_encoded_size(qenc), 0);
     size_t outsize(0);
@@ -346,8 +346,8 @@ int encode_main(options& opts) {
     qb3_destroy_encoder(qenc);
 
     if (opts.verbose)
-        cerr << "Output\nSize: " << outsize << " Ratio " << outsize * 100.0 / fsize << "%, encode time : " 
-            << time_span << " s, rate : " 
+        cerr << "Output\nSize: " << outsize << "\nEncode time : " << time_span << "s\nRatio " 
+            << outsize * 100.0 / image.size() << "%, encode time : " 
             << image.size() / time_span / 1024 /1024 << " MB/s\n";
 
     f = fopen(opts.out_fname.c_str(), "wb");
