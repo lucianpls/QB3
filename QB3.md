@@ -87,23 +87,25 @@ very frequently true, the variable size encoding results in compression.
 
 Since QB3 is a block based encoding, the last block in a row or column may not be a full 4x4 block. Yet in practice this
 would be a serious limitation. QB3 solves this by shifting the begining of the last block in a row or column to the left or up,
-so that the last block is always a full 4x4 block. This means that the last block may duplicate some values from the previous block.
+so that the last block is always a full 4x4 block. On decoding
+This means that the last block may duplicate some values from the previous block.
 While this method results in sub-optimal compression, it is simple and fast. The worst case is when both the width and the height
 of the image is of the form 4*N+1, where N is an integer. In this case, the amount of redundant pixels expressed in percentage is
-`300 * (W + H) / WH` or `600 / S` for a square image. This is a reasonable tradeoff for the simplicity of the algorithm. For 
-optimal results, the image should be a multiple of 4 in both dimensions, or padded externally to such a size. When the image 
-is padded, duplicating the values in the last column and/or row is a good choice, it will affect the compression ratio less than
-padding with zero.
+`300 * (W + H) / (W*H)` or `600 / S` for a square image. While significant small images, this is a reasonable tradeoff for the 
+simplicity of the algorithm. For optimal results, the image should be a multiple of 4 in both dimensions, or padded to such a size. 
+When the image is padded, repeating the values of the last column and/or row is a good choice, it will affect the compression ratio 
+less than padding with zero.
 
 ### QB3 Bitstream
 
 The QB3 bitstream is a concatenation of encoded groups, each encoded individually at a specific rung. In the case of multi 
 band rasters, the band for a given group are concatenated before going to the next group. 
 The rung of each group is encoded first, as the difference between the current and the 
-previous rung for the same band. The rung values start with the maximum rung possible for a given datatype. For example byte data will
-have 7 as the starting rung. The rung delta is encoded using QB3 code, at the rung for the maximum value of the rung for a data type. 
-For byte data this will be rung 2, for 16bit integer 3. As a further optimization, assuming the group rung does not change often, 
-a single 0 bit is used to signify that the rung value for the current block is identical to the one before. The rung change switch will be:
+previous rung for the same band. The rung values start with the maximum rung possible for a given datatype. For example 
+byte data will have 7 as the starting rung. The rung delta is encoded using QB3 code, at the rung for the maximum value of 
+the rung for a data type. For byte data this will be rung 2, for 16bit integer 3. As a further optimization, assuming the group 
+rung does not change often, a single 0 bit is used to signify that the rung value for the current block is identical to the one 
+before. The rung change switch will be:
 
  - 0, If the rung is the same as the one before
  - 1 + CodeSwitch, If the rung is different
@@ -115,8 +117,8 @@ the equivalent positive deltas are biased down by 1 (thus 0 means that delta is 
 The codeswitch itself is QB3 encoded, using a variable number of bits. For example, for byte data, the codeswitch will use 2 bits for
 +-1, 3 bits for +-2 and 4 bits for +-3, -4 and the SIGNAL.
 
-The codeswitch is then followed by the 16 group values, encoded in QB3 format. Special encoding are required at rung 0 and rung 1, where
-the normal QB3 doesn't apply (output codes can be shorter than the two prefix bits).
+The codeswitch is then followed by the 16 group values, encoded in QB3 format. Special encoding are required at rung 0 and 
+rung 1, where the normal QB3 doesn't apply (output codes can be shorter than the two prefix bits).
 
 ### Rung 0 Encoding
 
@@ -140,7 +142,8 @@ Decoding this rung has to be done slightly different from the higher rungs, test
 
 The rung of a group is the highest bit set for any value within the group. This means that at least one of the values in 
 the group is in the long range of the respective group. The encoder will not generate an encoded group where
-all the values are in the nominal or short range. This kind of block would be a relatively small encoded group, an opportunity wasted.
+all the values are in the nominal or short range. This kind of block would be a relatively small encoded group, an opportunity 
+wasted.
 Knowing this, it is possible to reduce one of the values in an unambiguous way, so it can be restored when decoding. In the case
 where the first value within the group is the only one in the long range, the top bit can be flipped to zero, which changes
 the range of that value to the nominal or low. On decoding, if no value in the decoded group are in the long range, it can be
@@ -193,6 +196,14 @@ rung for the CF group or when the CF-2 rung is much smaller than the group rung
 encoded with its own rung, CF is always in the top rung, so we can save one or 
 more bits by enconding CF at the next lower rung.
 
+### Quantized encoding
+
+This encoding is used to improve compression, by storing the values in a quantized form. The quantization is done by
+dividing the values by a quantization factor, then rounding the result to the nearest integer. The quantization factor
+is itself an integer. The quantized values are then encoded using the QB3 encoding. The quantization factor is stored
+in a QB3 chunk. On decoding, the values in the QB3 stream are multiplied by the quantization factor to restore the range
+of the original values. Note that the range of the output values may be different from the input values due to rounding.
+
 ## QB3 image encoding
 
 The QB3 image encoding adds a few metadata fields to the QB3 block stream, making it possible to decode
@@ -219,12 +230,14 @@ The header is followe by a sequence of QB3 chunks. A QB3 chunk has a two charact
 followed by the chunk data. The signature is used to identify the chunk type and the interpretation of the chunk data. The size is the 
 size of the chunk data, not including the signature and size fields. The following chunk types are currently defined, all other types are reserved.
 
-|Signature|Name|Description|Size|
+|Signature|Name|Description|Value|
 |-|-|-|-|
-|"CB"|Core Band mapping|A vector of core band number, per band|Number of bands|
+|"CB"|Band mapping|A vector of core band number, per band|Number of bands|
 |"QV"|Quanta Value|Multiplier for all values|A positive integer stored with the minimum number of bytes needed|
 |"DT"|Data| Pseudo chunk, QB3 encoded stream|NA|
 
+The "CB" is not present for a single band image or when the mapping is the identity.
+The "QV" chunk is not present when the quanta value is 1.
 The "DT" chunk signature is used to signify the end of the chunks, and it is followed by QB3 encoded stream. 
 Note that the "DT" chunk does not have a size field. All the data after the "DT" signature is part of the QB3 encoded stream. If the decoder 
 is not provided with sufficient data to fully decode the image, it will return an error.
