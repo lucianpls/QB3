@@ -196,14 +196,6 @@ rung for the CF group or when the CF-2 rung is much smaller than the group rung
 encoded with its own rung, CF is always in the top rung, so we can save one or 
 more bits by enconding CF at the next lower rung.
 
-### Quantized encoding
-
-This encoding is used to improve compression, by storing the values in a quantized form. The quantization is done by
-dividing the values by a quantization factor, then rounding the result to the nearest integer. The quantization factor
-is itself an integer. The quantized values are then encoded using the QB3 encoding. The quantization factor is stored
-in a QB3 chunk. On decoding, the values in the QB3 stream are multiplied by the quantization factor to restore the range
-of the original values. Note that the range of the output values may be different from the input values due to rounding.
-
 ## QB3 image encoding
 
 The QB3 image encoding adds a few metadata fields to the QB3 block stream, making it possible to decode
@@ -241,4 +233,13 @@ The "QV" chunk is not present when the quanta value is 1.
 The "DT" chunk signature is used to signify the end of the chunks, and it is followed by QB3 encoded stream. 
 Note that the "DT" chunk does not have a size field. All the data after the "DT" signature is part of the QB3 encoded stream. If the decoder 
 is not provided with sufficient data to fully decode the image, it will return an error.
+
+### Quantized image encoding
+
+This encoding is used to improve compression by storing the values in a pre-quantized form. The quantization is done by
+dividing the input values by a quantization factor, then rounding the result to the nearest integer. The quantization factor
+is itself an integer. The quantization factor is stored in a QB3 image chunk. The quantized values are then encoded using 
+QB3 encoding. On decoding, the values decoded from the QB3 stream are multiplied by the quantization factor to restore the range
+of the original values. Note that the range of the output values may be different from the input values due to rounding.
+While the QB3 stream encoding is lossless, the quantization is lossy.
 
