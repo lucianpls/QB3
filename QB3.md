@@ -2,7 +2,17 @@
 
 **Incomplete**
 
-## Group Encoding
+## Introduction
+
+QB3 is a raster specific lossless compression for integer values, signed and unsigned, up to 64bit per value. It usually achieves 
+better compression than PNG for 8bit natural images while being extremely fast, for both compression and decompression. It compress 
+and decompress 8 bit color imagery at a rate of 300 MB per second on a single core of a modern CPU. For 16, 32 and 64bit integer 
+types, it is much faster, up to 2GB/s compression and 3GB/sec decompression. Being a data type aware raster specific compression, 
+it can achieve better compression than generic, byte oriented compressors like DEFLATE and ZSTD.
+
+## Algorithm overview
+
+### Block Encoding
 
 This is the basic encoding for raster data, in groups of 4x4, scanned in bit interleaved order. 
 Within a band, blocks are in normal, row-major order, not in bit interleaved order. 
@@ -18,55 +28,50 @@ value will determine the number of bits per value required to hold the exact val
 *rung* of the block, the highest set bit index of the block maximum value. As long as the rung is known, the bits higher than 
 the rung can be discarded as they contain no information. This is the main source of the QB3 compression.
 
-## Magnitude-Sign encoding of integer values
+### Magnitude-Sign encoding of integer values
 
 For rasters, the locality preserving ordering is mostly valuable if we follow it up 
 with delta encoding, it would generate relatively small values. The problem is that negative values 
 require many bits in the normal, two's complement encoding. This can be solved by 
 reordering the values with alternate signs 0, -1, 1, -2 ..., up to the min_val.
-For encoding the delta values, the formula becomes
-
-    if (v < 0)
-      m = -1 - 2 * v
-    else
-      m = 2 * v
-
-where m has the same number of bits as the initial value v.  This encoding puts the sign in
-bit 0, and the absolute value in the rest of the bits, thus the higher bits are zero 
-for small values. For negative values, 1 is subtracted first, because -0 is not valid, which it allows the 
-original range of values to be preserved. This is the magnitude-sign (mags) encoding, because the absolute 
-magnitude is followed by the sign bit. The advantage is that in this encoding the top zero bits are not 
-needed to determine the actual value.  
-By contrast, the two's complement encoding is in sign-magnitude order (smag), although the magnitude of negative 
+For encoding the values, the formula is: `    m = 2 * abs(v) - sign(v)`, 
+where m has the same number of bits as the initial value v. This encoding puts the sign in bit 0, and the 
+absolute value in the rest of the bits, thus the higher bits are zero. For negative values, 1 is subtracted 
+first, because -0 is not a valid value, which it allows the original range of values to be preserved. 
+This is the magnitude-sign (mags) encoding, because the absolute magnitude is followed by the sign bit. 
+The advantage is that in this encoding the top zero bits are not needed to determine the actual value.  
+In contrast, the two's complement encoding is sign-magnitude order (smag), although the magnitude of negative 
 numbers is encoded with flipped bit values.
 
-## MAGS QB3 suffix encoding
+### MAGS QB3 suffix encoding
 
-Let's assume that for encoding a block n bits per value are required, 
-which means that the rung is n - 1. Even within a 16 value block smaller values 
-are more likely than larger ones, using a variable length code will result in a 
-smaller output size. We split the possible values in three ranges, each range 
-encoded with a different number of bits.
+For this step, the values are considered as unsigned. For the 16 values in a block, the highest bit set of 
+any value is the rung of the block. Let's assume that for encoding values within a block N bits per value 
+are required, which means that the block rung is n - 1. Within a block smaller values are more likely than 
+larger ones, and re-encoding using a variable length code results in a smaller output size. 
+The block value range is split in three ranges, and values in each range is encoded with a different 
+number of bits.
 
- - First range, short, is the first quarter of possible codes within a rung. These 
+ - First range, short, is the first quarter of possible values within a rung. These 
 are the values between 0 and 2^(n-2), which start with 00 in the two most 
-significant bits when stored on n bits. These can be encoded using n - 1 bits, 
-including a signal bit, so each such values saves one bit.
- - Second range, the nominal length values, are the second quarter of possible 
- codes, between 2^(n-2) and 2^(n-1). These values start with 01 in the two most 
-significant bits. These values need n - 2 bits plus two signaling bits, they don't save or add any bits.
- - Last type, long, are values between 2^(n-1) and 2^n. These represent the top 
- half of the possible values, which occur less often. These values have a 1 
- in the most significant bit in normal encoding. These values will need n + 1 bits 
- for storage, including two signal bits, since we know that the top bit has to be 1.
+significant bits when stored on n bits. These values can be encoded using n - 1 bits, 
+including a suffix signal bit, so each such encoded value saves one bit.
+ - Second range, nominal, is the second quarter of possible values, between 2^(n-2) and 2^(n-1). 
+These values start with 01 in the two most significant bits. These values will be encoded using n - 2 bits 
+plus two signaling bits, they don't save or add any bits.
+ - Third range, long, are values between 2^(n-1) and 2^n. These represent the top 
+ half of the possible valuesm, which have a 1 in the most significant bit in normal encoding. 
+ These values are rare and are encoded using n + 1 bits, including two signal bits, 
+ since we know that the top bit has to be 1. One of these values will add an extra bit to the
+ output size, but the probablity of this happening is low. The maximum value per block is in this range.
 
 The encoding type needs to be self-identifying, for every value. To do this, 
-the range values end by one or two signa bits which determine the size of the symbol:
+the encoded values end with one or two signal bits which determine the size of the symbol:
  - x0 Short
- - x01 Nominal
- - x11 Long
+ - 01 Nominal
+ - 11 Long
 
-This means that values within each range get encoded with a different number of bits, which include the prefix. 
+This means that values within each range get encoded with a different number of bits, which include the suffix. 
 Considering that the normal encoding requires n bits, we have:
 
  - Short:   1 + (n-2) = n-1 bits
@@ -74,11 +79,11 @@ Considering that the normal encoding requires n bits, we have:
  - Long:    2 + (n-1) = n+1 bits
  
 Values in the long range take one more bit than the nominal size, while values in the short range take one bit less. 
-If the number of the short values in a group is larger than the number of long values, the overall stored size for the group 
-will be less than if the values in the group are stored with the nominal size. This variable size encoding results 
-in additional compression.
+If the number of the short values in a group is larger than the number of long values, the overall stored size for the 
+whole group will be less than if the values in the group are stored without this encoding. Since this condition is 
+very frequently true, the variable size encoding results in compression.
 
-## QB3 Bitstream
+### QB3 Bitstream
 
 The QB3 bitstream is a concatenation of encoded groups, each encoded individually at a specific rung. In the case of multi 
 band rasters, the band for a given group are concatenated before going to the next group. 
@@ -142,23 +147,22 @@ across the group is a step function. This encoding applies to all rungs except f
 ### Common Factor Group Encoding
 
 This encoding is only used by the *best* mode of libQB3. It uses integer division and multiplication, operations which 
-are not used in the default case.  
-The non-zero values within a group may have a common factor *CF*. If CF is 2 or larger, the values within the 
-group can be divided by CF before encoding, which results in a rung reduction and shorter encoding. However, 
-the CF value itself needs to be stored, and the CF encoding has to be signaled to the decoder. Overall, there
-are cases where the CF encoding is smaller than the normal QB3 one.  
-A CF encoded group is encoded as:
+are not used in the default case. The non-zero values within a group may have a common factor *CF*. When CF is 2 or larger, 
+the values within the group can be divided by CF before encoding, which results in at lease one rung reduction and thus shorter 
+encoding. However, the CF value itself needs to be stored, and the CF encoding for the block has to be signaled to the decoder. 
+In most cases the CF encoding is smaller than the normal QB3 one.
 
-- SIGNAL. This is the unused value for a codeswitch, including the 1 bit prefix.
-- CodeSwitch for the CF group values, relative to the previous group rung. This encodes the rung used to store the 
-reduced values in the CF group. The prefix bit is 1 if the same rung is used to encode CF value itself or 0 otherwise. 
-The CodeSwitch is always present when using CF encoding, the rung prefix bit has a different meaning when the CF SIGNAL is present. 
-In this case, the CF rung could be the same as the previous rung value. Since the short 
-codeswitch for same rung can't be used, the full SIGNAL encoding is used.
-- If the bit immediately following the SIGNAL is zero, a second CodeSwitch, relative to the CF rung, encoding the rung for the CF itself.
-- CF - 2 value, encoded in QB3, using the CF rung. It is biased down by 2 since the CF has to be at least 
-2 for the CF group encoding. Note that the CF rung is the rung needed for the CF-2 value, not CF.
-- The 16 reduced group values, using the CF group rung. This includes the group step encoding.
+A CF encoded group is encoded as:
+- SIGNAL. This is the unused value for a codeswitch, including 1 bit prefix.
+- CodeSwitch for the group values, relative to the previous group rung. The prefix bit for this code switch is 1 if the same 
+rung is used to encode CF value itself or 0 otherwise. The CodeSwitch is always present for CF encoding, the rung prefix bit 
+has a different meaning when the CF SIGNAL was present. In this case, the CF rung could be the same as the previous rung value. 
+Since the short codeswitch for same rung can't be used, the full SIGNAL encoding is used.
+- If the bit immediately following the SIGNAL is zero, a second CodeSwitch, relative to the CF rung, encoding the rung for 
+the CF itself.
+- <CF - 2> value, encoded using the CF rung. It is biased down by 2 since the CF has to be at least 
+2 for the CF group encoding. Note that the CF rung is the rung needed for the <CF-2> value, not CF.
+- The reduced group values, using the CF group rung. This includes the group step encoding.
 
 Notes:
 - If CF group rung is zero and CF rung is also zero, the encoding uses
@@ -166,13 +170,50 @@ Notes:
 by the CF-2 bit, followed by the 16bits of the cf group. The short group 0 never
  occurs since at least one of the cf group is non-zero. The step-down optimization 
 could be used here to reduce one sequence, but it would be extremely rare 
-and would expand all other rung 0 sequences by one bit, most likely having a negative effect overall.
+and would expand all other rung 0 sequences by one bit, likely having a negative effect overall.
 - Since the CF group rung is reduced by division with CF, the CF group rung has the be at least one
- less than the maximum rung for the datatype, since CF is at least 2. For byte data for 
-example, CF group rung can't be 7.  
+ less than the maximum rung for the datatype. For byte data for example, the group rung can't be 7.  
+
 TODO: use this to add index encoding, the code-switch flag bit is available.
 - The separate CF rung encoding is used when CF-2 is in a larger rung than the 
 rung for the CF group or when the CF-2 rung is much smaller than the group rung 
 (this is an edge case, happens mostly for high byte count data). When CF is 
 encoded with its own rung, CF is always in the top rung, so we can save one or 
 more bits by enconding CF at the next lower rung.
+
+## QB3 image encoding
+
+The QB3 image encoding adds a few metadata fields to the QB3 block stream, making it possible to decode
+the image.  
+A QB3 image starts with a fixed QB3 header which has the following fields:
+
+|Field|Description|Bytes|
+|-|-|-|
+|Signature| "QB3\200"|4|
+|XSize| Width - 1|2|
+|YSize| Height -1|2|
+|Bands| Number of bands - 1|1|
+|Type| Value type|1|
+|Mode| Encoding mode|1|
+
+- The signature is used to identify the file as a QB3 image.
+- Multiple byte values are stored in little endian order.  
+- The XSize and YSize fields are the width and height of the image, minus one. Images between 4x4 and 65536x65536 are supported.
+    Bands is the number of bands in the image, minus one. Up to 256 bands are supported, although the library might be compiled with a lower value.
+- Type represents the value types. Currently integer types with 8, 16, 32 and 64 bits are supported. All values are reserved
+- Mode represents the encoding style. Currently there are two modes, the default the *best* mode. All values are reserved
+
+The header is followe by a sequence of QB3 chunks. A QB3 chunk has a two character signature, followed by a two byte size in little endian, 
+followed by the chunk data. The signature is used to identify the chunk type and the interpretation of the chunk data. The size is the 
+size of the chunk data, not including the signature and size fields. The following chunk types are currently defined, all other types are reserved.
+
+|Signature|Name|Description|Size|
+|-|-|-|-|
+|"CB"|Core Band mapping|A vector of core band number, per band|Number of bands|
+|"QV"|Quanta Value|Multiplier for all values|A positive integer stored with the minimum number of bytes needed|
+|"DT"|Data| Pseudo chunk, QB3 encoded stream|NA|
+
+The "DT" chunk signature is used to signify the end of the chunks, and it is followed by QB3 encoded stream. 
+Note that the "DT" chunk does not have a size field. All the data after the "DT" signature is part of the QB3 encoded stream. If the decoder 
+is not provided with sufficient data to fully decode the image, it will return an error.
+
