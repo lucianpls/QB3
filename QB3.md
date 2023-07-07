@@ -83,6 +83,18 @@ If the number of the short values in a group is larger than the number of long v
 whole group will be less than if the values in the group are stored without this encoding. Since this condition is 
 very frequently true, the variable size encoding results in compression.
 
+### Edge handling
+
+Since QB3 is a block based encoding, the last block in a row or column may not be a full 4x4 block. Yet in practice this
+would be a serious limitation. QB3 solves this by shifting the begining of the last block in a row or column to the left or up,
+so that the last block is always a full 4x4 block. This means that the last block may duplicate some values from the previous block.
+While this method results in sub-optimal compression, it is simple and fast. The worst case is when both the width and the height
+of the image is of the form 4*N+1, where N is an integer. In this case, the amount of redundant pixels expressed in percentage is
+`300 * (W + H) / WH` or `600 / S` for a square image. This is a reasonable tradeoff for the simplicity of the algorithm. For 
+optimal results, the image should be a multiple of 4 in both dimensions, or padded externally to such a size. When the image 
+is padded, duplicating the values in the last column and/or row is a good choice, it will affect the compression ratio less than
+padding with zero.
+
 ### QB3 Bitstream
 
 The QB3 bitstream is a concatenation of encoded groups, each encoded individually at a specific rung. In the case of multi 
