@@ -53,6 +53,7 @@ int Usage(const options &opt) {
         << "Options:\n"
         << "\t-v : verbose\n"
         << "\t-b : best compression\n"
+        << "\t-m <b,b,b> : band mapping for compression\n"
         << "\t-d : decode QB3\n"
         ;    
     return 1;
@@ -277,10 +278,10 @@ int encode_main(options& opts) {
         cerr << "Image " << raster.size.x << "x" << raster.size.y << "@" 
             << raster.size.c << "\nSize " << fsize
             << ((raster.dt != ICDT_Byte) ? " 16bit\n" : "\n");
-    if (raster.size.x % 4 or raster.size.y % 4) {
-        cerr << "QB3 requires input size to be a multiple of 4\n";
-        return 2;
-    }
+    //if (raster.size.x % 4 or raster.size.y % 4) {
+    //    cerr << "QB3 requires input size to be a multiple of 4\n";
+    //    return 2;
+    //}
     codec_params params(raster);
 
     if (raster.dt != ICDT_Byte && raster.dt != ICDT_UInt16 && raster.dt != ICDT_Short) {

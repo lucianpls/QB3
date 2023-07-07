@@ -312,7 +312,13 @@ static int encode_fast(const T* image, oBits& s, encs &info)
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
     T group[B2];
     for (size_t y = 0; y < ysize; y += B) {
+        // If the last row is partial, roll it up
+        if (y + B > ysize)
+            y = ysize - B;
         for (size_t x = 0; x < xsize; x += B) {
+            // If the last column is partial, move it left
+            if (x + B > xsize)
+                x = xsize - B;                
             const size_t loc = (y * xsize + x) * bands; // Top-left pixel address
             for (size_t c = 0; c < bands; c++) { // blocks are band interleaved
                 T maxval(0); // Maximum mag-sign value within this group
@@ -380,7 +386,13 @@ static int encode_best(const T *image, oBits& s, encs &info)
     for (size_t i = 0; i < B2; i++)
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
     for (size_t y = 0; y < ysize; y += B) {
+        // If the last row is partial, roll it up
+        if (y + B > ysize)
+            y = ysize - B;
         for (size_t x = 0; x < xsize; x += B) {
+            // If the last column is partial, move it left
+            if (x + B > xsize)
+                x = xsize - B;
             size_t loc = (y * xsize + x) * bands; // Top-left pixel address
             for (size_t c = 0; c < bands; c++) { // blocks are always band interleaved
                 T maxval(0); // Maximum mag-sign value within this group

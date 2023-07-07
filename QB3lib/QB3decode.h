@@ -204,8 +204,14 @@ static bool decode(uint8_t *src, size_t len, T* image,
     iBits s(src, len);
 
     bool failed(false);
-    for (size_t y = 0; (y + B) <= ysize; y += B) {
-        for (size_t x = 0; (x + B) <= xsize; x += B) {
+    for (size_t y = 0; y < ysize; y += B) {
+        // If the last row is partial, roll it up
+        if (y + B > ysize)
+            y = ysize - B;
+        for (size_t x = 0; x < xsize; x += B) {
+            // If the last column is partial, move it left
+            if (x + B > xsize)
+                x = xsize - B;
             for (int c = 0; c < bands; c++) {
                 uint64_t cs(0), abits(1), acc(s.peek());
                 if (acc & 1) { // Rung change
