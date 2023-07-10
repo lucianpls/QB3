@@ -54,10 +54,13 @@ int Usage(const options &opt) {
         << "cqb3 [options] <input_filename> <output_filename>\n"
         << "Options:\n"
         << "\t-v : verbose\n"
+        << "\t-d : decode from QB3\n"
+        << "\n"
+        << "Compression only options:\n"
         << "\t-b : best compression\n"
-        << "\t-m <b,b,b> : band mapping for compression\n"
-        << "\t-d : decode QB3\n"
-        ;    
+        << "\t-t : trim to multiple of 4x4 pixels\n"
+        << "\t-m <b,b,b> : core band mapping\n"
+        ;
     return 1;
 }
 
@@ -152,6 +155,17 @@ bool parse_args(int argc, char** argv, options& opt) {
         // Strip extension
         fname = fname.substr(0, fname.find_first_of("."));
         opt.out_fname += fname + (opt.decode ? ".png" : ".qb3");
+    }
+
+    // Conversion direction dependent options
+    if (opt.decode) {
+        if (opt.trim or opt.best) {
+            cerr << "Invalid option for QB3 decoding\n";
+            return Usage(opt);
+        }
+    }
+    else {
+
     }
     return true;
 }
@@ -309,14 +323,17 @@ int encode_main(options& opts) {
         cerr << error_message << endl;
         return 1;
     }
+
     if (opts.verbose)
         cerr << "Image " << raster.size.x << "x" << raster.size.y << "@" 
             << raster.size.c << "\nSize " << fsize
             << ((raster.dt != ICDT_Byte) ? " 16bit\n" : "\n");
-    //if (raster.size.x % 4 or raster.size.y % 4) {
-    //    cerr << "QB3 requires input size to be a multiple of 4\n";
-    //    return 2;
-    //}
+
+    if (raster.size.x < 4 or raster.size.y < 4) {
+        cerr << "QB3 requires input size to be a multiple of 4\n";
+        return 2;
+    }
+
     codec_params params(raster);
 
     if (raster.dt != ICDT_Byte && raster.dt != ICDT_UInt16 && raster.dt != ICDT_Short) {
@@ -333,8 +350,11 @@ int encode_main(options& opts) {
         cerr << "Decode time: " << time_span << "s\nRatio " << fsize * 100.0 / image.size() << "%, rate: "
         << image.size() / time_span / 1024 / 1024 << " MB/s\n";
 
-    if ((raster.size.x % 4 || raster.size.y % 4) && opts.trim)
+    if ((raster.size.x % 4 || raster.size.y % 4) && opts.trim) {
         trim(raster, image);
+        if (opts.verbose)
+            cerr << "Trimmed to " << raster.size.x << "x" << raster.size.y << endl;
+    }
 
     size_t xsize = raster.size.x;
     size_t ysize = raster.size.y;
