@@ -22,6 +22,7 @@ Contributors:  Lucian Plesea
 #include <chrono>
 #include <string>
 #include <vector>
+#include <utility>
 
 // From https://github.com/lucianpls/libicd
 #include <icd_codecs.h>
@@ -43,6 +44,7 @@ struct options {
     string error;
     string mapping; // band mapping, if provided
     bool best;
+    bool trim; // Trim input to a multiple of 4x4 blocks
     bool verbose;
     bool decode;
 };
@@ -95,6 +97,9 @@ bool parse_args(int argc, char** argv, options& opt) {
                 opt.mapping = "-"; // Disable mapping
                 if (i < argc && isbandmap(argv[i + 1]))
                     opt.mapping = argv[++i];
+                break;
+            case 't':
+                opt.trim = true;
                 break;
             default:
                 opt.error = "Uknown option provided";
@@ -254,6 +259,36 @@ int decode_main(options& opts) {
     return 0;
 }
 
+// Trim raster to a multiple of 4x4
+// Removed lines are last, first, last
+void trim(Raster& raster, vector<unsigned char> &buffer) {
+    size_t xsize = raster.size.x;
+    size_t ysize = raster.size.y;
+    size_t bands = raster.size.c;
+    if (!(xsize % 4) && !(ysize % 4))
+        return; // Only trim if necessary
+    // Pixel size in bytes
+    size_t psize = ICD::getTypeSize(raster.dt, bands);
+    size_t xstart = (xsize % 4) > 1; // Trim first column
+    size_t ystart = (ysize % 4) > 1; // Trim first row
+    size_t xend = xsize - ((xsize % 4) > 0) - ((xsize % 4) > 2); // Last one or two columns
+    size_t yend = ysize - ((ysize % 4) > 0) - ((ysize % 4) > 2); // Last one or two rows
+
+    // Adjust output raster size
+    raster.size.x = (raster.size.x / 4) * 4;
+    raster.size.y = (raster.size.y / 4) * 4;
+    // Smaller than the input
+    std::vector<unsigned char> outbuffer;
+    outbuffer.reserve(buffer.size());
+    // copy line at a time
+    for (size_t y = ystart; y < yend; y++)
+        outbuffer.insert(outbuffer.end(),
+            &buffer[(y * xsize + xstart) * psize],
+            &buffer[(y * xsize + xend) * psize]);
+    // Return in buffer
+    swap(buffer, outbuffer);
+}
+
 int encode_main(options& opts) {
     string fname = opts.in_fname;
     FILE* f = fopen(fname.c_str(), "rb");
@@ -294,16 +329,18 @@ int encode_main(options& opts) {
     stride_decode(params, source, image.data());
     auto time_span = duration_cast<duration<double>>(high_resolution_clock::now() - t).count();
 
-    size_t xsize = raster.size.x;
-    size_t ysize = raster.size.y;
-    size_t bands = raster.size.c;
-    high_resolution_clock::time_point t1, t2;
-    int dt = raster.dt == ICDT_Byte ? QB3_U8 :
-        ICDT_UInt16 ? QB3_U16 : QB3_I16;
-
     if (opts.verbose)
         cerr << "Decode time: " << time_span << "s\nRatio " << fsize * 100.0 / image.size() << "%, rate: "
         << image.size() / time_span / 1024 / 1024 << " MB/s\n";
+
+    if ((raster.size.x % 4 || raster.size.y % 4) && opts.trim)
+        trim(raster, image);
+
+    size_t xsize = raster.size.x;
+    size_t ysize = raster.size.y;
+    size_t bands = raster.size.c;
+    int dt = raster.dt == ICDT_Byte ? QB3_U8 :
+        ICDT_UInt16 ? QB3_U16 : QB3_I16;
 
     auto qenc = qb3_create_encoder(xsize, ysize, bands, dt);
     vector<uint8_t> outvec(qb3_max_encoded_size(qenc), 0);
@@ -333,6 +370,7 @@ int encode_main(options& opts) {
             cerr << "Invalid band mapping, adjusted\n";
     }
     try {
+        high_resolution_clock::time_point t1, t2;
         qb3_set_encoder_mode(qenc, opts.best ? qb3_mode::QB3M_BEST : qb3_mode::QB3M_BASE);
         t1 = high_resolution_clock::now();
         outsize = qb3_encode(qenc, static_cast<void*>(image.data()), outvec.data());
@@ -346,10 +384,12 @@ int encode_main(options& opts) {
     }
     qb3_destroy_encoder(qenc);
 
-    if (opts.verbose)
-        cerr << "Output\nSize: " << outsize << "\nEncode time : " << time_span << "s\nRatio " 
-            << outsize * 100.0 / image.size() << "%, encode time : " 
-            << image.size() / time_span / 1024 /1024 << " MB/s\n";
+    if (opts.verbose) {
+        cerr << "Output\nSize: " << outsize << "\nEncode time : " << time_span << "s\nRatio "
+            << outsize * 100.0 / image.size() << "%, encode time : "
+            << image.size() / time_span / 1024 / 1024 << " MB/s\n";
+        cerr << outsize * 100.0 / fsize << "% of the input\n";
+    }
 
     f = fopen(opts.out_fname.c_str(), "wb");
     if (!f) {
