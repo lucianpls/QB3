@@ -58,7 +58,7 @@ int Usage(const options &opt) {
         << "\n"
         << "Compression only options:\n"
         << "\t-b : best compression\n"
-        << "\t-t : trim to multiple of 4x4 pixels\n"
+        << "\t-t : trim input to multiple of 4x4 pixels\n"
         << "\t-m <b,b,b> : core band mapping\n"
         ;
     return 1;
@@ -160,7 +160,7 @@ bool parse_args(int argc, char** argv, options& opt) {
     // Conversion direction dependent options
     if (opt.decode) {
         if (opt.trim or opt.best) {
-            cerr << "Invalid option for QB3 decoding\n";
+            opt.error = "Invalid option for QB3 decoding\n";
             return Usage(opt);
         }
     }
@@ -274,12 +274,12 @@ int decode_main(options& opts) {
 }
 
 // Trim raster to a multiple of 4x4
-// Removed lines are last, first, last
+// Remove order is N-1,0,N-2, until size is 4*x
 void trim(Raster& raster, vector<unsigned char> &buffer) {
     size_t xsize = raster.size.x;
     size_t ysize = raster.size.y;
     size_t bands = raster.size.c;
-    if (!(xsize % 4) && !(ysize % 4))
+    if (0 == ((xsize % 4) | (ysize % 4)))
         return; // Only trim if necessary
     // Pixel size in bytes
     size_t psize = ICD::getTypeSize(raster.dt, bands);
@@ -287,18 +287,17 @@ void trim(Raster& raster, vector<unsigned char> &buffer) {
     size_t ystart = (ysize % 4) > 1; // Trim first row
     size_t xend = xsize - ((xsize % 4) > 0) - ((xsize % 4) > 2); // Last one or two columns
     size_t yend = ysize - ((ysize % 4) > 0) - ((ysize % 4) > 2); // Last one or two rows
-
     // Adjust output raster size
     raster.size.x = (raster.size.x / 4) * 4;
     raster.size.y = (raster.size.y / 4) * 4;
     // Smaller than the input
     std::vector<unsigned char> outbuffer;
     outbuffer.reserve(buffer.size());
-    // copy line at a time
+    // copy one line at a time
     for (size_t y = ystart; y < yend; y++)
         outbuffer.insert(outbuffer.end(),
-            &buffer[(y * xsize + xstart) * psize],
-            &buffer[(y * xsize + xend) * psize]);
+            &buffer[psize * (y * xsize + xstart)],
+            &buffer[psize * (y * xsize + xend)]);
     // Return in buffer
     swap(buffer, outbuffer);
 }
@@ -324,23 +323,23 @@ int encode_main(options& opts) {
         return 1;
     }
 
-    if (opts.verbose)
-        cerr << "Image " << raster.size.x << "x" << raster.size.y << "@" 
+    if (opts.verbose) {
+        cerr << "Image " << raster.size.x << "x" << raster.size.y << "@"
             << raster.size.c << "\nSize " << fsize
             << ((raster.dt != ICDT_Byte) ? " 16bit\n" : "\n");
+    }
 
     if (raster.size.x < 4 or raster.size.y < 4) {
         cerr << "QB3 requires input size to be a multiple of 4\n";
         return 2;
     }
 
-    codec_params params(raster);
-
     if (raster.dt != ICDT_Byte && raster.dt != ICDT_UInt16 && raster.dt != ICDT_Short) {
         cerr << "Only conversion from 8 and 16 bit data implemented\n";
         return 2;
     }
 
+    codec_params params(raster);
     std::vector<uint8_t> image(params.get_buffer_size());
     auto t = high_resolution_clock::now();
     stride_decode(params, source, image.data());
@@ -418,7 +417,7 @@ int encode_main(options& opts) {
     }
     fwrite(outvec.data(), outsize, 1, f);
     fclose(f);
-	return 0;
+    return 0;
 }
 
 int main(int argc, char** argv)

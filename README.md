@@ -18,7 +18,11 @@ Only 64bit builds should be used, since the implementation makes heavy use of 64
 bit values.
 
 # Use
-The easiest way to try it out is to build [GDAL](https://github.com/OSGeo/GDAL) and
+
+[cqb3](cqb3.md) is a utility conversion program that can convert PNG and JPEG images to and
+from QB3, for 8 and 16 bit images.  
+
+Another option is to build [GDAL](https://github.com/OSGeo/GDAL) and
 enable QB3 in MRF.  
 [QB3.h](QB3lib/QB3.h) contains the public C API.
 Opaque encoder and decoder control structures have to be created, then options and 
