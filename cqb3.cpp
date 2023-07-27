@@ -34,7 +34,8 @@ using namespace ICD;
 
 struct options {
     options() : 
-        best(false), 
+        best(false),
+        trim(false),
         verbose(false), 
         decode(false) 
     {};
