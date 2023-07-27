@@ -405,7 +405,7 @@ int encode_main(options& opts) {
 
     if (opts.verbose) {
         cerr << "Output\nSize: " << outsize << "\nEncode time : " << time_span << "s\nRatio "
-            << outsize * 100.0 / image.size() << "%, encode time : "
+            << outsize * 100.0 / image.size() << "%, encode rate : "
             << image.size() / time_span / 1024 / 1024 << " MB/s\n";
         cerr << outsize * 100.0 / fsize << "% of the input\n";
     }
