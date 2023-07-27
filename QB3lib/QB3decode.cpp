@@ -15,7 +15,6 @@ Content: C API QB3 decoding
 Contributors:  Lucian Plesea
 */
 
-#include "QB3common.h"
 #include "QB3decode.h"
 // For memset
 #include <cstring>

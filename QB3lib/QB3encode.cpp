@@ -15,11 +15,11 @@ Content: C API QB3 encoding
 Contributors:  Lucian Plesea
 */
 
-#include "QB3common.h"
 #include "QB3encode.h"
 #include <limits>
 // For memcpy
 #include <cstring>
+#include <vector>
 
 // constructor
 encsp qb3_create_encoder(size_t width, size_t height, size_t bands, int dt) {

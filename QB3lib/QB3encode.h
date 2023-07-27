@@ -16,11 +16,8 @@ Contributors:  Lucian Plesea
 */
 
 #pragma once
-#include <vector>
-#include <utility>
-#include <type_traits>
-#include "bitstream.h"
 #include "QB3common.h"
+#include <algorithm>
 
 namespace QB3 {
 // integer divide val(in magsign) by cf(normal)
@@ -220,22 +217,14 @@ static void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung) {
             // And the group bits
             for (int i = 0; i < B2; i++)
                 acc |= static_cast<uint64_t>(group[i]) << abits++;
-            // store it directly in the main output stream
             bits.push(acc, abits);
-            return; // done
+            return;
         }
-        cfrung = trung; // Encode cf value with trung
-        // Push the accumulator and the cf encoding, cfrung can't be zero or 63
-        auto p = qb3csztbl(cf, cfrung);
-        if (p.first + abits <= 64) {
-            acc |= p.second << abits;
-            abits += p.first;
-        }
-        else { // can't oveflow since cfrung can't be 63
-            bits.push(acc, abits);
-            acc = p.second;
-            abits = p.first;
-        }
+        // Push the accumulator and the cf encoding, 0 < rung < 63
+        auto p = qb3csztbl(cf, trung);
+        bits.push(acc, abits);
+        acc = p.second;
+        abits = p.first;
     }
     else { // CF needs a different rung than the group, so the change is never 0
         // First, encode trung using code-switch with the change bit cleared
@@ -249,18 +238,20 @@ static void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung) {
         abits += static_cast<size_t>(cs >> 12) - 1;
         if (cfrung > 1) {
             auto p = qb3csztbl(cf ^ (1ull << cfrung), cfrung - 1); // Can't overflow
-            if (p.first + abits <= 64) {
-                acc |= p.second << abits;
-                abits += p.first;
-            }
-            else { // can't oveflow since cfrung can't be 63
-                bits.push(acc, abits);
-                acc = p.second;
-                abits = p.first;
-            }
+            bits.push(acc, abits);
+            acc = p.second;
+            abits = p.first;
         }
         else { // single bit, there is enough space, cfrung 0 or 1, save only the bottom bit
             acc |= static_cast<uint64_t>(cf - static_cast<T>(cfrung * 2)) << abits++;
+        }
+        if (0 == trung) { // encode the group bits directly, saves the flag bit
+            bits.push(acc, abits);
+            acc = 0;
+            for (int i= 0; i < B2; i++)
+                acc |= static_cast<uint64_t>(group[i]) << i;
+            bits.push(acc, B2);
+            return;
         }
     }
     groupencode(group, maxval, bits, acc, abits);
@@ -297,16 +288,14 @@ static int encode_fast(const T* image, oBits& s, encs &info)
         if (cband[c] >= bands)
             return 2; // Band mapping error
     // Running code length, start with nominal value
-    std::vector<size_t> _runbits(bands, 0);
+    size_t runbits[QB3_MAXBANDS] = {};
     // Previous value, per band
-    std::vector<T> _prev(bands, T(0));
+    T prev[QB3_MAXBANDS] = {};
     // Initialize state
     for (size_t c = 0; c < bands; c++) {
-        _runbits[c] = info.runbits[c];
-        _prev[c] = static_cast<T>(info.prev[c]);
+        runbits[c] = info.runbits[c];
+        prev[c] = static_cast<T>(info.prev[c]);
     }
-    auto runbits = _runbits.data();
-    auto prev = _prev.data();
     size_t offsets[B2];
     for (size_t i = 0; i < B2; i++)
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
@@ -372,15 +361,15 @@ static int encode_best(const T *image, oBits& s, encs &info)
             return 2; // Band mapping error
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     // Running code length, start with nominal value
-    std::vector<size_t> _runbits(bands, 0);
+    size_t runbits[QB3_MAXBANDS];
     // Previous value, per band
-    std::vector<T> _prev(bands, 0u);
+    T prev[QB3_MAXBANDS];
     for (size_t c = 0; c < bands; c++) {
-        _runbits[c] = info.runbits[c];
-        _prev[c] = static_cast<T>(info.prev[c]);
+        runbits[c] = info.runbits[c];
+        prev[c] = static_cast<T>(info.prev[c]);
     }
-    auto runbits = _runbits.data();
-    auto prev = _prev.data();
+    //auto runbits = _runbits.data();
+    //auto prev = _prev.data();
     T group[B2]; // Current 2D group to encode, as array
     size_t offsets[B2];
     for (size_t i = 0; i < B2; i++)
@@ -418,8 +407,7 @@ static int encode_best(const T *image, oBits& s, encs &info)
                 auto oldrung = runbits[c];
                 const size_t rung = topbit(maxval | 1); // Force at least one bit set
                 runbits[c] = rung;
-                if (0 == rung) { // only 1s and 0s, rung is -1 or 0
-                    // Encode as QB3 group, no point in trying cf
+                if (0 == rung) { // only 1s and 0s, rung is -1 or 0, no point in trying cf
                     uint64_t acc = CSW[UBITS][(rung - oldrung) & ((1ull << UBITS) - 1)];
                     size_t abits = acc >> 12;
                     acc &= 0xffull;
@@ -431,10 +419,10 @@ static int encode_best(const T *image, oBits& s, encs &info)
                     continue;
                 }
                 auto cf = gcf(group);
-                if (cf > 1) // Always smaller in cf encoding
-                    cfgenc(s, group, cf, oldrung);
-                else
+                if (cf < 2)
                     groupencode(group, maxval, oldrung, s);
+                else // Always smaller in cf encoding
+                    cfgenc(s, group, cf, oldrung);
             }
         }
     }
@@ -446,5 +434,4 @@ static int encode_best(const T *image, oBits& s, encs &info)
 
     return 0;
 }
-
 } // namespace

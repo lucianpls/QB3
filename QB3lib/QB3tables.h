@@ -41,5 +41,4 @@ namespace QB3 {
     extern const uint16_t SIGNAL[7]; // switch to same rung, used as a signal
     extern const uint16_t* CSW[7];
     extern const uint16_t* DSW[7];
-
-}
+} // namespace QB3

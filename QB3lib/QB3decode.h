@@ -16,14 +16,9 @@ Contributors:  Lucian Plesea
 */
 
 #pragma once
-#include "bitstream.h"
-#include <cinttypes>
-#include <utility>
-#include <type_traits>
 #include "QB3common.h"
 
 namespace QB3 {
-
 // Computed decode, does not work for rung 0 or 1
 static std::pair<size_t, uint64_t> qb3dsz(uint64_t val, size_t rung) {
     assert(rung > 1);
@@ -242,7 +237,7 @@ static bool decode(uint8_t *src, size_t len, T* image,
                         failed |= (rung == cfrung);
                     }
                     
-                    if (rung | cfrung) { // 1 <= cfrung <= 62
+                    if (rung | cfrung) { // 0 < cfrung < 63
                         if (sizeof(T) == 8 && (cfrung + abits) > 62) {
                             s.advance(abits);
                             acc = s.peek();
@@ -252,7 +247,15 @@ static bool decode(uint8_t *src, size_t len, T* image,
                         auto p = qb3dsztbl(acc, cfrung - T(read_cfrung));
                         T cf = static_cast<T>(p.second + 2 + (T(read_cfrung) << cfrung));
                         s.advance(abits + p.first);
-                        failed |= !gdecode(s, rung, group, s.peek(), 0);
+                        acc = s.peek();
+                        if (rung > 0) {
+                            failed |= !gdecode(s, rung, group, acc, 0);
+                        }
+                        else { // Decode here, it is missing the all-zeros flag
+                            for (int i = 0; i < B2; i++, acc >>= 1)
+                                group[i] = acc & 1;
+                            s.advance(B2);
+                        }
                         // Multiply by CF and get the max for the actual rung
                         T maxval = magsmul(group[0], cf);
                         group[0] = maxval;
@@ -261,10 +264,10 @@ static bool decode(uint8_t *src, size_t len, T* image,
                             if (maxval < val) maxval = val;
                             group[i] = val;
                         }
-                        failed |= (2 > maxval);
-                        runbits[c] = topbit(maxval | 1);
+                        failed |= 2 > maxval; // CF has to be at least 2
+                        runbits[c] = topbit(maxval);
                     }
-                    else { // rung == cfrung == 0, directly decode here
+                    else { // rung == cfrung == 0, decode here, single bit for data
                         runbits[c] = 1ull + (acc & 1);
                         T val((0b10 << (acc & 1)) + 1); // -2 or -3, premultiplied
                         for (int i = 0; i < B2; i++) {
@@ -296,4 +299,4 @@ static bool decode(uint8_t *src, size_t len, T* image,
     } // per block strip
     return failed;
 }
-} // Namespace
+} // namespace
