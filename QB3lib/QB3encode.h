@@ -164,7 +164,7 @@ static void groupencode(T group[B2], T maxval, oBits& s,
             if (rung < 63) { // high rung, no overflow
                 for (int i = 0; i < B2; i++) {
                     auto p = qb3csz(group[i], rung);
-                    s.push(p.second, p.first); // changes 65 in 64
+                    s.push(p.second, p.first);
                 }
             }
             else { // top rung, might overflow
@@ -368,12 +368,10 @@ static int encode_best(const T *image, oBits& s, encs &info)
         runbits[c] = info.runbits[c];
         prev[c] = static_cast<T>(info.prev[c]);
     }
-    //auto runbits = _runbits.data();
-    //auto prev = _prev.data();
-    T group[B2]; // Current 2D group to encode, as array
     size_t offsets[B2];
     for (size_t i = 0; i < B2; i++)
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
+    T group[B2]; // Current 2D group to encode, as array
     for (size_t y = 0; y < ysize; y += B) {
         // If the last row is partial, roll it up
         if (y + B > ysize)
@@ -405,7 +403,7 @@ static int encode_best(const T *image, oBits& s, encs &info)
                 }
                 prev[c] = prv;
                 auto oldrung = runbits[c];
-                const size_t rung = topbit(maxval | 1); // Force at least one bit set
+                const size_t rung = topbit(maxval | 1);
                 runbits[c] = rung;
                 if (0 == rung) { // only 1s and 0s, rung is -1 or 0, no point in trying cf
                     uint64_t acc = CSW[UBITS][(rung - oldrung) & ((1ull << UBITS) - 1)];
