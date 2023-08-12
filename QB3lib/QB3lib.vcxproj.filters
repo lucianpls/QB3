@@ -29,15 +29,9 @@
     <ClInclude Include="QB3encode.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="QB3tables.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="QB3encode.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="QB3tables.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="QB3decode.cpp">

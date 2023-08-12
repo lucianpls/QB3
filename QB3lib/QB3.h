@@ -16,7 +16,6 @@ Contributors:  Lucian Plesea
 */
 
 #pragma once
-#include <cinttypes>
 // For size_t
 #include <stddef.h>
 
@@ -41,12 +40,12 @@ typedef struct encs * encsp; // encoder
 typedef struct decs * decsp; // decoder
 
 // Types
-enum qb3_dtype { QB3_U8 = 0, QB3_I8, QB3_U16, QB3_I16, QB3_U32, QB3_I32, QB3_U64, QB3_I64 };
+constexpr enum qb3_dtype { QB3_U8 = 0, QB3_I8, QB3_U16, QB3_I16, QB3_U32, QB3_I32, QB3_U64, QB3_I64 };
 // Encode mode
-enum qb3_mode { QB3M_DEFAULT = 0, QB3M_BASE = 0, QB3M_BEST };
+constexpr enum qb3_mode { QB3M_DEFAULT = 0, QB3M_BASE = 0, QB3M_BEST };
 
 // Errors
-enum qb3_error {
+constexpr enum qb3_error {
     QB3E_OK = 0,
     QB3E_EINV, // Invalid parameter
     QB3E_UNKN, // Unknown 

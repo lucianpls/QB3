@@ -19,15 +19,9 @@ Content: QB3 parts used by both the encoder and the decoder
 #pragma once
 #include "QB3.h"
 #include "bitstream.h"
+#include <cinttypes>
 #include <utility>
 #include <type_traits>
-
-// Define QB3_SHORT_TABLES to minimize the size of the tables
-// This makes no difference for byte data, runs slower for large data types
-// It saves about 20KB
-// #define QB3_SHORT_TABLES
-//
-#include "QB3tables.h"
 
 #if defined(_WIN32)
 #include <intrin.h>

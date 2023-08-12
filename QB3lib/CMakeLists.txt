@@ -25,7 +25,7 @@ add_library(${PROJECT_NAME})
 # target_compile_options(${PROJECT_NAME} PRIVATE $<$<CXX_COMPILER_ID:GNU>:-mavx2>)
 
 target_sources(${PROJECT_NAME} 
-    PRIVATE QB3encode.cpp QB3encode.h QB3decode.cpp QB3decode.h QB3tables.cpp QB3tables.h QB3common.h bitstream.h QB3.h
+    PRIVATE QB3encode.cpp QB3encode.h QB3decode.cpp QB3decode.h QB3common.h bitstream.h QB3.h
 )
 set_target_properties(${PROJECT_NAME} PROPERTIES 
     PUBLIC_HEADER QB3.h
