@@ -22,7 +22,7 @@ Contributors:  Lucian Plesea
 #include <vector>
 
 // constructor
-encsp qb3_create_encoder(size_t width, size_t height, size_t bands, int dt) {
+encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt) {
     if (width > 0x10000ul || height > 0x10000ul || bands == 0 
         || bands > QB3_MAXBANDS || dt > int(QB3_I64))
         return nullptr;

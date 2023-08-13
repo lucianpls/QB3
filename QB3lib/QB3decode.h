@@ -239,7 +239,7 @@ static bool gdecode(iBits &s, size_t rung, T * group, uint64_t acc, size_t abits
             }
             s.advance(abits);
         }
-        else { // Last part of table decoding, rungs 6-10 (or 6-7), four values per accumulator
+        else { // Last part of table decoding, rungs 6-7, four values per accumulator
             auto drg = DRG[rung];
             const auto m = (1ull << (rung + 2)) - 1;
             for (size_t j = 0; j < B2; j += B2 / 4) {

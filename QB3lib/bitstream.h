@@ -10,10 +10,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-Contributors:  Lucian Plesea
-
 Content: Bit streams, in low endian format
 
+Contributors:  Lucian Plesea
 */
 
 #pragma once
@@ -27,6 +26,12 @@ class iBits {
 public:
     iBits(const uint8_t* data, size_t size) : v(data), len(size * 8), bitp(0) {}
 
+    // informational
+    size_t avail() const { return len - bitp; }
+    bool empty() const { return avail() == 0; }
+    // read position in bits
+    size_t position() const { return bitp; }
+
     // Single bit fetch
     uint64_t get() {
         if (empty()) return 0; // Don't go past the end
@@ -35,29 +40,16 @@ public:
         return val;
     }
 
-    // Not very efficient for small number of bits
-    uint64_t pull(size_t bits = 1) {
-        assert(bits && bits <= 64 && !empty());
-
-        uint64_t val = peek() & (~0ull >> (64 - bits));
-        advance(bits);
-        return val;
-    }
-
     // Advance read position by d bits
     void advance(size_t d) {
         bitp = (bitp + d < len) ? (bitp + d) : len;
     }
 
-
-    // Get 64bits without changing the state, use only when input buffer has 8 extra usable bytes
-    uint64_t unsafe_peek() const { // Uses unaligned access
-        return (v[bitp / 8] >> (bitp % 8)) | 
-            (*reinterpret_cast<const uint64_t *>(v + ((bitp + 7) / 8)) << ((8 - bitp) % 8));
-    }
-
-    // Careful
-    uint64_t safe_peek() const {
+    // Get 64bits without changing the state
+    uint64_t peek() const {
+        if (avail() >= 64)
+            return (v[bitp / 8] >> (bitp % 8)) |
+            (*reinterpret_cast<const uint64_t*>(v + ((bitp + 7) / 8)) << ((8 - bitp) % 8));
         if (empty())
             return 0;
         uint64_t val = v[bitp / 8] >> (bitp % 8);
@@ -67,28 +59,19 @@ public:
         return val;
     }
 
-    // Get 64bits without changing the state
-    uint64_t peek() const {
-        if (avail() >= 64)
-            return unsafe_peek();
-        return safe_peek();
-    }
-
-    // informational
-    size_t avail() const { return len - bitp; }
-    bool empty() const { return avail() == 0; }
-
-    // Position in bits
-    size_t position() const {
-        return bitp;
+    // Not very efficient for small number of bits
+    uint64_t pull(size_t bits = 1) {
+        assert(bits && bits <= 64 && !empty());
+        uint64_t val = peek() & (~0ull >> (64 - bits));
+        advance(bits);
+        return val;
     }
 
 private:
     const uint8_t* v;
     // In bits
-    const size_t len;
-    // next bit to read
-    size_t bitp;
+    const size_t len; // in bits, multiple of 8
+    size_t bitp; // read position
 };
 
 // Output bitstream, doesn't check the output buffer size
@@ -118,15 +101,11 @@ public:
 
     // Round position to byte boundary
     size_t tobyte() {
-        size_t ebits = position() & 0x7;
-        if (0 != ebits)
-            bitp += 8 - ebits;
-        return position() >> 3; // In bytes
+        bitp = (bitp + 7) & ~0x7;
+        return bitp >> 3; // In bytes
     }
 
 private:
     uint8_t *v;
-
-    // bit pointer
-    size_t bitp;
+    size_t bitp; // write position
 };

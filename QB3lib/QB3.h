@@ -55,7 +55,7 @@ enum qb3_error {
 // In QB3encode.cpp
 
 // Call before anything else
-DLLEXPORT encsp qb3_create_encoder(size_t width, size_t height, size_t bands, int dt);
+DLLEXPORT encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt);
 // Call when done with the encoder
 DLLEXPORT void qb3_destroy_encoder(encsp p);
 

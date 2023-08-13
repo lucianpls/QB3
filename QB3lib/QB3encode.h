@@ -190,7 +190,7 @@ static void groupencode(T group[B2], T maxval, oBits& s,
         s.push(acc, abits);
         return;
     }
-    // Last part of table encoding, rung 6-7 or 6-10
+    // Last part of table encoding, rung 6-7
     // Encoded data fits in 256 bits, 4 way interleaved
     if ((sizeof(CRG) / sizeof(*CRG)) > rung) {
         auto t = CRG[rung];
