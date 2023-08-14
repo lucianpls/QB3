@@ -1,46 +1,54 @@
 # QB3 technical details
 
-**Incomplete**
-
 ## Introduction
 
 QB3 is a raster specific lossless compression for integer values, signed and unsigned, up to 64bit per value. It usually achieves 
-better compression than PNG for 8bit natural images while being extremely fast, for both compression and decompression. It compress 
-and decompress 8 bit color imagery at a rate of 300 MB per second on a single core of a modern CPU. For 16, 32 and 64bit integer 
-types, it is much faster, up to 2GB/s compression and 3GB/sec decompression. Being a data type aware raster specific compression, 
-it can achieve better compression than generic, byte oriented compressors like DEFLATE and ZSTD.
+better compression than PNG for 8bit natural images while being extremely fast, for both compression and decompression. 
 
-## Algorithm overview
+## Performance and Implementation
+
+QB3 encodes and decodes 8 bit color imagery at a rate close to 300 MB per second using a single core of a recent CPU. For 16, 32 and 64bit integer 
+types it is much faster, up to 2GB/s compression and 3GB/sec decompression. This means that only about 15 CPU clock cycles are needed per 
+raw data value, measured on real cases, despite the relatively long dependency chains. At the same time, being a data type aware raster specific 
+compression, QB3 achieves better compression than byte oriented compressors such as DEFLATE or ZSTD. The high rate is achieved by using an algorithm
+that avoids conditional code execution as much as possible. In addition, only bit arithmetic operations are used, with no multiplication or division. 
+The performance does improve by about 10% using compiler auto-vectorization. Even higher performance could be achieved using manually tuned 
+vectorization at the expense of portability. Parallel execution is also possible.
+Alternatively, better compression could be achieved using a more complex algorithm. One such implementation is included,
+applicable when values within a block have a common factor. The main use case is for normalized or for qunatized data. When this 
+algorithm is used, encoding speed drops to roughly half while decoding speed is roughly the same. For real 8 bit images the compression 
+improvement is usually negligible.
+
+## QB3 Algorithm Overview
 
 ### Block Encoding
 
-This is the basic encoding for raster data, in groups of 4x4, scanned in bit interleaved order. 
-Within a band, blocks are in normal, row-major order, not in bit interleaved order. 
-In case of multi-band images, one band may be designated as the main band. If a 
-main band is selected, it is subtracted from all the other bands, pixel by pixel, 
-before any other processing. The values to be encoded are the differences between 
-the current and the previous value, per band. The previous value starts as zero, and is 
-maintained per band. The *previous value* is the previous value in the order of the bit interleaved scanning within the block, 
-or the last value of the previous block within the same band. The goal of this pre-processing is to produce groups with relatively 
-small absolute values.
-The next step is the conversion of the signed values within the block to mag-sign encoding. After the conversion, the maximum 
-value will determine the number of bits per value required to hold the exact values for the whole group. This is the nominal 
-*rung* of the block, the highest set bit index of the block maximum value. As long as the rung is known, the bits higher than 
-the rung can be discarded as they contain no information. This is the main source of the QB3 compression.
+QB3 is based on encoding individual 4x4 blocks, scanned in bit interleaved order. 
+Within a band, blocks are aranged in row-major order. In case of multi-band images, band to band
+decorrelation per pixel can be used. A band can be either a core band, in which case is left unmodified,
+or a derived band, in which case pixel values from one of the core bands is subtracted from the raw values.
+The values encoded are the differences between the current and the previous value, per band. The previous 
+value starts as zero, and is maintained per band. The *previous value* is the previous value in the order of the 
+bit interleaved scanning within the block, or the last value of the previous block within the same band. 
+The goal of this algorithm is to produce groups with relatively small absolute values.
+The next step is to convert the values within the block to magnitude-sign encoding. After the conversion,
+the maximum value determines the number of bits per value required to hold the exact values for the whole group. 
+This is the nominal *rung* of the block, the highest set bit index of the block maximum value. As long as the 
+rung is known, the bits higher than the rung can be discarded as they are always zero. This is the main source 
+of the QB3 compression.
 
 ### Magnitude-Sign encoding of integer values
 
 For rasters, the locality preserving ordering is mostly valuable if we follow it up 
-with delta encoding, it would generate relatively small values. The problem is that negative values 
-require many bits in the normal, two's complement encoding. This can be solved by 
-reordering the values with alternate signs 0, -1, 1, -2 ..., up to the min_val.
-For encoding the values, the formula is: `    m = 2 * abs(v) - sign(v)`, 
-where m has the same number of bits as the initial value v. This encoding puts the sign in bit 0, and the 
-absolute value in the rest of the bits, thus the higher bits are zero. For negative values, 1 is subtracted 
-first, because -0 is not a valid value, which it allows the original range of values to be preserved. 
-This is the magnitude-sign (mags) encoding, because the absolute magnitude is followed by the sign bit. 
-The advantage is that in this encoding the top zero bits are not needed to determine the actual value.  
-In contrast, the two's complement encoding is sign-magnitude order (smag), although the magnitude of negative 
+with delta encoding, it would generate relatively small absolute values. The problem is that negative values
+require many bits in the normal 2s complement encoding. This is solved by reordering the values with alternate 
+signs 0, -1, 1, -2 ..., up to the min_val. For encoding the values, the formula used is: `m = 2 * abs(v) - sign(v)`, 
+where m has the same number of bits as the initial value v. This encoding stores the sign in bit 0, and the 
+absolute value in the next higher bits, thus the top bits are zero. For negative values, the absolute value 
+is biased by -1 because -0 is not a valid value, allowing the original range of values to be preserved, making
+the encoding reversible. This is the magnitude-sign (mags) encoding, because the absolute magnitude is followed
+by the sign bit. In this encoding the top zero bits are not needed to determine the actual value.  
+In contrast, the 2s complement encoding is sign-magnitude (smag), although the magnitude of negative 
 numbers is encoded with flipped bit values.
 
 ### MAGS QB3 suffix encoding
@@ -71,30 +79,29 @@ the encoded values end with one or two signal bits which determine the size of t
  - 01 Nominal
  - 11 Long
 
-This means that values within each range get encoded with a different number of bits, which include the suffix. 
-Considering that the normal encoding requires n bits, we have:
+This means that values within each range get encoded with a different number of bits, including the suffix. 
+Considering that the normal mags encoding for values in the n rung requires n bits, in the prefix mags encoding we have:
 
  - Short:   1 + (n-2) = n-1 bits
  - Nominal: 2 + (n-2) = n bits
  - Long:    2 + (n-1) = n+1 bits
  
-Values in the long range take one more bit than the nominal size, while values in the short range take one bit less. 
-If the number of the short values in a group is larger than the number of long values, the overall stored size for the 
-whole group will be less than if the values in the group are stored without this encoding. Since this condition is 
-very frequently true, the variable size encoding results in compression.
+Values in the long range need one more bit than the nominal size, while values in the short range take one bit less. 
+If the number of values in the short range in a group is larger than the number of long values, the overall stored 
+size for the whole group will be smaller than the same group in mags encoding. Since this condition is 
+very frequently true, the mags suffix encoding results in compression.
 
 ### Edge handling
 
-Since QB3 is a block based encoding, the last block in a row or column may not be a full 4x4 block. Yet in practice this
-would be a serious limitation. QB3 solves this by shifting the begining of the last block in a row or column to the left or up,
-so that the last block is always a full 4x4 block. On decoding
-This means that the last block may duplicate some values from the previous block.
-While this method results in sub-optimal compression, it is simple and fast. The worst case is when both the width and the height
+QB3 is a block based encoding, yet the last block in a row or column may not be a full 4x4 block. The algorithm avoids this limitation 
+by shifting the begining of the last block in a row or column to the left or up so that the last block is always a full 4x4 block. 
+This means that the last block duplicates some values from the previous block when the full size is not a multiple of 4.
+While this method is simple and fast, it results in sub-optimal compression. The worst case is when both the width and the height
 of the image is of the form 4*N+1, where N is an integer. In this case, the amount of redundant pixels expressed in percentage is
-`300 * (W + H) / (W*H)` or `600 / S` for a square image. While significant small images, this is a reasonable tradeoff for the 
-simplicity of the algorithm. For optimal results, the image should be a multiple of 4 in both dimensions, or padded to such a size. 
-When the image is padded, repeating the values of the last column and/or row is a good choice, it will affect the compression ratio 
-less than padding with zero.
+`300 * (W + H) / (W*H)` or `600 / W` for a square image. While significant for small images, this is a reasonable tradeoff for the 
+simplicity of the algorithm. For optimal results, the input should be a multiple of 4 in both dimensions. If the image is padded, 
+repeating the values of the nearest column and/or row is a good choice, it should affect the compression ratio less than padding 
+with zero.
 
 ### QB3 Bitstream
 
@@ -196,11 +203,10 @@ rung for the CF group or when the CF-2 rung is much smaller than the group rung
 encoded with its own rung, CF is always in the top rung, so we can save one or 
 more bits by enconding CF at the next lower rung.
 
-## QB3 image encoding
+## QB3 raster file format
 
-The QB3 image encoding adds a few metadata fields to the QB3 block stream, making it possible to decode
-the image.  
-A QB3 image starts with a fixed QB3 header which has the following fields:
+The QB3 raster file adds a few metadata fields to the QB3 encoded stream, making it possible to decode
+the image.  A QB3 image starts with a fixed QB3 header which has the following fields:
 
 |Field|Description|Bytes|
 |-|-|-|
@@ -211,22 +217,22 @@ A QB3 image starts with a fixed QB3 header which has the following fields:
 |Type| Value type|1|
 |Mode| Encoding mode|1|
 
-- The signature is used to identify the file as a QB3 image.
 - Multiple byte values are stored in little endian order.  
+- The signature is used to identify the file as a QB3 file.
 - The XSize and YSize fields are the width and height of the image, minus one. Images between 4x4 and 65536x65536 are supported.
-    Bands is the number of bands in the image, minus one. Up to 256 bands are supported, although the library might be compiled with a lower value.
+    Bands is the number of bands in the image, minus one. Up to 256 bands are supported, although the library is normally compiled with a lower value.
 - Type represents the value types. Currently integer types with 8, 16, 32 and 64 bits are supported. All values are reserved
-- Mode represents the encoding style. Currently there are two modes, the default the *best* mode. All values are reserved
+- Mode represents the encoding style. Currently there are two modes, the default the *fast* mode. All values are reserved
 
-The header is followe by a sequence of QB3 chunks. A QB3 chunk has a two character signature, followed by a two byte size in little endian, 
-followed by the chunk data. The signature is used to identify the chunk type and the interpretation of the chunk data. The size is the 
-size of the chunk data, not including the signature and size fields. The following chunk types are currently defined, all other types are reserved.
+The header is followed by a sequence of QB3 chunks. A QB3 chunk has a two character signature, followed by a two byte size field, 
+followed by the chunk data. The chunk signature is used to identify the chunk type and the interpretation of the chunk data. The size is the 
+size of the chunk data not including the signature and size fields. The following chunk types are currently defined, all other types are reserved.
 
 |Signature|Name|Description|Value|
 |-|-|-|-|
 |"CB"|Band mapping|A vector of core band number, per band|Number of bands|
-|"QV"|Quanta Value|Multiplier for all values|A positive integer stored with the minimum number of bytes needed|
-|"DT"|Data| Pseudo chunk, QB3 encoded stream|NA|
+|"QV"|Quanta Value|Multiplier for encoded values|A positive integer stored with the minimum number of bytes needed|
+|"DT"|Data| Pseudo chunk, QB3 encoded stream, size field is missing|NA|
 
 The "CB" is not present for a single band image or when the mapping is the identity.
 The "QV" chunk is not present when the quanta value is 1.
