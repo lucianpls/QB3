@@ -160,7 +160,7 @@ bool parse_args(int argc, char** argv, options& opt) {
 
     // Conversion direction dependent options
     if (opt.decode) {
-        if (opt.trim or opt.best) {
+        if (opt.trim || opt.best) {
             opt.error = "Invalid option for QB3 decoding\n";
             return Usage(opt);
         }
@@ -329,7 +329,7 @@ int encode_main(options& opts) {
             << raster.size.c << "\nSize " << fsize
             << ((raster.dt != ICDT_Byte) ? " 16bit\n" : "\n");
 
-    if (raster.size.x < 4 or raster.size.y < 4) {
+    if (raster.size.x < 4 || raster.size.y < 4) {
         cerr << "QB3 requires input size to be a multiple of 4\n";
         return 2;
     }
