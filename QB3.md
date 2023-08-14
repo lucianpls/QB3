@@ -62,16 +62,12 @@ number of bits.
 
  - First range, short, is the first quarter of possible values within a rung. These 
 are the values between 0 and 2^(n-2), which start with 00 in the two most 
-significant bits when stored on n bits. These values can be encoded using n - 1 bits, 
-including a suffix signal bit, so each such encoded value saves one bit.
+significant bits when stored on n bits.
  - Second range, nominal, is the second quarter of possible values, between 2^(n-2) and 2^(n-1). 
-These values start with 01 in the two most significant bits. These values will be encoded using n - 2 bits 
-plus two signaling bits, they don't save or add any bits.
+These values start with 01 in the two most significant bits.
  - Third range, long, are values between 2^(n-1) and 2^n. These represent the top 
- half of the possible valuesm, which have a 1 in the most significant bit in normal encoding. 
- These values are rare and are encoded using n + 1 bits, including two signal bits, 
- since we know that the top bit has to be 1. One of these values will add an extra bit to the
- output size, but the probablity of this happening is low. The maximum value per block is in this range.
+ half of the possible valuesm, which have a 1 in the most significant bit. The maximum value per block is
+always in this range, which means that at least one value per block is in this range.
 
 The encoding type needs to be self-identifying, for every value. To do this, 
 the encoded values end with one or two signal bits which determine the size of the symbol:
@@ -80,16 +76,16 @@ the encoded values end with one or two signal bits which determine the size of t
  - 11 Long
 
 This means that values within each range get encoded with a different number of bits, including the suffix. 
-Considering that the normal mags encoding for values in the n rung requires n bits, in the prefix mags encoding we have:
+Considering that the normal mags encoding for values in the n-1 rung requires n bits, in the prefix mags encoding we have:
 
  - Short:   1 + (n-2) = n-1 bits
  - Nominal: 2 + (n-2) = n bits
  - Long:    2 + (n-1) = n+1 bits
  
-Values in the long range need one more bit than the nominal size, while values in the short range take one bit less. 
-If the number of values in the short range in a group is larger than the number of long values, the overall stored 
-size for the whole group will be smaller than the same group in mags encoding. Since this condition is 
-very frequently true, the mags suffix encoding results in compression.
+Values in the long range need one more bit than the nominal size, while values in the short range take one bit less.
+If the number of values in the short range in a group is larger than the number of long values, the overall size for the 
+whole group will be smaller than the same group in mags encoding. Since this condition is very frequently true, the mags 
+suffix encoding results in compression.
 
 ### Edge handling
 
@@ -105,11 +101,10 @@ with zero.
 
 ### QB3 Bitstream
 
-The QB3 bitstream is a concatenation of encoded groups, each encoded individually at a specific rung. In the case of multi 
-band rasters, the band for a given group are concatenated before going to the next group. 
-The rung of each group is encoded first, as the difference between the current and the 
-previous rung for the same band. The rung values start with the maximum rung possible for a given datatype. For example 
-byte data will have 7 as the starting rung. The rung delta is encoded using QB3 code, at the rung for the maximum value of 
+The QB3 bitstream is a bit-dense concatenation of encoded groups, each encoded individually at a specific rung. In the case of multi 
+band rasters, the group encodings for each band are stored in band interleaved order. 
+For a group encoding, the rung of the group is encoded first, as the difference between the current rung and the 
+previous rung for the same band. The rung values start with zero. The rung delta is encoded using QB3 code, at the rung for the maximum value of 
 the rung for a data type. For byte data this will be rung 2, for 16bit integer 3. As a further optimization, assuming the group 
 rung does not change often, a single 0 bit is used to signify that the rung value for the current block is identical to the one 
 before. The rung change switch will be:
@@ -120,8 +115,9 @@ before. The rung change switch will be:
 The CodeSwitch encodes the delta between the current rung value and the previous one. This delta uses wrapparound at the 
 number of bits required to hold all the possible bit values for a data type. Furthermore, since zero delta is encoded explicitly, 
 the equivalent positive deltas are biased down by 1 (thus 0 means that delta is 1). This leaves one maximum positive value unused 
-(for example for byte data, rung difference of +4 would result in the same value as -4). This special codeswitch is used as a SIGNAL.
-The codeswitch itself is QB3 encoded, using a variable number of bits. For example, for byte data, the codeswitch will use 2 bits for
+(for example for byte data, rung difference of +4 would result in the same value as -4). This special codeswitch is used as a SIGNAL
+and is not used in the normal QB3 encoding.
+The codeswitch itself is suffix encoded, using a variable number of bits. For example, for byte data, the codeswitch will use 2 bits for
 +-1, 3 bits for +-2 and 4 bits for +-3, -4 and the SIGNAL.
 
 The codeswitch is then followed by the 16 group values, encoded in QB3 format. Special encoding are required at rung 0 and 
