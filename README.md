@@ -1,12 +1,9 @@
-# QB3: Fast and Efficient Raster Compression
+# QB3: Fast and Efficient Image/Raster Compression
 
 QB3 is a raster specific lossless compression that usually achieves better compression 
-ratio than PNG for natural images while being extremely fast, for both compression and decompression. 
-It requires almost no memory during operation.
-QB3 handles integer values, signed and unsigned, up to 64bit per value. 
-If multiple bands are to be compressed together, as is usually the case for color 
-images, QB3 can take advange of band to band similarities to compress 
-even better.
+ratio than PNG for natural images while being more than one hundred times faster. It 
+requires almost no memory during operation other than the input and output streams.
+QB3 handles integer values, signed and unsigned, up to 64bit per value.
 
 # QB3 Library
 The library, located in [QB3lib](QB3lib) provides the core QB3 
