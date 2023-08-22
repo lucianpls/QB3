@@ -41,8 +41,16 @@ typedef struct decs * decsp; // decoder
 
 // Types
 enum qb3_dtype { QB3_U8 = 0, QB3_I8, QB3_U16, QB3_I16, QB3_U32, QB3_I32, QB3_U64, QB3_I64 };
-// Encode mode
-enum qb3_mode { QB3M_DEFAULT = 0, QB3M_BASE = 0, QB3M_BEST };
+
+// Encode mode, default is QB3M_BASE, pure QB3 encoding. Fastest
+// QB3M_BEST is the best compression, may change
+enum qb3_mode { 
+    QB3M_DEFAULT = 0, 
+    QB3M_BASE = 0, 
+    QB3M_CF = 1, // With common factor
+    QB3M_RLE = 2, // BASE + RLE
+    QB3M_CF_RLE = 3, // BASE + CF + RLE
+    QB3M_BEST = 3}; // Best compression, one of the above
 
 // Errors
 enum qb3_error {
@@ -79,8 +87,8 @@ DLLEXPORT size_t qb3_max_encoded_size(const encsp p);
 // If mode value is out of range, it returns the previous mode value of p
 DLLEXPORT qb3_mode qb3_set_encoder_mode(encsp p, qb3_mode mode);
 
-// Generate raw qb3 stream, no headers
-DLLEXPORT void qb3_set_encoder_raw(encsp p);
+//// Generate raw qb3 stream, no headers
+//DLLEXPORT void qb3_set_encoder_raw(encsp p);
 
 // Encode the source into destination buffer, which should be at least qb3_max_encoded_size
 // Source organization is expected to be y major, then x, then band (interleaved)
@@ -96,11 +104,11 @@ DLLEXPORT int qb3_get_encoder_state(encsp p);
 // To be used by raw and formatted QB3 streams
 DLLEXPORT void qb3_destroy_decoder(decsp p);
 
-// Raw functions
-DLLEXPORT decsp qb3_create_raw_decoder(size_t width, size_t height, size_t bands, qb3_dtype dt);
-
-DLLEXPORT size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination);
-
+//// Raw functions
+//DLLEXPORT decsp qb3_create_raw_decoder(size_t width, size_t height, size_t bands, qb3_dtype dt);
+//
+//DLLEXPORT size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination);
+//
 DLLEXPORT size_t qb3_decoded_size(const decsp p);
 
 DLLEXPORT qb3_dtype qb3_get_type(const decsp p);

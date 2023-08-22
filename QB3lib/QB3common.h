@@ -94,7 +94,6 @@ struct encs {
     qb3_dtype type;
     int error; // Holds the code for error, 0 if everything is fine
     bool away; // Round up instead of down when quantizing
-    bool raw;  // Write QB3 raw stream
 };
 
 // Decoder control structure
@@ -109,7 +108,6 @@ struct decs {
     qb3_dtype type;
     int error;
     int state;
-    bool raw;
 
     // Input buffer
     uint8_t* s_in;

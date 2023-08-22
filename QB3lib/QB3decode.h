@@ -305,6 +305,7 @@ static T magsmul(T val, T cf) {
     return magsabs(val) * (cf << 1) - (val & 1);
 }
 
+// reports most but not all errors, for example if the input stream is too short for the last block
 template<typename T>
 static bool decode(uint8_t *src, size_t len, T* image, 
     size_t xsize, size_t ysize, size_t bands, size_t *cband)
@@ -333,6 +334,7 @@ static bool decode(uint8_t *src, size_t len, T* image,
             if (x + B > xsize)
                 x = xsize - B;
             for (int c = 0; c < bands; c++) {
+                failed |= s.empty(); // Stream can't be empty here
                 uint64_t cs(0), abits(1), acc(s.peek());
                 if (acc & 1) { // Rung change
                     cs = dsw[(acc >> 1) & LONG_MASK];
@@ -422,6 +424,7 @@ static bool decode(uint8_t *src, size_t len, T* image,
                 *dimg += *simg;
         }
     } // per block strip
-    return failed;
+    // It might not catch all errors
+    return failed || s.avail() > 7; 
 }
 } // namespace

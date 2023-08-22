@@ -95,6 +95,7 @@ public:
         bitp += nbits;
     }
 
+    // Number of bits written
     size_t position() const {
         return bitp;
     }

@@ -18,26 +18,7 @@ Contributors:  Lucian Plesea
 #include "QB3decode.h"
 // For memset
 #include <cstring>
-
-// Builds a decoder control structure for raw qb3 input
-decsp qb3_create_raw_decoder(size_t width, size_t height, size_t bands, qb3_dtype dt) {
-    if (width > 0x10000ul || height > 0x10000ul || bands == 0 || bands > QB3_MAXBANDS)
-        return nullptr;
-    auto p = new decs;
-    p->xsize = width;
-    p->ysize = height;
-    p->nbands = bands;
-    p->type = dt;
-    p->quanta = 0;
-    p->raw = true;
-    // Start with no inter-band differential
-    for (size_t c = 0; c < bands; c++)
-        p->cband[c] = c;
-    // For 3 or 4 bands we assume RGB(A) input and use R-G and B-G
-    if (bands == 3 || bands == 4)
-        p->cband[0] = p->cband[2] = 1;
-    return p;
-}
+#include <vector>
 
 void qb3_destroy_decoder(decsp p) {
     delete p;
@@ -149,7 +130,6 @@ decsp qb3_read_start(void* source, size_t source_size, size_t *image_size) {
         delete p;
         return nullptr;
     }
-    p->raw = false;
     p->s_in = static_cast<uint8_t*>(source) + QB3_HDRSZ;
     p->s_size = source_size - QB3_HDRSZ;
 
@@ -167,7 +147,7 @@ decsp qb3_read_start(void* source, size_t source_size, size_t *image_size) {
 // Returns true if no failure is detected and (first) IDAT is found
 bool qb3_read_info(decsp p) {
     // Check that the input structure is in the correct state
-    if (p->state != 1 || p->error || p->raw || !p->s_in || p->s_size < 4) {
+    if (p->state != 1 || p->error || !p->s_in || p->s_size < 4) {
         if (QB3E_OK == p->error)
             p->error = QB3E_EINV;
         return false; // Didn't work
@@ -226,24 +206,104 @@ bool qb3_read_info(decsp p) {
     return QB3E_OK == p->error;
 }
 
-// Call after read_header to read the actual data
-size_t qb3_read_data(decsp p, void* destination) {
-    // Check that it was a QB3 file
-    if (p->state != 2 || p->error != QB3E_OK || p->raw 
-        || p->s_in == nullptr || p->s_size == 0) {
-        if (p->error == QB3E_OK)
-            p->error = QB3E_EINV;
-        return 0; // Error signal
+// Decode RLE0FFFF data
+// Returns 0 if decoding worked as expected
+int64_t deRLE0FFFF(const uint8_t* s, size_t slen, uint8_t* d, size_t dlen) {
+    // Just a sanity check, those sizes would be insane
+    assert(static_cast<int64_t>(slen) > 0 && static_cast<int64_t>(dlen) > 0 );
+    while ((slen > 0) && (dlen > 0)) {
+        slen--;
+        dlen--;
+        uint8_t c = *s++;
+        if ((0xFF != c) || (2 > slen)) { // Not code or not enough input
+            *d++ = c;
+        }
+        else { // check the second byte
+            if (0xff != s[0]) { // Not a marker, emit the 0xff
+                *d++ = 0xff;
+                continue;
+            }
+            // Consume the second FF and the byte after it
+            c = s[1];
+            s += 2;
+            slen -= 2;
+            if (c != 0xff) { // zero run
+                dlen -= 3 + c;
+                if (dlen < 0)
+                    break; // output error, will exit
+                *d++ = 0;
+                *d++ = 0;
+                *d++ = 0;
+                *d++ = 0;
+                while (c--)
+                    *d++ = 0;
+            }
+            else { // emit two FFs
+                if (--dlen < 0)
+                    break; // output error, will exit
+                *d++ = 0xff;
+                *d++ = 0xff;
+            }
+        }
     }
-    return qb3_decode(p, p->s_in, p->s_size, destination);
+    // Returns negative if the dest is not large enough, positive size of output when the input runs out
+    return static_cast<int64_t>(dlen) - static_cast<int64_t>(slen); // So it can become negative
 }
 
-// The encode public API, returns 0 if an error is detected
+// The size of the decoded data, fairly expensive
+size_t deRLE0FFFFSize(const uint8_t* s, size_t slen) {
+    size_t count(0);
+    // Read and output at least one byte per loop
+    while (slen-- > 0) {
+        uint8_t c = *s++;
+        if ((0xFF != c) || (2 > slen)) { // Not marker or not enough input
+            count++;
+        }
+        else { // check the second byte
+            if (0xff != s[0]) { // Not a marker
+                count++;
+            }
+            else {
+                // Consume the second FF and the next byte
+                c = s[1];
+                s += 2;
+                slen -= 2;
+                if (c != 0xff) { // zero run
+                    count += 4;
+                    count += c;
+                }
+                else { // two FF
+                    count += 2;
+                }
+            }
+        }
+    }
+    return count;
+}
+
+// returns 0 if an error is detected
 // TODO: Error reporting
-size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination) {
+// source points to data to decode
+static size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination) {
 
     int error_code = 0;
     auto src = reinterpret_cast<uint8_t *>(source);
+
+    std::vector<uint8_t> buffer;
+    // If RLE is needed, it is expensive, allocates a whole new buffer
+    if (p->mode == QB3M_RLE || p->mode == QB3M_CF_RLE) {
+        // RLE needs to be decoded into a temporary buffer
+        auto sz = deRLE0FFFFSize(src, src_sz);
+        buffer.resize(sz);
+        auto err = deRLE0FFFF(src, src_sz, buffer.data(), sz);
+        if (err != 0) {
+            p->error = QB3E_EINV;
+            return 0;
+        }
+        // Retarget the source to the buffer
+        src = buffer.data();
+        src_sz = sz;
+    }
 
 #define DEC(T) QB3::decode(src, src_sz, reinterpret_cast<T*>(destination), \
     p->xsize, p->ysize, p->nbands, p->cband)
@@ -293,4 +353,16 @@ size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination) {
     }
 #undef MUL
     return error_code ? 0 : qb3_decoded_size(p);
+}
+
+// Call after read_header to read the actual data
+size_t qb3_read_data(decsp p, void* destination) {
+    // Check that it was a QB3 file
+    if (p->state != 2 || p->error != QB3E_OK
+        || p->s_in == nullptr || p->s_size == 0) {
+        if (p->error == QB3E_OK)
+            p->error = QB3E_EINV;
+        return 0; // Error signal
+    }
+    return qb3_decode(p, p->s_in, p->s_size, destination);
 }

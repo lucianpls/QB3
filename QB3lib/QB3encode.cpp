@@ -33,7 +33,7 @@ encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt
     p->type = static_cast<qb3_dtype>(dt);
     p->quanta = 1; // No quantization
     p->away = false; // Round to zero
-    p->raw = false;  // Write image header
+    //p->raw = false;  // Write image header
     p->mode = QB3M_DEFAULT; // Base
     // Start with no inter-band differential
     for (size_t c = 0; c < bands; c++) {
@@ -123,9 +123,9 @@ qb3_mode qb3_set_encoder_mode(encsp p, qb3_mode mode) {
     return p->mode;
 }
 
-DLLEXPORT void qb3_set_encoder_raw(encsp p) {
-    p->raw = true;
-}
+//DLLEXPORT void qb3_set_encoder_raw(encsp p) {
+//    p->raw = true;
+//}
 
 // Quantize in place then encode the source, by type
 template<typename T>
@@ -221,11 +221,141 @@ void static write_headers(encsp p, oBits& s) {
     write_data_header(p, s);
 }
 
+// Returns the number of bytes of value c
+static uint8_t run_count(const uint8_t* s, uint8_t c, uint8_t len = 0xff) {
+    for (uint8_t count = 0; count < len; count++, s++)
+        if (c != *s)
+            return count;
+    return len;
+}
+
+
+// Special purpose RLE encoder, only packs long sequnces of 0
+// Uses 0xff 0xff as a marker
+// It generates the following special patterns
+// FF FF FF ->> FF FF
+// FF FF N ->> 0 repeated N + 4 times, between 4 and 258 
+//
+
+static size_t RLE0FFFF(const uint8_t* src, size_t len, uint8_t* dst) {
+    uint8_t* d(dst);
+    while (len--) {
+        const uint8_t c = *src++; // non-special or last two bytes are alway copied
+        if (((c + 1) & 0xfe) || (2 > len)) {
+            *d++ = c;
+        }
+        else { // Special char, at least one more is available in src
+            uint8_t cc = *src; // not consumed here
+            if (c != cc) { // non-repeating special
+                *d++ = c; // Copy the first char, not special enough
+                continue;
+            }
+            // At least two special chars in a row
+            src++; // Consume the second byte, it will be handled
+            len--;
+
+            if (c) { // Two FFs in a row, encoded as FF FF FF
+                *d++ = c;
+                *d++ = c;
+                *d++ = c;
+                continue;
+            }
+            // Two zeros, if we don't have four it's not a run
+            if (2 > len || 0 != src[0] || 0 != src[1]) { // Not four zeros, emit two
+                *d++ = 0;
+                *d++ = 0;
+                continue;
+            }
+
+            // If the last emitted byte was FF this can't be encoded as a run
+            // emit one zero and put back the second
+            if (d != dst && 0xff == d[-1]) {
+                *d++ = 0;
+                len++;
+                src--;
+                continue;
+            }
+
+            // at least four zeros on input, use the next two
+            src += 2;
+            len -= 2;
+            auto run = static_cast<uint8_t>(len < 0xff ? len : 0xfe); // Can't use 0xff
+            run = run_count(src, 0, run); // In addition to the four
+            // run, emit FF FF run (run is at least 4)
+            *d++ = 0xff;
+            *d++ = 0xff;
+            *d++ = run; // Signifying the 4 to 258 range
+            src += run;
+            len -= run;
+        }
+    }
+    return d - dst;
+}
+
+// Returns the size of the packed data, without writing anything
+static size_t RLE0FFFFSize(const uint8_t* src, size_t len) {
+    uint8_t last(0); // Last byte emitted, to avoid encoding runs of FFs
+    size_t count(0);
+    while (len--) {
+        const uint8_t c = *src++; // non-special or last two bytes are alway copied
+        if (((c + 1) & 0xfe) || (2 > len)) {
+            count++;
+            last = c;
+        }
+        else { // Special char, at least one more is available in src
+            uint8_t cc = *src; // not consumed here
+            if (c != cc) { // non-repeating special
+                last = c;
+                count++;
+                continue;
+            }
+            // At least two special chars in a row
+            src++; // Consume the second byte, it will be handled
+            len--;
+
+            if (c) { // Two FFs in a row, encoded as FF FF FF
+                last = 0xff;
+                count += 3;
+                continue;
+            }
+            // Two zeros, if we don't have four it's not a run
+            if (2 > len || 0 != src[0] || 0 != src[1]) { // Not four zeros, emit two
+                last = 0;
+                count += 2;
+                continue;
+            }
+
+            // If the last emitted byte was FF this can't be encoded as a run
+            // emit one zero and put back the second
+            if (0xff == last) {
+                last = 0;
+                count++;
+                len++;
+                src--;
+                continue;
+            }
+
+            // at least four zeros on input, use the next two
+            src += 2;
+            len -= 2;
+            uint8_t run = static_cast<uint8_t>(len < 0xff ? len : 0xfe); // Can't use 0xff
+            run = run_count(src, 0, run); // In addition to the four
+            // run, emit FF FF run (run is at least 4)
+            last = run;
+            count += 3;
+            src += run;
+            len -= run;
+        }
+    }
+    return count;
+}
+
 // Separate because it needs to operate on strips to avoid excessive memory consumption
 // It might still not be sufficient
 static size_t encode_quanta(encsp p, void* source, void* destination, qb3_mode mode) {
+    // mode is the final user choice
     oBits s(reinterpret_cast<uint8_t*>(destination));
-    if (!p->raw) write_headers(p, s);
+    write_headers(p, s);
     if (p->error) return 0;
 
     encs subimg(*p);
@@ -260,21 +390,32 @@ static size_t encode_quanta(encsp p, void* source, void* destination, qb3_mode m
         src += linesize * B;
     }
 
-    return (s.position() + 7) / 8;
+    return (p->error) ? 0 : s.tobyte();
 #undef QENC
 }
 
 
 // The encode public API, returns 0 if an error is detected
 size_t qb3_encode(encsp p, void* source, void* destination) {
-    auto mode = p->mode;
+    auto mode = p->mode; // save the user chosen mode
+    // Turn off the RLE for now
+    bool rle = (mode == qb3_mode::QB3M_RLE || mode == qb3_mode::QB3M_CF_RLE);
+    if (rle)
+        p->mode = (mode == qb3_mode::QB3M_RLE) ? QB3M_BASE : QB3M_CF;
+
     if (p->quanta > 1)
         return encode_quanta(p, source, destination, mode);
-    oBits s(reinterpret_cast<uint8_t*>(destination));
-    if (!p->raw) write_headers(p, s);
+
+    uint8_t* const d = reinterpret_cast<uint8_t*>(destination);
+    oBits s(d);
+    // size of headers or zero if raw
+    size_t data_position(0);
+    write_headers(p, s);
+    data_position = (s.position() + 7) / 8; // It is byte aligned already
     if (p->error) return 0;
 
-#define ENC(T) (mode == QB3M_BEST) ? \
+    // ONLY QB3M_BASE and QB3M_CF are supported here
+#define ENC(T) (p->mode == QB3M_CF) ? \
               QB3::encode_best(reinterpret_cast<const T*>(source), s, *p)\
             : QB3::encode_fast(reinterpret_cast<const T*>(source), s, *p);
 
@@ -295,6 +436,42 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
         p->error = QB3E_EINV; // Invalid type
     } // data type
 #undef ENC
+
+    if (rle) {
+        p->mode = mode; // restore the user selected mode
+        if (p->error) // Bail out if there was an error
+            return 0;
+
+        auto len = (s.position() + 7) / 8; // current output position in bytes
+        // Skip RLE if the compression is poor, this is a vague limit
+        if (len <= qb3_max_encoded_size(p) / 2) {
+            auto data_size = len - data_position; // Exclude the headers, they will be rewritten
+            auto available = qb3_max_encoded_size(p) - len;
+            // Get the size of the RLE0FFFF
+            auto rle_size = RLE0FFFFSize(d + data_position, data_size);
+            if (rle_size <= available && rle_size < data_size) { // Only if it fits and is small enough
+                // Encode it at the end of the data
+                auto new_size = RLE0FFFF(d + data_position, data_size, d + len);
+                // Check that it worked
+                assert(new_size == rle_size);
+                if (new_size != rle_size) { // Paranoid check
+                    p->error = QB3E_EINV; // Something went wrong, bail out
+                    return 0;
+                }
+
+                // new stream, same buffer
+                oBits srle(d);
+                write_headers(p, srle);
+                if (p->error)
+                    return 0;
+                // Copy the RLE0FFFF data at the current position, they are not overlapping
+                memcpy(d + srle.tobyte(), d + len, rle_size);
+                // Return the new size
+                return srle.tobyte() + rle_size;
+            }
+        }
+    }
+
     return (p->error) ? 0 : s.tobyte();
 }
 

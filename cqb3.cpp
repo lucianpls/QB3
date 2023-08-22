@@ -36,6 +36,7 @@ struct options {
     options() : 
         best(false),
         trim(false),
+        rle(false), // non-default RLE (off for best, on for fast)
         verbose(false), 
         decode(false) 
     {};
@@ -46,6 +47,7 @@ struct options {
     string mapping; // band mapping, if provided
     bool best;
     bool trim; // Trim input to a multiple of 4x4 blocks
+    bool rle; // Skip RLE
     bool verbose;
     bool decode;
 };
@@ -59,6 +61,8 @@ int Usage(const options &opt) {
         << "\n"
         << "Compression only options:\n"
         << "\t-b : best compression\n"
+        << "\t-r : reverse RLE behavior, off for best, on for fast\n"
+        << "\t     RLE is only used if applicable\n"
         << "\t-t : trim input to multiple of 4x4 pixels\n"
         << "\t-m <b,b,b> : core band mapping\n"
         ;
@@ -104,6 +108,9 @@ bool parse_args(int argc, char** argv, options& opt) {
                 opt.mapping = "-"; // Disable mapping
                 if (i < argc && isbandmap(argv[i + 1]))
                     opt.mapping = argv[++i];
+                break;
+            case 'r':
+                opt.rle = true;
                 break;
             default:
                 opt.error = "Uknown option provided";
@@ -208,6 +215,10 @@ int decode_main(options& opts) {
         raw.resize(qb3_decoded_size(qdec));
         auto t1 = high_resolution_clock::now();
         auto rbytes = qb3_read_data(qdec, raw.data());
+        if (rbytes != raw.size()) {
+            opts.error = "Error reading qb3 file data";
+            throw 2;
+        }
         auto t2 = high_resolution_clock::now();
         time_span = duration_cast<duration<double>>(t2 - t1).count();
     }
@@ -389,7 +400,18 @@ int encode_main(options& opts) {
     }
     try {
         high_resolution_clock::time_point t1, t2;
-        qb3_set_encoder_mode(qenc, opts.best ? qb3_mode::QB3M_BEST : qb3_mode::QB3M_BASE);
+        // Pick a mode
+        qb3_mode mode = opts.best ? qb3_mode::QB3M_BEST : qb3_mode::QB3M_BASE;
+        // If the RLE is set, pick more careful
+        if (opts.rle) {
+            if (QB3M_BEST == mode) {
+                mode = QB3M_CF; // Disable RLE for best
+            }
+            else if (QB3M_BASE == mode) {
+                mode = QB3M_RLE;
+            }
+        }
+        qb3_set_encoder_mode(qenc, mode);
         t1 = high_resolution_clock::now();
         outsize = qb3_encode(qenc, static_cast<void*>(image.data()), outvec.data());
         t2 = high_resolution_clock::now();
@@ -401,6 +423,15 @@ int encode_main(options& opts) {
         return err_code;
     }
     qb3_destroy_encoder(qenc);
+
+    // DEBUG only, dump the data
+    //#if defined(_DEBUG)
+    //    { // Write the raw data
+    //        FILE* f = fopen("debug.raw", "wb");
+    //        fwrite(outvec.data() + 20, outsize - 20, 1, f);
+    //        fclose(f);
+    //    }
+    //#endif
 
     if (opts.verbose) {
         cerr << "Output\nSize: " << outsize << "\nEncode time : " << time_span << "s\nRatio "
