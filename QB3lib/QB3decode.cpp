@@ -16,7 +16,7 @@ Contributors:  Lucian Plesea
 */
 
 #include "QB3decode.h"
-// For memset
+// For memset, memcpy
 #include <cstring>
 #include <vector>
 
@@ -281,13 +281,29 @@ size_t deRLE0FFFFSize(const uint8_t* s, size_t slen) {
     return count;
 }
 
+static size_t raw_size(decsp const& p) {
+    return p->xsize * p->ysize * p->nbands * typesizes[p->type];
+}
+
+
 // returns 0 if an error is detected
 // TODO: Error reporting
 // source points to data to decode
-static size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination) {
-
+static size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination)
+{
     int error_code = 0;
     auto src = reinterpret_cast<uint8_t *>(source);
+
+    // If the data is stored and size is right, just copy it
+    if (p->mode == qb3_mode::QB3M_STORED) {
+        // Only if the size is what we expect
+        if (src_sz != raw_size(p)) {
+            p->error = QB3E_EINV;
+            return 0;
+        }
+        memcpy(destination, source, src_sz);
+        return src_sz;
+    }
 
     std::vector<uint8_t> buffer;
     // If RLE is needed, it is expensive, allocates a whole new buffer

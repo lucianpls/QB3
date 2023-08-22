@@ -50,7 +50,9 @@ enum qb3_mode {
     QB3M_CF = 1, // With common factor
     QB3M_RLE = 2, // BASE + RLE
     QB3M_CF_RLE = 3, // BASE + CF + RLE
-    QB3M_BEST = 3}; // Best compression, one of the above
+    QB3M_BEST = 3,
+    QB3M_STORED = 255 // Raw bypass
+}; // Best compression, one of the above
 
 // Errors
 enum qb3_error {

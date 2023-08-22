@@ -394,6 +394,9 @@ static size_t encode_quanta(encsp p, void* source, void* destination, qb3_mode m
 #undef QENC
 }
 
+static size_t raw_size(encsp const &p) {
+    return p->xsize * p->ysize * p->nbands * typesizes[p->type];
+}
 
 // The encode public API, returns 0 if an error is detected
 size_t qb3_encode(encsp p, void* source, void* destination) {
@@ -437,12 +440,12 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
     } // data type
 #undef ENC
 
+    auto len = (s.position() + 7) / 8; // current output position in bytes
     if (rle) {
         p->mode = mode; // restore the user selected mode
         if (p->error) // Bail out if there was an error
             return 0;
 
-        auto len = (s.position() + 7) / 8; // current output position in bytes
         // Skip RLE if the compression is poor, this is a vague limit
         if (len <= qb3_max_encoded_size(p) / 2) {
             auto data_size = len - data_position; // Exclude the headers, they will be rewritten
@@ -470,6 +473,22 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
                 return srle.tobyte() + rle_size;
             }
         }
+    }
+
+    // See if we're better off with the raw data
+    if (!p->error && raw_size(p) <= len) {
+        // new stream, same buffer
+        oBits sraw(d);
+        auto mode = p->mode; // save the user chosen mode
+        p->mode = QB3M_STORED; // Force raw mode
+        write_headers(p, sraw);
+        if (p->error)
+            return 0;
+        // Copy the raw data at the current position, they are not overlapping
+        memcpy(d + sraw.tobyte(), source, raw_size(p));
+        p->mode = mode; // restore the user selected mode, in case of reuse
+        // Return the new size
+        return sraw.tobyte() + raw_size(p);
     }
 
     return (p->error) ? 0 : s.tobyte();
