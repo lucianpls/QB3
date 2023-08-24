@@ -82,6 +82,15 @@ static const uint16_t csw6[] = { 0x1000, 0x6001, 0x6009, 0x6011, 0x6019, 0x6021,
 0x601d, 0x6015, 0x600d, 0x6005 };
 static const uint16_t* CSW[] = { nullptr, nullptr, nullptr, csw3, csw4, csw5, csw6 };
 
+// Encode integers as magnitude and sign, with bit 0 for sign.
+// This encoding has the top bits always zero, regardless of sign
+// To keep the range the same as two's complement, the magnitude of 
+// negative values is biased down by one (no negative zero)
+
+// Convert integer to mag-sign without conditionals, as fast as C can make it
+template<typename T>
+static T mags(T v) { return (v << 1) ^ (~T(0) * (v >> (8 * sizeof(T) - 1))); }
+
 // integer divide val(in magsign) by cf(normal)
 template<typename T> static T magsdiv(T val, T cf) {return ((magsabs(val) / cf) << 1) - (val & 1);}
 

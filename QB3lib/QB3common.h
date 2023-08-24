@@ -128,28 +128,8 @@ constexpr size_t QB3_HDRSZ = 4 + 2 + 2 + 1 + 1 + 1;
 // in decode.cpp
 extern const int typesizes[8];
 
-// Encode integers as magnitude and sign, with bit 0 for sign.
-// This encoding has the top bits always zero, regardless of sign
-// To keep the range the same as two's complement, the magnitude of 
-// negative values is biased down by one (no negative zero)
-
-// Change to mag-sign without conditionals, as fast as C can make it
-template<typename T>
-static T mags(T v) {
-    return (v << 1) ^ (~T(0) * (v >> (8 * sizeof(T) - 1)));
-}
-
-// Undo mag-sign without conditionals, as fast as C can make it
-template<typename T>
-static T smag(T v) {
-    return (v >> 1) ^ (~T(0) * (v & 1));
-}
-
-// Absolute from mag-sign
-template<typename T>
-static T magsabs(T val) {
-    return (val >> 1) + (val & 1);
-}
+// Absolute value from mag-sign
+template<typename T> static T magsabs(T val) { return (val >> 1) + (val & 1); }
 
 // If the rung bits of the input values match 1*0*, returns the index of first 0, otherwise B2 + 1
 template<typename T>

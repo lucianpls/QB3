@@ -141,6 +141,9 @@ static const uint16_t dsw6[] = { 0x6001, 0x7009, 0x603f, 0x8011, 0x6002, 0x7037,
 0x6008, 0x7030, 0x6038, 0x8020 };
 const uint16_t* DSW[] = { nullptr, nullptr, nullptr, dsw3, dsw4, dsw5, dsw6 };
 
+// integer mag-sign to normal encoding without conditionals
+template<typename T> static T smag(T v) { return (v >> 1) ^ (~T(0) * (v & 1)); }
+
 // Computed decode, does not work for rung 0 or 1
 static std::pair<size_t, uint64_t> qb3dsz(uint64_t val, size_t rung) {
     assert(rung > 1);
