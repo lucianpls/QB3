@@ -127,6 +127,24 @@ DLLEXPORT void qb3_set_encoder_raw(encsp p) {
     p->raw = true;
 }
 
+// Round to Zero Division, no overflow
+template<typename T>
+static T rto0div(T x, T y) {
+    static_assert(std::is_integral<T>(), "Integer types only");
+    T r = x / y, m = x % y;
+    y = (y >> 1);
+    return r + (!(x < 0) & (m > y)) - ((x < 0) & ((m + y) < 0));
+}
+
+// Round from Zero Division, no overflow
+template<typename T>
+static T rfr0div(T x, T y) {
+    static_assert(std::is_integral<T>(), "Integer types only");
+    T r = x / y, m = x % y;
+    y = (y >> 1) + (y & 1);
+    return r + (!(x < 0) & (m >= y)) - ((x < 0) & ((m + y) <= 0));
+}
+
 // Quantize in place then encode the source, by type
 template<typename T>
 bool quantize(T* source, oBits& s, encs& p) {
@@ -144,10 +162,10 @@ bool quantize(T* source, oBits& s, encs& p) {
 
     if (p.away)
         for (size_t i = 0; i < nV; i++)
-            source[i] = QB3::rfr0div(source[i], q);
+            source[i] = rfr0div(source[i], q);
     else
         for (size_t i = 0; i < nV; i++)
-            source[i] = QB3::rto0div(source[i], q);
+            source[i] = rto0div(source[i], q);
     return 0;
 }
 

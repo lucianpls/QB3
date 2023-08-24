@@ -321,24 +321,6 @@ static void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung) {
     groupencode(group, maxval, bits, acc, abits);
 }
 
-// Round to Zero Division, no overflow
-template<typename T>
-static T rto0div(T x, T y) {
-    static_assert(std::is_integral<T>(), "Integer types only");
-    T r = x / y, m = x % y;
-    y = (y >> 1);
-    return r + (!(x < 0) & (m > y)) - ((x < 0) & ((m + y) < 0));
-}
-
-// Round from Zero Division, no overflow
-template<typename T>
-static T rfr0div(T x, T y) {
-    static_assert(std::is_integral<T>(), "Integer types only");
-    T r = x / y, m = x % y;
-    y = (y >> 1) + (y & 1);
-    return r + (!(x < 0) & (m >= y)) - ((x < 0) & ((m + y) <= 0));
-}
-
 // Only basic encoding
 template<typename T>
 static int encode_fast(const T* image, oBits& s, encs &info)
