@@ -80,6 +80,7 @@ static const uint16_t csw6[] = { 0x1000, 0x6001, 0x6009, 0x6011, 0x6019, 0x6021,
 0x80b7, 0x80c7, 0x80d7, 0x80e7, 0x80ff, 0x80ef, 0x80df, 0x80cf, 0x80bf, 0x80af, 0x809f, 0x808f, 0x807f, 0x806f, 0x805f, 0x804f,
 0x803f, 0x802f, 0x801f, 0x800f, 0x707b, 0x706b, 0x705b, 0x704b, 0x703b, 0x702b, 0x701b, 0x700b, 0x603d, 0x6035, 0x602d, 0x6025,
 0x601d, 0x6015, 0x600d, 0x6005 };
+static const uint16_t* CSW[] = { nullptr, nullptr, nullptr, csw3, csw4, csw5, csw6 };
 
 // integer divide val(in magsign) by cf(normal)
 template<typename T> static T magsdiv(T val, T cf) {return ((magsabs(val) / cf) << 1) - (val & 1);}
@@ -237,15 +238,11 @@ static void groupencode(T group[B2], T maxval, oBits& s,
     }
 }
 
-template<typename T> constexpr uint16_t SIGNAL = sizeof(T) == 1 ? 0x5017 : sizeof(T) == 2 ? 0x6037 : sizeof(T) == 4 ? 0x7077 : 0x80f7;
-template<typename T> constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-template<typename T> constexpr uint64_t UBMASK = (1ull << UBITS<T>) - 1;
-template<typename T> uint16_t const *CSW = sizeof(T) == 1 ? csw3 : sizeof(T) == 2 ? csw4 : sizeof(T) == 4 ? csw5 : csw6;
-
 // Base QB3 group encode with code switch, returns encoded size
 template <typename T = uint8_t> 
 static void groupencode(T group[B2], T maxval, size_t oldrung, oBits& s) {
-    uint64_t acc = CSW<T>[(topbit(maxval | 1) - oldrung) & UBMASK<T>];
+    constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+    uint64_t acc = CSW[UBITS][(topbit(maxval | 1) - oldrung) & ((1ull << UBITS) - 1)];
     groupencode(group, maxval, s, acc & TBLMASK, static_cast<size_t>(acc >> 12));
 }
 
@@ -253,8 +250,10 @@ static void groupencode(T group[B2], T maxval, size_t oldrung, oBits& s) {
 template <typename T = uint8_t>
 static void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung) {
     // Signal as switch to same rung, max-positive value, by UBITS
-    uint64_t acc = SIGNAL<T> & TBLMASK;
-    size_t abits = SIGNAL<T> >> 12;
+    const uint16_t SIGNAL[] = { 0x0, 0x0, 0x0, 0x5017, 0x6037, 0x7077, 0x80f7 };
+    constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+    uint64_t acc = SIGNAL[UBITS] & TBLMASK;
+    size_t abits = UBITS + 2; // SIGNAL[UBITS] >> 12;
     // divide group values by CF and find the new maxvalue
     T maxval = 0;
     for (size_t i = 0; i < B2; i++) if (group[i])
@@ -264,11 +263,11 @@ static void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung) {
     auto cfrung = topbit(cf | 1); // rung for cf-2 value
     // Encode the trung, with or without switch
     // Use the wrong way switch for in-band
-    auto cs = CSW<T>[(trung - oldrung) & UBMASK<T>];
+    auto cs = CSW[UBITS][(trung - oldrung) & ((1ull << UBITS) - 1)];
     if ((cs >> 12) == 1) // Would be no-switch, use signal instead, it decodes to delta of zero
-        cs = SIGNAL<T>;
+        cs = SIGNAL[UBITS];
     // When trung is only somewhat larger than cfrung encode cf at same rung as data
-    if (trung >= cfrung && (trung < (cfrung + UBITS<T>) || 0 == cfrung)) {
+    if (trung >= cfrung && (trung < (cfrung + UBITS) || 0 == cfrung)) {
         acc |= (cs & TBLMASK) << abits;
         abits += cs >> 12;
         if (trung == 0) { // Special encoding for single bit
@@ -294,7 +293,7 @@ static void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung) {
         // Then encode cfrung, using code-switch from trung, 
         // skip the change bit, since rung will always be different
         // cfrung - trung is never 0
-        cs = CSW<T>[(cfrung - trung) & UBMASK<T>];
+        cs = CSW[UBITS][(cfrung - trung) & ((1ull << UBITS) - 1)];
         acc |= (cs & (TBLMASK - 1)) << (abits - 1);
         abits += static_cast<size_t>(cs >> 12) - 1;
         if (cfrung > 1) {
@@ -336,15 +335,14 @@ static T rfr0div(T x, T y) {
     return r + (!(x < 0) & (m >= y)) - ((x < 0) & ((m + y) <= 0));
 }
 
-// Best block traversal order in most cases
-static const uint8_t xlut[16] = { 0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3 };
-static const uint8_t ylut[16] = { 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3 };
-
 // Only basic encoding
 template<typename T>
 static int encode_fast(const T* image, oBits& s, encs &info)
 {
     static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
+    // Best block traversal order in most cases
+    const uint8_t xlut[16] = { 0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3 };
+    const uint8_t ylut[16] = { 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3 };
     const size_t xsize(info.xsize), ysize(info.ysize), bands(info.nbands), * cband(info.cband);
     if (xsize == 0 || xsize > 0x10000ull || ysize == 0 || ysize > 0x10000ull || 0 == bands)
         return 1;
@@ -352,10 +350,10 @@ static int encode_fast(const T* image, oBits& s, encs &info)
     for (size_t c = 0; c < bands; c++)
         if (cband[c] >= bands)
             return 2; // Band mapping error
-    // Running code length
-    size_t runbits[QB3_MAXBANDS];
+    // Running code length, start with nominal value
+    size_t runbits[QB3_MAXBANDS] = {};
     // Previous value, per band
-    T prev[QB3_MAXBANDS];
+    T prev[QB3_MAXBANDS] = {};
     // Initialize state
     for (size_t c = 0; c < bands; c++) {
         runbits[c] = info.runbits[c];
@@ -415,6 +413,9 @@ template <typename T = uint8_t>
 static int encode_best(const T *image, oBits& s, encs &info)
 {
     static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
+    // Best block traversal order in most cases
+    const uint8_t xlut[16] = { 0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3 };
+    const uint8_t ylut[16] = { 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3 };
     const size_t xsize(info.xsize), ysize(info.ysize), bands(info.nbands), * cband(info.cband);
     if (xsize == 0 || xsize > 0x10000ull || ysize == 0 || ysize > 0x10000ull || 0 == bands)
         return 1;
@@ -422,6 +423,7 @@ static int encode_best(const T *image, oBits& s, encs &info)
     for (size_t c = 0; c < bands; c++)
         if (cband[c] >= bands)
             return 2; // Band mapping error
+    constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     // Running code length, start with nominal value
     size_t runbits[QB3_MAXBANDS];
     // Previous value, per band
@@ -468,7 +470,7 @@ static int encode_best(const T *image, oBits& s, encs &info)
                 const size_t rung = topbit(maxval | 1);
                 runbits[c] = rung;
                 if (0 == rung) { // only 1s and 0s, rung is -1 or 0, no point in trying cf
-                    uint64_t acc = CSW<T>[(rung - oldrung) & UBMASK<T>];
+                    uint64_t acc = CSW[UBITS][(rung - oldrung) & ((1ull << UBITS) - 1)];
                     size_t abits = acc >> 12;
                     acc &= 0xffull;
                     acc |= static_cast<uint64_t>(maxval) << abits++; // Add the all-zero flag
