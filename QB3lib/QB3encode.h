@@ -85,39 +85,35 @@ static const uint16_t* CSW[] = { nullptr, nullptr, nullptr, csw3, csw4, csw5, cs
 // integer divide val(in magsign) by cf(normal)
 template<typename T> static T magsdiv(T val, T cf) {return ((magsabs(val) / cf) << 1) - (val & 1);}
 
-// return greatest common factor (absolute) of a B2 sized vector of mag-sign values, Euclid algorithm
-// Lots of early returns, optimize for them
-template<typename T> static T gcf(const T* group) 
-{
+// greatest common factor (absolute) of a B2 sized vector of mag-sign values, Euclid algorithm
+template<typename T> static T gcf(const T* group){
     static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
-    // Work with actual absolute values, on local copy of data
-    T v[B2] = {0}; // Only the first value has to be zero
+    // Work with absolute values
     int sz = 0;
-    for (int i = 0; i < B2; i++) { // skip the zeros
-        if (group[i] > 2)
-            v[sz++] = magsabs(group[i]); 
-        else if (group[i] != 0) // 0b01 and 0b10 in mags are + or - 1
-            return 1; // No common factor
+    T v[B2]; // No need to initialize
+    for (int i = 0; i < B2; i++) {
+        v[sz] = magsabs(group[i]);
+        sz += 0 < v[sz]; // Skip the zeros
     }
-    while (sz > 1) {
-        // Find the minimum value
-        int j = 0;
+    do {
+        // minimum value and location
         T m = v[0];
+        int j = 0;
         for (int i = 1; i < sz; i++)
             if (m > v[i])
                 m = v[j = i];
-        // Place it at v[0]
+        if (1 == m)
+            return 1; // common factor
+        // Force the min at v[0]
         v[j] = v[0];
         v[0] = m;
         for (int i = j = 1; i < sz; i++) {
-            if (1 < v[i] % m)
-                v[j++] = v[i] % m;
-            else if (1 == v[i] % m)
-                return 1; // no common factor
+            v[j] = v[i] % m;
+            j += 0 < v[j]; // Skip the zeros
         }
         sz = j; // Never zero
-    }
-    return v[0]; // 2 or higher if there is a common factor
+    } while (sz > 1);
+    return v[0]; // common factor > 1
 }
 
 // Computed encoding with three codeword lenghts, used for higher rungs
