@@ -23,8 +23,10 @@ Contributors:  Lucian Plesea
 
 // constructor
 encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt) {
-    if (width > 0x10000ul || height > 0x10000ul || bands == 0 
-        || bands > QB3_MAXBANDS || dt > int(QB3_I64))
+    if (width < 4 || width > 0x10000ul 
+        || height < 4 || height > 0x10000ul 
+        || bands == 0 || bands > QB3_MAXBANDS 
+        || dt > int(QB3_I64))
         return nullptr;
     auto p = new encs;
     p->xsize = width;
@@ -75,7 +77,7 @@ bool qb3_set_encoder_coreband(encsp p, size_t bands, size_t *cband) {
 bool qb3_set_encoder_quanta(encsp p, size_t q, bool away) {
     p->quanta = 1;
     p->away = false;
-    if (q < 1) // Quanta of zero if not valid
+    if (q < 1)
         return false;
     p->quanta = q;
     p->away = away;
@@ -84,7 +86,7 @@ bool qb3_set_encoder_quanta(encsp p, size_t q, bool away) {
     // Check the quanta value agains the max positive by type
     bool error = false;
     switch (p->type) {
-#define TOO_LARGE(Q, T) (Q > uint64_t(std::numeric_limits<int8_t>::max()))
+#define TOO_LARGE(Q, T) (Q > uint64_t(std::numeric_limits<T>::max()))
     case qb3_dtype::QB3_I8:
         error |= TOO_LARGE(p->quanta, int8_t);
     case qb3_dtype::QB3_U8:

@@ -335,21 +335,29 @@ static T rfr0div(T x, T y) {
     return r + (!(x < 0) & (m >= y)) - ((x < 0) & ((m + y) <= 0));
 }
 
+// Check that the parameters are valid
+static int check_info(const encs& info) {
+    if (info.xsize < 4 || info.xsize > 0x10000 || info.ysize < 4 || info.ysize > 0x10000
+        || info.nbands < 1 || info.nbands > QB3_MAXBANDS)
+        return 1;
+    // Check band mapping
+    for (size_t c = 0; c < info.nbands; c++)
+        if (info.cband[c] >= info.nbands)
+            return 2; // Band mapping error
+    return 0;
+}
+
 // Only basic encoding
 template<typename T>
 static int encode_fast(const T* image, oBits& s, encs &info)
 {
     static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
+    if (check_info(info))
+        return check_info(info);
     // Best block traversal order in most cases
     const uint8_t xlut[16] = { 0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3 };
     const uint8_t ylut[16] = { 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3 };
     const size_t xsize(info.xsize), ysize(info.ysize), bands(info.nbands), * cband(info.cband);
-    if (xsize == 0 || xsize > 0x10000ull || ysize == 0 || ysize > 0x10000ull || 0 == bands)
-        return 1;
-    // Check band mapping
-    for (size_t c = 0; c < bands; c++)
-        if (cband[c] >= bands)
-            return 2; // Band mapping error
     // Running code length, start with nominal value
     size_t runbits[QB3_MAXBANDS] = {};
     // Previous value, per band
@@ -359,10 +367,10 @@ static int encode_fast(const T* image, oBits& s, encs &info)
         runbits[c] = info.runbits[c];
         prev[c] = static_cast<T>(info.prev[c]);
     }
-    size_t offsets[B2];
+    size_t offsets[B2] = {};
     for (size_t i = 0; i < B2; i++)
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
-    T group[B2];
+    T group[B2] = {};
     for (size_t y = 0; y < ysize; y += B) {
         // If the last row is partial, roll it up
         if (y + B > ysize)
@@ -378,8 +386,9 @@ static int encode_fast(const T* image, oBits& s, encs &info)
                 auto prv = prev[c];
                 // Use separate loop for basebands to avoid a test inside the hot loop
                 if (c != cband[c]) {
+                    auto cb = cband[c];
                     for (size_t i = 0; i < B2; i++) {
-                        T g = image[loc + c + offsets[i]] - image[loc + cband[c] + offsets[i]];
+                        T g = image[loc + c + offsets[i]] - image[loc + cb + offsets[i]];
                         prv += g -= prv;
                         group[i] = mags(g);
                         maxval = std::max(maxval, mags(g));
@@ -413,29 +422,25 @@ template <typename T = uint8_t>
 static int encode_best(const T *image, oBits& s, encs &info)
 {
     static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
+    if (check_info(info))
+        return check_info(info);
     // Best block traversal order in most cases
     const uint8_t xlut[16] = { 0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3 };
     const uint8_t ylut[16] = { 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3 };
     const size_t xsize(info.xsize), ysize(info.ysize), bands(info.nbands), * cband(info.cband);
-    if (xsize == 0 || xsize > 0x10000ull || ysize == 0 || ysize > 0x10000ull || 0 == bands)
-        return 1;
-    // Check band mapping
-    for (size_t c = 0; c < bands; c++)
-        if (cband[c] >= bands)
-            return 2; // Band mapping error
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     // Running code length, start with nominal value
-    size_t runbits[QB3_MAXBANDS];
+    size_t runbits[QB3_MAXBANDS] = {};
     // Previous value, per band
-    T prev[QB3_MAXBANDS];
+    T prev[QB3_MAXBANDS] = {};
     for (size_t c = 0; c < bands; c++) {
         runbits[c] = info.runbits[c];
         prev[c] = static_cast<T>(info.prev[c]);
     }
-    size_t offsets[B2];
+    size_t offsets[B2] = {};
     for (size_t i = 0; i < B2; i++)
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
-    T group[B2]; // Current 2D group to encode, as array
+    T group[B2] = {}; // Current 2D group to encode, as array
     for (size_t y = 0; y < ysize; y += B) {
         // If the last row is partial, roll it up
         if (y + B > ysize)
@@ -450,8 +455,9 @@ static int encode_best(const T *image, oBits& s, encs &info)
                 // Collect the block for this band, convert to running delta mag-sign
                 auto prv = prev[c];
                 if (c != cband[c]) {
+                    auto cb = cband[c];
                     for (size_t i = 0; i < B2; i++) {
-                        T g = image[loc + c + offsets[i]] - image[loc + cband[c] + offsets[i]];
+                        T g = image[loc + c + offsets[i]] - image[loc + cb + offsets[i]];
                         prv += g -= prv;
                         group[i] = mags(g);
                         maxval = std::max(maxval, mags(g));

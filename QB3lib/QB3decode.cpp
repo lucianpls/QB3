@@ -24,47 +24,6 @@ void qb3_destroy_decoder(decsp p) {
     delete p;
 }
 
-bool qb3_set_decoder_coreband(decsp p, size_t bands, const size_t* cband) {
-    if (bands != p->nbands)
-        return false; // Incorrect band number
-    // Store the new mapping
-    for (size_t i = 0; i < bands; i++)
-        p->cband[i] = (cband[i] < bands) ? cband[i] : i;
-    return true;
-}
-
-bool qb3_set_decoder_quanta(decsp p, size_t q) {
-    p->quanta = 1;
-    if (q < 1) // Quanta of zero if not valid
-        return false;
-    p->quanta = q;
-    if (q == 1) // No quantization
-        return true;
-    // Check the quanta value agains the max positive by type
-    bool error = false;
-    switch (p->type) {
-#define TOO_LARGE(Q, T) (Q > uint64_t(std::numeric_limits<int8_t>::max()))
-    case qb3_dtype::QB3_I8:
-        error |= TOO_LARGE(p->quanta, int8_t);
-    case qb3_dtype::QB3_U8:
-        error |= TOO_LARGE(p->quanta, uint8_t);
-    case qb3_dtype::QB3_I16:
-        error |= TOO_LARGE(p->quanta, int16_t);
-    case qb3_dtype::QB3_U16:
-        error |= TOO_LARGE(p->quanta, uint16_t);
-    case qb3_dtype::QB3_I32:
-        error |= TOO_LARGE(p->quanta, int32_t);
-    case qb3_dtype::QB3_U32:
-        error |= TOO_LARGE(p->quanta, uint32_t);
-    case qb3_dtype::QB3_I64:
-        error |= TOO_LARGE(p->quanta, int64_t);
-    } // data type
-#undef TOO_LARGE
-    if (error)
-        p->quanta = 1;
-    return !error;
-}
-
 size_t qb3_decoded_size(const decsp p) {
     return p->xsize * p->ysize * p->nbands * typesizes[static_cast<int>(p->type)];
 }
@@ -89,7 +48,7 @@ static void dequantize(T* d, const decsp p) {
     }
 }
 
-// Check a 4 byte signature, in the lower 316its of val
+// Check a 2 byte signature
 static bool check_sig(uint64_t val, const char *sig) {
     uint8_t c0 = static_cast<uint8_t>(sig[0]);
     uint8_t c1 = static_cast<uint8_t>(sig[1]);
@@ -102,14 +61,12 @@ static bool check_sig(uint64_t val, const char *sig) {
 decsp qb3_read_start(void* source, size_t source_size, size_t *image_size) {
     if (source_size < QB3_HDRSZ + 4 || nullptr == image_size)
         return nullptr; // Too short to be a QB3 format stream
-    auto p = new decs;
-    memset(p, 0, sizeof(decs));
     iBits s(reinterpret_cast<uint8_t*>(source), source_size);
     auto val = s.pull(64);
-    if (!check_sig(val, "QB") || !check_sig(val >> 16, "3\200")) {
-        delete p;
+    if (!check_sig(val, "QB") || !check_sig(val >> 16, "3\200"))
         return nullptr;
-    }
+    auto p = new decs;
+    memset(p, 0, sizeof(decs));
     val >>= 32;
     p->xsize = 1 + (val & 0xffff);
     val >>= 16;
@@ -281,11 +238,6 @@ size_t deRLE0FFFFSize(const uint8_t* s, size_t slen) {
     return count;
 }
 
-static size_t raw_size(decsp const& p) {
-    return p->xsize * p->ysize * p->nbands * typesizes[p->type];
-}
-
-
 // returns 0 if an error is detected
 // TODO: Error reporting
 // source points to data to decode
@@ -297,7 +249,7 @@ static size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination
     // If the data is stored and size is right, just copy it
     if (p->mode == qb3_mode::QB3M_STORED) {
         // Only if the size is what we expect
-        if (src_sz != raw_size(p)) {
+        if (src_sz != qb3_decoded_size(p)) {
             p->error = QB3E_EINV;
             return 0;
         }
