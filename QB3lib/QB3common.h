@@ -40,7 +40,7 @@ constexpr size_t B2(B * B);
 #endif
 
 #if defined(_WIN32)
-// rank of top set bit, result is undefined for val == 0
+// blog2 of val, result is undefined for val == 0
 static size_t topbit(uint64_t val) {
     return 63 - __lzcnt64(val);
 }
@@ -59,11 +59,14 @@ static size_t setbits16(uint64_t val) {
 }
 
 #else // no builtins, portable C
-static size_t topbit(uint64_t val) {
-    unsigned r = 0;
-    while (val >>= 1)
-        r++;
-    return r;
+// blog2 of val, result is undefined for val == 0
+static size_t topbit(uint64_t v) {
+    size_t r, t;
+    r = size_t(0 != (v >> 32)) << 5; v >>= r;
+    t = size_t(0 != (v >> 16)) << 4; v >>= t; r |= t;
+    t = size_t(0 != (v >> 8)) << 3;  v >>= t; r |= t;
+    t = size_t(0 != (v >> 4)) << 2;  v >>= t; r |= t;
+    return r + ((0xffffaa50ull >> (v << 1)) & 0x3);
 }
 
 // My own portable byte bitcount
