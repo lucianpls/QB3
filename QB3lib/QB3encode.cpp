@@ -15,6 +15,7 @@ Content: C API QB3 encoding
 Contributors:  Lucian Plesea
 */
 
+#pragma warning(disable:4127) // conditional expression is constant
 #include "QB3encode.h"
 #include <limits>
 // For memcpy
@@ -39,9 +40,9 @@ encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt
     p->mode = QB3M_DEFAULT; // Base
     // Start with no inter-band differential
     for (size_t c = 0; c < bands; c++) {
-        p->runbits[c] = 0;
-        p->prev[c] = 0;
-        p->cband[c] = c;
+        p->band[c].runbits = 0;
+        p->band[c].prev = 0;
+        p->cband[c] = static_cast<uint8_t>(c);
     }
     // For 3 or 4 bands we assume RGB(A) input and use R-G and B-G
     if (bands == 3 || bands == 4)
@@ -59,7 +60,7 @@ bool qb3_set_encoder_coreband(encsp p, size_t bands, size_t *cband) {
         return false; // Incorrect band number
     // Set it, make sure it's not out of spec
     for (size_t i = 0; i < bands; i++)
-        p->cband[i] = (cband[i] < bands) ? cband[i] : i;
+        p->cband[i] = static_cast<uint8_t>((cband[i] < bands) ? cband[i] : i);
     // Force core bands to be independent
     for (size_t i = 0; i < bands; i++)
         if (p->cband[i] != i)
@@ -131,7 +132,7 @@ qb3_mode qb3_set_encoder_mode(encsp p, qb3_mode mode) {
 
 // Quantize in place then encode the source, by type
 template<typename T>
-bool quantize(T* source, oBits& s, encs& p) {
+bool quantize(T* source, oBits& , encs& p) {
     size_t nV = p.xsize * p.ysize * p.nbands; // Number of values
     T q = static_cast<T>(p.quanta);
     if (q == 2) { // Easy to optimize for 2
@@ -211,8 +212,8 @@ void static  write_quanta_header(encsp p, oBits& s) {
     s.push(p->quanta, qbytes);
 }
 
-// Data header has no knwon size
-void static write_data_header(encsp p, oBits& s) {
+// Data header has no known size
+void static write_data_header(encsp, oBits& s) {
     push_sig("DT", s);
 }
 
@@ -402,7 +403,7 @@ static size_t raw_size(encsp const &p) {
 
 // The encode public API, returns 0 if an error is detected
 size_t qb3_encode(encsp p, void* source, void* destination) {
-    auto mode = p->mode; // save the user chosen mode
+    auto const mode = p->mode; // save the user chosen mode
     // Turn off the RLE for now
     bool rle = (mode == qb3_mode::QB3M_RLE || mode == qb3_mode::QB3M_CF_RLE);
     if (rle)
@@ -481,7 +482,6 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
     if (!p->error && raw_size(p) <= len) {
         // new stream, same buffer
         oBits sraw(d);
-        auto mode = p->mode; // save the user chosen mode
         p->mode = QB3M_STORED; // Force raw mode
         write_headers(p, sraw);
         if (p->error)

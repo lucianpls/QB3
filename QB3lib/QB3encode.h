@@ -126,9 +126,9 @@ static std::pair<size_t, uint64_t> qb3csz(uint64_t val, size_t rung) {
     uint64_t top = val >> rung;
     uint64_t tb = 1ull << rung;
     return std::make_pair<size_t, uint64_t>(rung + top + (top | nxt),
-        + ((~0ull * (1 & top)) & (((val ^ tb) << 2) | 0b11))                // 1 x LONG     -> _11
-        + ((~0ull * (1 & ~(top | nxt))) & (val << 1))                       // 0 0 SHORT    -> _x0
-        + ((~0ull * (1 & (~top & nxt))) & ((((val << 1) ^ tb) << 1) + 1))); // 0 1 NOMINAL  -> _01
+        +((~0ull * (1 & ~(top | nxt))) & (val << 1))                      // 0 0 SHORT    -> _x0
+        + ((~0ull * (1 & (~top & nxt))) & ((((val << 1) ^ tb) << 1) + 1)) // 0 1 NOMINAL  -> _01
+        + ((~0ull * (1 & top)) & (((val ^ tb) << 2) | 0b11)));            // 1 x LONG     -> _11
 }
 
 // Single value QB3 encode, possibly using tables, works for all rungs
@@ -357,15 +357,15 @@ static int encode_fast(const T* image, oBits& s, encs &info)
     // Best block traversal order in most cases
     const uint8_t xlut[16] = { 0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3 };
     const uint8_t ylut[16] = { 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3 };
-    const size_t xsize(info.xsize), ysize(info.ysize), bands(info.nbands), * cband(info.cband);
+    const size_t xsize(info.xsize), ysize(info.ysize), bands(info.nbands), *cband(info.cband);
     // Running code length, start with nominal value
     size_t runbits[QB3_MAXBANDS] = {};
     // Previous value, per band
     T prev[QB3_MAXBANDS] = {};
-    // Initialize state
+    // Initialize stage
     for (size_t c = 0; c < bands; c++) {
-        runbits[c] = info.runbits[c];
-        prev[c] = static_cast<T>(info.prev[c]);
+        runbits[c] = info.band[c].runbits;
+        prev[c] = static_cast<T>(info.band[c].prev);
     }
     size_t offsets[B2] = {};
     for (size_t i = 0; i < B2; i++)
@@ -408,10 +408,10 @@ static int encode_fast(const T* image, oBits& s, encs &info)
             }
         }
     }
-    // Save the state
+    // Save the stage
     for (size_t c = 0; c < bands; c++) {
-        info.prev[c] = static_cast<size_t>(prev[c]);
-        info.runbits[c] = runbits[c];
+        info.band[c].prev = static_cast<size_t>(prev[c]);
+        info.band[c].runbits = runbits[c];
     }
     return 0;
 }
@@ -427,15 +427,15 @@ static int encode_best(const T *image, oBits& s, encs &info)
     // Best block traversal order in most cases
     const uint8_t xlut[16] = { 0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3 };
     const uint8_t ylut[16] = { 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3 };
-    const size_t xsize(info.xsize), ysize(info.ysize), bands(info.nbands), * cband(info.cband);
+    const size_t xsize(info.xsize), ysize(info.ysize), bands(info.nbands), *cband(info.cband);
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     // Running code length, start with nominal value
     size_t runbits[QB3_MAXBANDS] = {};
     // Previous value, per band
     T prev[QB3_MAXBANDS] = {};
     for (size_t c = 0; c < bands; c++) {
-        runbits[c] = info.runbits[c];
-        prev[c] = static_cast<T>(info.prev[c]);
+        runbits[c] = info.band[c].runbits;
+        prev[c] = static_cast<T>(info.band[c].prev);
     }
     size_t offsets[B2] = {};
     for (size_t i = 0; i < B2; i++)
@@ -494,10 +494,10 @@ static int encode_best(const T *image, oBits& s, encs &info)
             }
         }
     }
-    // Save the state
+    // Save the stage
     for (size_t c = 0; c < bands; c++) {
-        info.prev[c] = static_cast<size_t>(prev[c]);
-        info.runbits[c] = runbits[c];
+        info.band[c].prev = static_cast<size_t>(prev[c]);
+        info.band[c].runbits = runbits[c];
     }
     return 0;
 }

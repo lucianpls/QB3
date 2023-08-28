@@ -80,22 +80,26 @@ static size_t setbits16(uint64_t val) {
 
 #endif
 
+struct band_state {
+    size_t prev, runbits;
+};
+
 // Encoder control structure
 struct encs {
     size_t xsize;
     size_t ysize;
     size_t nbands;
     size_t quanta;
+
+    // Persistent stage by band
+    band_state band[QB3_MAXBANDS];
     // band which will be subtracted, by band
     size_t cband[QB3_MAXBANDS];
 
-    // end state
-    size_t prev[QB3_MAXBANDS];
-    size_t runbits[QB3_MAXBANDS];
+    int error; // Holds the code for error, 0 if everything is fine
 
     qb3_mode mode;
     qb3_dtype type;
-    int error; // Holds the code for error, 0 if everything is fine
     bool away; // Round up instead of down when quantizing
 };
 
@@ -105,12 +109,13 @@ struct decs {
     size_t ysize;
     size_t nbands;
     size_t quanta;
-    // band which will be subtracted, by band
-    size_t cband[QB3_MAXBANDS];
+    int error;
+    int stage;
+
+    // band which will be added, by band
+    uint8_t cband[QB3_MAXBANDS];
     qb3_mode mode;
     qb3_dtype type;
-    int error;
-    int state;
 
     // Input buffer
     uint8_t* s_in;

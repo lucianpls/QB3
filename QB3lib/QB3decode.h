@@ -308,7 +308,7 @@ static T magsmul(T val, T cf) {
 // reports most but not all errors, for example if the input stream is too short for the last block
 template<typename T>
 static bool decode(uint8_t *src, size_t len, T* image, 
-    size_t xsize, size_t ysize, size_t bands, size_t *cband)
+    size_t xsize, size_t ysize, size_t bands, uint8_t *cband)
 {
     static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
     // Best block traversal order in most cases
@@ -363,7 +363,7 @@ static bool decode(uint8_t *src, size_t len, T* image,
                         cfrung = (rung + cs) & NORM_MASK;
                         failed |= (rung == cfrung);
                     }
-                    
+
                     if (rung | cfrung) { // 0 < cfrung < 63
                         if (sizeof(T) == 8 && (cfrung + abits) > 62) {
                             s.advance(abits);

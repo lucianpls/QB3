@@ -15,6 +15,7 @@ Content: C API QB3 decoding
 Contributors:  Lucian Plesea
 */
 
+#pragma warning(disable:4127) // conditional expression is constant
 #include "QB3decode.h"
 // For memset, memcpy
 #include <cstring>
@@ -96,15 +97,15 @@ decsp qb3_read_start(void* source, size_t source_size, size_t *image_size) {
     image_size[2] = p->nbands;
 
     p->error = QB3E_OK;
-    p->state = 1; // Read main header
+    p->stage = 1; // Read main header
     return p; // Looks reasonable
 }
 
 // read the rest of the qb3 stream metadata
 // Returns true if no failure is detected and (first) IDAT is found
 bool qb3_read_info(decsp p) {
-    // Check that the input structure is in the correct state
-    if (p->state != 1 || p->error || !p->s_in || p->s_size < 4) {
+    // Check that the input structure is in the correct stage
+    if (p->stage != 1 || p->error || !p->s_in || p->s_size < 4) {
         if (QB3E_OK == p->error)
             p->error = QB3E_EINV;
         return false; // Didn't work
@@ -151,14 +152,14 @@ bool qb3_read_info(decsp p) {
             if (p->s_size > used) { // Should have some data
                 p->s_in += used;
                 p->s_size -= used;
-                p->state = 2; // Seen data header
+                p->stage = 2; // Seen data header
             }
         }
         else { // Unknown chunk
             p->error = QB3E_UNKN;
         }
-    } while (p->state != 2 && QB3E_OK == p->error && !s.empty());
-    if (QB3E_OK == p->error && 2 != p->state) // Should be s.empty()
+    } while (p->stage != 2 && QB3E_OK == p->error && !s.empty());
+    if (QB3E_OK == p->error && 2 != p->stage) // Should be s.empty()
         p->error = QB3E_EINV; // not expected
     return QB3E_OK == p->error;
 }
@@ -326,7 +327,7 @@ static size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination
 // Call after read_header to read the actual data
 size_t qb3_read_data(decsp p, void* destination) {
     // Check that it was a QB3 file
-    if (p->state != 2 || p->error != QB3E_OK
+    if (p->stage != 2 || p->error != QB3E_OK
         || p->s_in == nullptr || p->s_size == 0) {
         if (p->error == QB3E_OK)
             p->error = QB3E_EINV;
