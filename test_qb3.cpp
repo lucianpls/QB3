@@ -48,73 +48,6 @@ vector<outT> toplus(vector<inT>& v, outT m) {
     return result;
 }
 
-// Adds m instead of multiplying
-template<typename T>
-void check_plus(vector<uint8_t>& image, const Raster& raster, uint64_t m, int main_band = 0, bool fast = 0) {
-    size_t xsize = raster.size.x;
-    size_t ysize = raster.size.y;
-    size_t bands = raster.size.c;
-    high_resolution_clock::time_point t1, t2;
-    double time_span;
-
-    auto img = toplus(image, static_cast<T>(m));
-    auto tp = sizeof(T) == 8 ? qb3_dtype::QB3_I64 : sizeof(T) == 4 ? qb3_dtype::QB3_I32 :
-        sizeof(T) == 2 ? qb3_dtype::QB3_I16 : qb3_dtype::QB3_I8;
-    auto qenc = qb3_create_encoder(xsize, ysize, bands, tp);
-    vector<uint8_t> outvec(qb3_max_encoded_size(qenc));
-
-    if (main_band != 1) {
-        std::vector<size_t> cbands(bands);
-        if (-1 == main_band)
-            for (size_t i = 0; i < bands; i++)
-                cbands[i] = i;
-        qb3_set_encoder_coreband(qenc, bands, cbands.data());
-    }
-    qb3_set_encoder_mode(qenc, fast ? qb3_mode::QB3M_BASE : qb3_mode::QB3M_BEST);
-    t1 = high_resolution_clock::now();
-    auto outsize = qb3_encode(qenc, static_cast<void*>(img.data()), outvec.data());
-    t2 = high_resolution_clock::now();
-    time_span = duration_cast<duration<double>>(t2 - t1).count();
-
-    if (fast)
-        cout << "Fast ";
-    if (m != 1)
-        cout << "Sum " << m;
-    cout << " \tBPV " << sizeof(T) << '\t' << outsize << "\t"
-        << outsize * 100.0 / image.size() / sizeof(T) << "\t"
-        << time_span << "\t";
-
-    std::vector<T> re(xsize * ysize * bands);
-
-    auto qdec = qb3_create_raw_decoder(xsize, ysize, bands, tp);
-    if (main_band != 1) {
-        std::vector<size_t> cbands(bands);
-        if (-1 == main_band)
-            for (size_t i = 0; i < bands; i++)
-                cbands[i] = i;
-        qb3_set_decoder_coreband(qdec, bands, cbands.data());
-    }
-    t1 = high_resolution_clock::now();
-    qb3_decode(qdec, outvec.data(), outsize, re.data());
-    t2 = high_resolution_clock::now();
-    qb3_destroy_decoder(qdec);
-
-    time_span = duration_cast<duration<double>>(t2 - t1).count();
-    cout << time_span;
-
-    if (img != re) {
-        for (size_t i = 0; i < img.size(); i++)
-            if (img[i] != re[i]) {
-                cout << endl << "Difference at " << i << " "
-                    << img[i] << " " << re[i];
-                cout << endl << "y = " << i / (xsize * bands) <<
-                    " x = " << (i / bands) % xsize <<
-                    " c = " << i % bands;
-                break;
-            }
-    }
-}
-
 template<typename T>
 void check(vector<uint8_t> &image, const Raster &raster,
     uint64_t m, int main_band = 0,
@@ -374,11 +307,6 @@ int main(int argc, char **argv)
             cout << "Decode time " << time_span << " rate " << image.size() / time_span / 1024 / 1024 << " MB/s" << endl;
 
             cout << "Size\tRatio %\tEnc (MB/s)\t(s)\tDec (MB/s)\t(s)\tT_Size\n\n";
-
-            // Check that offsetting the input around max doesn't really change the compression
-            // This is obvious because only differences are encoded
-            // check_plus<uint8_t>(image, raster, 127, 1, 1);
-            // cout << endl;
 
             // The sign really messes things up for normal images, because transitions through 128 are frequent
             // and become massive
