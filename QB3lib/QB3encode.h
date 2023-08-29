@@ -288,24 +288,17 @@ static void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung) {
         // First, encode trung using code-switch with the change bit cleared
         acc |= (cs & (TBLMASK - 1)) << abits;
         abits += cs >> 12;
-        // Then encode cfrung, using code-switch from trung, 
-        // skip the change bit, since rung will always be different
-        // cfrung - trung is never 0
+        // Then encode cfrung, using code-switch from trung, without the flag bit
         cs = CSW[UBITS][(cfrung - trung) & ((1ull << UBITS) - 1)];
         acc |= (cs & (TBLMASK - 1)) << (abits - 1);
         abits += static_cast<size_t>(cs >> 12) - 1;
-        if (cfrung > 1) {
-            auto p = qb3csztbl(cf ^ (1ull << cfrung), cfrung - 1); // Can't overflow
-            if (p.first + abits > 64) { // Overflow, push the accumulator
-                bits.push(acc, abits);
-                acc = abits = 0;
-            }
-            acc |= p.second << abits;
-            abits += p.first;
+        auto p = qb3csztbl(cf ^ (1ull << cfrung), cfrung - 1); // Can't overflow
+        if (p.first + abits > 64) { // Overflow, push the accumulator
+            bits.push(acc, abits);
+            acc = abits = 0;
         }
-        else { // single bit, there is enough space, cfrung 0 or 1, save only the bottom bit
-            acc |= static_cast<uint64_t>(cf - static_cast<T>(cfrung * 2)) << abits++;
-        }
+        acc |= p.second << abits;
+        abits += p.first;
         if (0 == trung) { // encode the group bits directly, saves the flag bit
             if (abits + B2 > 64) {
                 bits.push(acc, abits);
