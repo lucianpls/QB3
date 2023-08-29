@@ -33,6 +33,26 @@ qb3_dtype qb3_get_type(const decsp p) {
     return p->type;
 }
 
+qb3_mode qb3_get_mode(const decsp p) {
+    if (p->stage != 2)
+        return qb3_mode::QB3M_INVALID;
+    return p->mode;
+}
+
+uint64_t qb3_get_quanta(const decsp p) {
+    if (p->stage != 2)
+        return 0; // Error
+    return p->quanta;
+}
+
+bool qb3_get_coreband(const decsp p, size_t *coreband) {
+    if (p->stage != 2)
+        return false; // Error
+    for (int c = 0; c < p->nbands; c++)
+        coreband[c] = p->cband[c];
+    return true;
+}
+
 // Integer multiply but don't overflow, at least on the positive side
 template<typename T>
 static void dequantize(T* d, const decsp p) {

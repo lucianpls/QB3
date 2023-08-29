@@ -51,7 +51,8 @@ enum qb3_mode {
     QB3M_RLE = 2, // BASE + RLE
     QB3M_CF_RLE = 3, // BASE + CF + RLE
     QB3M_BEST = 3,
-    QB3M_STORED = 255 // Raw bypass
+    QB3M_STORED = 255, // Raw bypass
+    QB3M_INVALID = -1 // Invalid mode
 }; // Best compression, one of the above
 
 // Errors
@@ -103,20 +104,6 @@ DLLEXPORT int qb3_get_encoder_state(encsp p);
 
 // In QB3decode.cpp
 
-// To be used by raw and formatted QB3 streams
-DLLEXPORT void qb3_destroy_decoder(decsp p);
-
-//// Raw functions
-//DLLEXPORT decsp qb3_create_raw_decoder(size_t width, size_t height, size_t bands, qb3_dtype dt);
-//
-//DLLEXPORT size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination);
-//
-DLLEXPORT size_t qb3_decoded_size(const decsp p);
-
-DLLEXPORT qb3_dtype qb3_get_type(const decsp p);
-
-// Formatted stream decode functions
-
 // Starts reading a formatted QB3 source. Reads the main header, which only contains the output size information
 // returns nullptr if it fails, usually because the source is not in the correct format
 // If successful, size containts 3 values, x size, y size and number of bands
@@ -127,6 +114,23 @@ DLLEXPORT bool qb3_read_info(decsp p);
 
 // Call after qb3_read_info, reads all the data, returns bytes read
 DLLEXPORT size_t qb3_read_data(decsp p, void* destination);
+
+DLLEXPORT void qb3_destroy_decoder(decsp p);
+
+DLLEXPORT size_t qb3_decoded_size(const decsp p);
+
+DLLEXPORT qb3_dtype qb3_get_type(const decsp p);
+
+// Query settings, valid after qb3_read_info
+
+// Encoding mode used, returns QB3M_INVALID if failed
+DLLEXPORT qb3_mode qb3_get_mode(const decsp p);
+
+// Returns the number of quantization bits used, returns 0 if failed
+DLLEXPORT size_t qb3_get_quanta(const decsp p);
+
+// Sets the cband array and returns true if successful
+DLLEXPORT bool qb3_get_coreband(const decsp p, size_t *cband);
 
 #if defined(__cplusplus)
 }

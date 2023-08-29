@@ -372,7 +372,7 @@ static bool decode(uint8_t *src, size_t len, T* image,
                         }
                         // when rung != cfrung, cfrung is encoded one rung below and the rung bit is set
                         auto p = qb3dsztbl(acc, cfrung - T(read_cfrung));
-                        T cf = static_cast<T>(p.second + 2 + (T(read_cfrung) << cfrung));
+                        T cf = static_cast<T>(p.second + 2 + (uint64_t(read_cfrung) << cfrung));
                         s.advance(abits + p.first);
                         acc = s.peek();
                         if (rung > 0) {

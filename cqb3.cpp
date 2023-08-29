@@ -38,9 +38,11 @@ struct options {
         trim(false),
         rle(false), // non-default RLE (off for best, on for fast)
         verbose(false), 
-        decode(false) 
+        decode(false),
+        quanta(0)
     {};
 
+    uint64_t quanta;
     string in_fname;
     string out_fname;
     string error;
@@ -61,6 +63,7 @@ int Usage(const options &opt) {
         << "\n"
         << "Compression only options:\n"
         << "\t-b : best compression\n"
+        << "\t-q <n> : quanta\n"
         << "\t-r : reverse RLE behavior, off for best, on for fast\n"
         << "\t     RLE is only used if applicable\n"
         << "\t-t : trim input to multiple of 4x4 pixels\n"
@@ -102,6 +105,11 @@ bool parse_args(int argc, char** argv, options& opt) {
                 break;
             case 't':
                 opt.trim = true;
+                break;
+            case 'q':
+                opt.quanta = 2; // Default
+                if ((i < argc) && isdigit(argv[i + 1][0]))
+                    opt.quanta = strtoull(argv[++i], nullptr, 10);
                 break;
             case 'm':
                 // The next parameter is a comma separated band list if it starts with a digit
@@ -178,6 +186,18 @@ bool parse_args(int argc, char** argv, options& opt) {
     return true;
 }
 
+const char *mode_string(qb3_mode m) {
+    switch (m) {
+    case QB3M_BASE: return "Base";
+    case QB3M_CF: return "CF";
+    case QB3M_RLE: return "Base + RLE";
+    case QB3M_CF_RLE: return "CF + RLE";
+    case QB3M_STORED: return "Stored";
+    default:
+        return "Unknown mode";
+    }
+}
+
 int decode_main(options& opts) {
     string fname = opts.in_fname;
     FILE* f = fopen(fname.c_str(), "rb");
@@ -211,6 +231,9 @@ int decode_main(options& opts) {
             cout << "Input:\nSize " << src.size() << " Image "
                 << image_size[0] << "x" << image_size[1] << "@"
                 << image_size[2] << endl;
+            cout << "QB3 mode :" << mode_string(qb3_get_mode(qdec)) << endl;
+            if (qb3_get_quanta(qdec) > 1)
+                cout << " Quanta " << qb3_get_quanta(qdec) << endl;
         }
         raw.resize(qb3_decoded_size(qdec));
         auto t1 = high_resolution_clock::now();
@@ -232,13 +255,20 @@ int decode_main(options& opts) {
     auto dt = qb3_get_type(qdec);
     qb3_destroy_decoder(qdec);
     if (opts.verbose) {
-        cerr << "Decode time: " << time_span << " rate: "
+        cerr << "Decode time: " << time_span << "s, rate: "
             << raw.size() / time_span / 1024 / 1024 << " MB/s\n";
     }
 
     if (dt != QB3_U8 && dt != QB3_U16) {
         cerr << "Only 8 and 16 bit PNG supported as output";
         return 1;
+    }
+
+    if (dt == QB3_U16) {
+        // Bug in libicd, it expects input 16 bit data to be in big endian
+        uint16_t * p = (uint16_t*)raw.data();
+        for (size_t i = 0; i < raw.size() / 2; ++i)
+            p[i] = (p[i] << 8) | (p[i] >> 8);
     }
 
     // Convert to PNG using libicd
@@ -336,12 +366,12 @@ int encode_main(options& opts) {
     }
 
     if (opts.verbose)
-        cout << "Image " << raster.size.x << "x" << raster.size.y << "@"
-            << raster.size.c << "\nSize " << fsize
-            << ((raster.dt != ICDT_Byte) ? " 16bit\n" : "\n");
+        cout << "Input " << raster.size.x << "x" << raster.size.y << "@"
+        << raster.size.c << "\nSize " << fsize
+        << ((raster.dt != ICDT_Byte) ? " 16bit\n" : "\n");
 
     if (raster.size.x < 4 || raster.size.y < 4) {
-        cerr << "QB3 requires input size to be a multiple of 4\n";
+        cerr << "QB3 requires input size between 4 and 65536 pixels\n";
         return 2;
     }
 
@@ -358,7 +388,7 @@ int encode_main(options& opts) {
 
     if (opts.verbose)
         cerr << "Decode time: " << time_span << "s\nRatio " << fsize * 100.0 / image.size() << "%, rate: "
-        << image.size() / time_span / 1024 / 1024 << " MB/s\n";
+        << image.size() / time_span / 1024 / 1024 << " MB/s\n\n";
 
     if ((raster.size.x % 4 || raster.size.y % 4) && opts.trim) {
         trim(raster, image);
@@ -398,6 +428,7 @@ int encode_main(options& opts) {
         if (!success)
             cerr << "Invalid band mapping, adjusted\n";
     }
+
     try {
         high_resolution_clock::time_point t1, t2;
         // Pick a mode
@@ -412,6 +443,14 @@ int encode_main(options& opts) {
             }
         }
         qb3_set_encoder_mode(qenc, mode);
+        if (opts.quanta > 1) {
+            if (!qb3_set_encoder_quanta(qenc, opts.quanta, true)) {
+                cerr << "Invalid quanta\n";
+                throw 1;
+            } else if (opts.verbose) {
+                cout << "Lossy compression, quantized by " << opts.quanta << endl;
+            }
+        }
         t1 = high_resolution_clock::now();
         outsize = qb3_encode(qenc, static_cast<void*>(image.data()), outvec.data());
         t2 = high_resolution_clock::now();
@@ -434,10 +473,10 @@ int encode_main(options& opts) {
     //#endif
 
     if (opts.verbose) {
-        cerr << "Output\nSize: " << outsize << "\nEncode time : " << time_span << "s\nRatio "
-            << outsize * 100.0 / image.size() << "%, encode rate : "
-            << image.size() / time_span / 1024 / 1024 << " MB/s\n";
-        cerr << outsize * 100.0 / fsize << "% of the input\n";
+        cout << "Output\nSize: " << outsize << "\nEncode time : " << time_span << "s\n"
+            "Ratio " << outsize * 100.0 / image.size() << "%, "
+            "rate : " << image.size() / time_span / 1024 / 1024 << " MB/s\n";
+        cout << outsize * 100.0 / fsize << "% of the input\n";
     }
 
     f = fopen(opts.out_fname.c_str(), "wb");

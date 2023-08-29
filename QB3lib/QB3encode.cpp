@@ -165,16 +165,6 @@ void static push_sig(const char* sig, oBits& s) {
 void static write_qb3_header(encsp p, oBits& s) {
     // QB3 signature is 4 bytes
     s.push(*reinterpret_cast<const uint32_t*>("QB3\200"), 32);
-    // Always start at byte boundary
-    if (p->xsize == 0 || p->ysize == 0
-        || p->xsize > 0xffff || p->ysize > 0xffff
-        || p->nbands > QB3_MAXBANDS
-        || p->type > QB3_U64
-        ) {
-        p->error = QB3E_EINV;
-        return;
-    }
-
     // Write xmax, ymax, num bands in low endian
     s.push((p->xsize - 1), 16);
     s.push((p->ysize - 1), 16);
@@ -203,13 +193,13 @@ void static write_cband_header(encsp p, oBits& s) {
 }
 
 // Header for step, if used
-void static  write_quanta_header(encsp p, oBits& s) {
+void static write_quanta_header(encsp p, oBits& s) {
     if (p->quanta < 2) // Is it needed
         return;
     push_sig("QV", s);
     size_t qbytes = 1 + topbit(p->quanta) / 8;
     s.push(qbytes, 16); // Payload bytes, 0 < v < 5
-    s.push(p->quanta, qbytes);
+    s.push(p->quanta, qbytes * 8);
 }
 
 // Data header has no known size
@@ -226,9 +216,9 @@ void static write_headers(encsp p, oBits& s) {
 
 // Returns the number of bytes of value c
 static uint8_t run_count(const uint8_t* s, uint8_t c, uint8_t len = 0xff) {
-    for (uint8_t count = 0; count < len; count++, s++)
+    for (uint8_t i = 0; i < len; i++, s++)
         if (c != *s)
-            return count;
+            return i;
     return len;
 }
 
@@ -353,31 +343,47 @@ static size_t RLE0FFFFSize(const uint8_t* src, size_t len) {
     return count;
 }
 
-// Separate because it needs to operate on strips to avoid excessive memory consumption
-// It might still not be sufficient
-static size_t encode_quanta(encsp p, void* source, void* destination, qb3_mode mode) {
-    // mode is the final user choice
-    oBits s(reinterpret_cast<uint8_t*>(destination));
-    write_headers(p, s);
-    if (p->error) return 0;
+static size_t raw_size(encsp const &p) {
+    return p->xsize * p->ysize * p->nbands * typesizes[p->type];
+}
 
+// ONLY QB3M_BASE and QB3M_CF are supported here
+template<typename T> static int enc(const T *source, oBits &s, encsp p)
+{
+    int error(0);
+    if (p->quanta < 2) {
+        if (p->mode == qb3_mode::QB3M_BEST)
+            error = QB3::encode_best(source, s, *p);
+        else
+            error = QB3::encode_fast(source, s, *p);
+        return error;
+    }
+
+    // Quantized encoding
+    // Use a subencoder to encode one B lines strip at a time,
+    // while keeping the running state from one strip to the next
+    // This avoids doubling memory for the input data
     encs subimg(*p);
-    // Stripe at a time, in a temporary buffer that can be modified
+    subimg.ysize = B;
     auto ysz(p->ysize);
     // In bytes
     auto linesize = p->xsize * p->nbands * typesizes[p->type];
-    // Char can be type punned 
-    std::vector<char> buffer(linesize * B);
-    subimg.ysize = B;
-    auto src = reinterpret_cast<char*>(source);
+    // Temporary data buffer for a strip
+    std::vector<char> buffer(linesize * subimg.ysize);
+    auto src = reinterpret_cast<const char*>(source);
 
 #define QENC(T) quantize(reinterpret_cast<T *>(buffer.data()), s, subimg);\
-                if (mode == qb3_mode::QB3M_BEST) \
-                    QB3::encode_best(reinterpret_cast<std::make_unsigned<T>::type *>(buffer.data()), s, subimg);\
+                if (subimg.mode == qb3_mode::QB3M_BEST) \
+                    error = QB3::encode_best(\
+                        reinterpret_cast<std::make_unsigned<T>::type *>(buffer.data()), s, subimg);\
                 else\
-                    QB3::encode_fast(reinterpret_cast<std::make_unsigned<T>::type *>(buffer.data()), s, subimg);
+                    error = QB3::encode_fast(\
+                        reinterpret_cast<std::make_unsigned<T>::type *>(buffer.data()), s, subimg);
 
-    for (size_t y = 0; y + B <= ysz; y += B) {
+    for (size_t y = 0; y < ysz; y += subimg.ysize) {
+        // Shift the last strip up to handle the edge
+        if (y + subimg.ysize > ysz)
+            src -= linesize * (y + subimg.ysize - ysz);
         memcpy(buffer.data(), src, buffer.size());
         switch (p->type) {
         case qb3_dtype::QB3_U8:  QENC(uint8_t);  break;
@@ -390,15 +396,11 @@ static size_t encode_quanta(encsp p, void* source, void* destination, qb3_mode m
         case qb3_dtype::QB3_I64: QENC(int64_t);  break;
         default: return QB3E_EINV;
         }
-        src += linesize * B;
+        src += linesize * subimg.ysize;
     }
 
-    return (p->error) ? 0 : s.tobyte();
 #undef QENC
-}
-
-static size_t raw_size(encsp const &p) {
-    return p->xsize * p->ysize * p->nbands * typesizes[p->type];
+    return error;
 }
 
 // The encode public API, returns 0 if an error is detected
@@ -409,9 +411,6 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
     if (rle)
         p->mode = (mode == qb3_mode::QB3M_RLE) ? QB3M_BASE : QB3M_CF;
 
-    if (p->quanta > 1)
-        return encode_quanta(p, source, destination, mode);
-
     uint8_t* const d = reinterpret_cast<uint8_t*>(destination);
     oBits s(d);
     // size of headers or zero if raw
@@ -420,11 +419,7 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
     data_position = (s.position() + 7) / 8; // It is byte aligned already
     if (p->error) return 0;
 
-    // ONLY QB3M_BASE and QB3M_CF are supported here
-#define ENC(T) (p->mode == QB3M_CF) ? \
-              QB3::encode_best(reinterpret_cast<const T*>(source), s, *p)\
-            : QB3::encode_fast(reinterpret_cast<const T*>(source), s, *p);
-
+#define ENC(T) enc(reinterpret_cast<const T*>(source), s, p)
     switch (p->type) {
     case qb3_dtype::QB3_U8:
     case qb3_dtype::QB3_I8:
@@ -478,7 +473,7 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
         }
     }
 
-    // See if we're better off with the raw data
+    // Maybe stored mode is better
     if (!p->error && raw_size(p) <= len) {
         // new stream, same buffer
         oBits sraw(d);
@@ -492,7 +487,6 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
         // Return the new size
         return sraw.tobyte() + raw_size(p);
     }
-
     return (p->error) ? 0 : s.tobyte();
 }
 
