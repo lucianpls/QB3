@@ -259,10 +259,8 @@ static void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung) {
     for (size_t i = 0; i < B2; i++) if (group[i])
         maxval = std::max(maxval, group[i] = T(((magsabs(group[i]) / cf) << 1) - (group[i] & 1)));
     cf -= 2; // Bias down, 0 and 1 are not used
-    auto trung = topbit(maxval | 1); // cf mode rung
-    auto cfrung = topbit(cf | 1); // rung for cf-2 value
-    // Encode the trung, with or without switch
-    // Use the wrong way switch for in-band
+    auto trung = topbit(maxval | 1); // rung for the group values
+    auto cfrung = topbit(cf | 1);    // rung for cf-2 value
     auto cs = CSW[UBITS][(trung - oldrung) & ((1ull << UBITS) - 1)];
     if ((cs >> 12) == 1) // Would be no-switch, use signal instead, it decodes to delta of zero
         cs = SIGNAL[UBITS];
@@ -298,19 +296,24 @@ static void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung) {
         abits += static_cast<size_t>(cs >> 12) - 1;
         if (cfrung > 1) {
             auto p = qb3csztbl(cf ^ (1ull << cfrung), cfrung - 1); // Can't overflow
-            bits.push(acc, abits);
-            acc = p.second;
-            abits = p.first;
+            if (p.first + abits > 64) { // Overflow, push the accumulator
+                bits.push(acc, abits);
+                acc = abits = 0;
+            }
+            acc |= p.second << abits;
+            abits += p.first;
         }
         else { // single bit, there is enough space, cfrung 0 or 1, save only the bottom bit
             acc |= static_cast<uint64_t>(cf - static_cast<T>(cfrung * 2)) << abits++;
         }
         if (0 == trung) { // encode the group bits directly, saves the flag bit
+            if (abits + B2 > 64) {
+                bits.push(acc, abits);
+                acc = abits = 0;
+            }
+            for (int i = 0; i < B2; i++)
+                acc |= static_cast<uint64_t>(group[i]) << abits++;
             bits.push(acc, abits);
-            acc = 0;
-            for (int i= 0; i < B2; i++)
-                acc |= static_cast<uint64_t>(group[i]) << i;
-            bits.push(acc, B2);
             return;
         }
     }
