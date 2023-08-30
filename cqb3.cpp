@@ -1,6 +1,5 @@
 /*
-
-Basic QB3 image encode and decode, uses libicd for input
+Content: QB3 image encode and decode utility
 
 Copyright 2023 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -179,9 +178,6 @@ bool parse_args(int argc, char** argv, options& opt) {
             opt.error = "Invalid option for QB3 decoding\n";
             return Usage(opt);
         }
-    }
-    else {
-
     }
     return true;
 }

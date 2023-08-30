@@ -1,4 +1,6 @@
 /*
+Content: QB3 encoding
+
 Copyright 2020-2023 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -9,8 +11,6 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-
-Content: QB3 encoding
 
 Contributors:  Lucian Plesea
 */
@@ -126,9 +126,9 @@ static std::pair<size_t, uint64_t> qb3csz(uint64_t val, size_t rung) {
     uint64_t top = val >> rung;
     uint64_t tb = 1ull << rung;
     return std::make_pair<size_t, uint64_t>(rung + top + (top | nxt),
-        +((~0ull * (1 & ~(top | nxt))) & (val << 1))                      // 0 0 SHORT    -> _x0
+          ((~0ull * (1 & ~(top | nxt))) & (val << 1))                     // 0 0 SHORT    -> _x0
         + ((~0ull * (1 & (~top & nxt))) & ((((val << 1) ^ tb) << 1) + 1)) // 0 1 NOMINAL  -> _01
-        + ((~0ull * (1 & top)) & (((val ^ tb) << 2) | 0b11)));            // 1 x LONG     -> _11
+        + ((~0ull * (1 & top))          & (((val ^ tb) << 2) | 0b11)));   // 1 x LONG     -> _11
 }
 
 // Single value QB3 encode, possibly using tables, works for all rungs
@@ -148,11 +148,7 @@ static void groupencode(T group[B2], T maxval, oBits& s,
     uint64_t acc = 0, size_t abits = 0)
 {
     assert(abits <= 64);
-    if (abits > 8) { // Just in case, a rung switch is 8 bits at most
-        s.push(acc, abits);
-        acc = abits = 0;
-    }
-    const size_t rung = topbit(maxval | 1); // Force at least one bit set
+    const size_t rung = topbit(maxval | 1);
     if (0 == rung) { // only 1s and 0s, rung is -1 or 0
         acc |= static_cast<uint64_t>(maxval) << abits++;
         if (0 != maxval)
@@ -167,6 +163,10 @@ static void groupencode(T group[B2], T maxval, oBits& s,
     assert(stepp > 0); // At least one rung bit should be set
     if (stepp <= B2)
         group[stepp - 1] ^= static_cast<T>(1ull << rung);
+    if (abits > 8) { // Just in case, a rung switch is 8 bits at most
+        s.push(acc, abits);
+        acc = abits = 0;
+    }
     if (6 > rung) { // Half of the group fits in 64 bits
         auto t = CRG[rung];
         for (size_t i = 0; i < B2 / 2; i++) {
@@ -343,6 +343,7 @@ static int check_info(const encs& info) {
     return 0;
 }
 
+
 // Only basic encoding
 template<typename T>
 static int encode_fast(const T* image, oBits& s, encs &info)
@@ -404,7 +405,7 @@ static int encode_fast(const T* image, oBits& s, encs &info)
             }
         }
     }
-    // Save the stage
+    // Save the state
     for (size_t c = 0; c < bands; c++) {
         info.band[c].prev = static_cast<size_t>(prev[c]);
         info.band[c].runbits = runbits[c];
@@ -474,7 +475,7 @@ static int encode_best(const T *image, oBits& s, encs &info)
                 if (0 == rung) { // only 1s and 0s, rung is -1 or 0, no point in trying cf
                     uint64_t acc = CSW[UBITS][(rung - oldrung) & ((1ull << UBITS) - 1)];
                     size_t abits = acc >> 12;
-                    acc &= 0xffull;
+                    acc &= 0xff;
                     acc |= static_cast<uint64_t>(maxval) << abits++; // Add the all-zero flag
                     if (0 != maxval)
                         for (size_t i = 0; i < B2; i++)
@@ -490,7 +491,7 @@ static int encode_best(const T *image, oBits& s, encs &info)
             }
         }
     }
-    // Save the stage
+    // Save the state
     for (size_t c = 0; c < bands; c++) {
         info.band[c].prev = static_cast<size_t>(prev[c]);
         info.band[c].runbits = runbits[c];

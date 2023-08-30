@@ -1,4 +1,6 @@
 /*
+Content: Debugging aid
+
 Copyright 2020-2023 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -93,7 +95,8 @@ void check(vector<uint8_t> &image, const Raster &raster,
     qenc = nullptr;
 
     cout << outsize << '\t' << outsize * 100.0 / image.size() / sizeof(T) 
-        << '\t' << image.size() * sizeof(T) / time_span / 1024 / 1024 << '\t' << time_span << '\t';
+        << '\t' << image.size() * sizeof(T) / time_span / 1024 / 1024 
+        << '\t' << time_span << '\t';
     if (err)
         cout << "\nFailed\n";
 
@@ -363,14 +366,20 @@ int main(int argc, char **argv)
             cout << "\nData type\n";
             check<uint64_t>(image, raster, 1, 1);
             cout << endl;
-            check<uint32_t>(image, raster, 1, 1);
-            cout << endl;
-            check<uint16_t>(image, raster, 1, 1);
-            cout << endl;
-            check<uint8_t>(image, raster, 1, 1);
+            check<uint64_t>(image, raster, 1, 1, true);
             cout << endl;
 
+            check<uint32_t>(image, raster, 1, 1);
+            cout << endl;
+            check<uint32_t>(image, raster, 1, 1, true);
+            cout << endl;
+
+            check<uint16_t>(image, raster, 1, 1);
+            cout << endl;
             check<uint16_t>(image, raster, 1, 1, true);
+            cout << endl;
+
+            check<uint8_t>(image, raster, 1, 1);
             cout << endl;
             check<uint8_t>(image, raster, 1, 1, true);
             cout << endl;

@@ -1,4 +1,6 @@
 /*
+Content: QB3 parts used by both the encoder and the decoder
+
 Copyright 2020-2023 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -11,9 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 Contributors:  Lucian Plesea
-
-Content: QB3 parts used by both the encoder and the decoder
-
 */
 
 #pragma once
@@ -147,15 +146,11 @@ static T mags(T v) {
 
 // Undo mag-sign without conditionals, as fast as C can make it
 template<typename T>
-static T smag(T v) {
-    return (v >> 1) ^ (~T(0) * (v & 1));
-}
+static T smag(T v) { return (v >> 1) ^ (~T(0) * (v & 1)); }
 
 // Absolute from mag-sign
 template<typename T>
-static T magsabs(T val) {
-    return (val >> 1) + (val & 1);
-}
+static T magsabs(T v) { return (v >> 1) + (v & 1); }
 
 // If the rung bits of the input values match 1*0*, returns the index of first 0, otherwise B2 + 1
 template<typename T>
