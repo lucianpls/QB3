@@ -352,7 +352,7 @@ template<typename T> static int enc(const T *source, oBits &s, encsp p)
 {
     int error(0);
     if (p->quanta < 2) {
-        if (p->mode == qb3_mode::QB3M_BEST)
+        if (p->mode == qb3_mode::QB3M_CF)
             error = QB3::encode_best(source, s, *p);
         else
             error = QB3::encode_fast(source, s, *p);
@@ -373,7 +373,7 @@ template<typename T> static int enc(const T *source, oBits &s, encsp p)
     auto src = reinterpret_cast<const char*>(source);
 
 #define QENC(T) quantize(reinterpret_cast<T *>(buffer.data()), s, subimg);\
-                if (subimg.mode == qb3_mode::QB3M_BEST) \
+                if (subimg.mode == qb3_mode::QB3M_CF) \
                     error = QB3::encode_best(\
                         reinterpret_cast<std::make_unsigned<T>::type *>(buffer.data()), s, subimg);\
                 else\
