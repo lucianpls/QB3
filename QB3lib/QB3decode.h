@@ -302,8 +302,8 @@ static bool gdecode(iBits &s, size_t rung, T * group, uint64_t acc, size_t abits
 // Absolute from mag-sign
 template<typename T> static T magsabs(T v) { return (v >> 1) + (v & 1); }
 
-// integer multiply val(in magsign) by cf(normal, positive)
-template<typename T> static T magsmul(T val, T cf) { return magsabs(val) * (cf << 1) - (val & 1); }
+// Multiply v(in magsign) by m(normal, positive)
+template<typename T> static T magsmul(T v, T m) { return magsabs(v) * (m << 1) - (v & 1); }
 
 // reports most but not all errors, for example if the input stream is too short for the last block
 template<typename T>
@@ -341,7 +341,6 @@ static bool decode(uint8_t *src, size_t len, T* image,
                     abits = cs >> 12;
                 }
                 acc >>= abits;
-
                 if (0 == cs || 0 != (cs & TBLMASK)) { // Normal decoding, not a signal
                     // abits is never > 8, so it's safe to call gdecode
                     auto rung = (runbits[c] + cs) & NORM_MASK;
@@ -417,7 +416,6 @@ static bool decode(uint8_t *src, size_t len, T* image,
             if (failed) break;
         } // per block
         if (failed) break;
-
         // For performance apply band delta per block stip, in linear order
         for (int c = 0; c < bands; c++) {
             if (c == cband[c]) continue;
