@@ -42,6 +42,7 @@ encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt
     for (size_t c = 0; c < bands; c++) {
         p->band[c].runbits = 0;
         p->band[c].prev = 0;
+        p->band[c].cf = 0;
         p->cband[c] = static_cast<uint8_t>(c);
     }
     // For 3 or 4 bands we assume RGB(A) input and use R-G and B-G
@@ -126,16 +127,28 @@ qb3_mode qb3_set_encoder_mode(encsp p, qb3_mode mode) {
     return p->mode;
 }
 
-//DLLEXPORT void qb3_set_encoder_raw(encsp p) {
-//    p->raw = true;
-//}
+// Round to Zero Division, no overflow
+template<typename T> static T rto0div(T x, T y) {
+    static_assert(std::is_integral<T>(), "Integer types only");
+    T r = x / y, m = x % y;
+    y = (y >> 1);
+    return r + (!(x < 0) & (m > y)) - ((x < 0) & ((m + y) < 0));
+}
 
-// Quantize in place then encode the source, by type
+// Round from Zero Division, no overflow
+template<typename T> static T rfr0div(T x, T y) {
+    static_assert(std::is_integral<T>(), "Integer types only");
+    T r = x / y, m = x % y;
+    y = (y >> 1) + (y & 1);
+    return r + (!(x < 0) & (m >= y)) - ((x < 0) & ((m + y) <= 0));
+}
+
+// Quantize source, in place
 template<typename T>
 bool quantize(T* source, oBits& , encs& p) {
     size_t nV = p.xsize * p.ysize * p.nbands; // Number of values
     T q = static_cast<T>(p.quanta);
-    if (q == 2) { // Easy to optimize for 2
+    if (q == 2) { // Easy to optimize for 2, common
         if (p.away)
             for (size_t i = 0; i < nV; i++)
                 source[i] = source[i] / 2 + source[i] % 2;
@@ -147,10 +160,10 @@ bool quantize(T* source, oBits& , encs& p) {
 
     if (p.away)
         for (size_t i = 0; i < nV; i++)
-            source[i] = QB3::rfr0div(source[i], q);
+            source[i] = rfr0div(source[i], q);
     else
         for (size_t i = 0; i < nV; i++)
-            source[i] = QB3::rto0div(source[i], q);
+            source[i] = rto0div(source[i], q);
     return 0;
 }
 
@@ -221,7 +234,6 @@ static uint8_t run_count(const uint8_t* s, uint8_t c, uint8_t len = 0xff) {
             return i;
     return len;
 }
-
 
 // Special purpose RLE encoder, only packs long sequnces of 0
 // Uses 0xff 0xff as a marker
@@ -346,6 +358,8 @@ static size_t RLE0FFFFSize(const uint8_t* src, size_t len) {
 static size_t raw_size(encsp const &p) {
     return p->xsize * p->ysize * p->nbands * typesizes[p->type];
 }
+
+int qb3_get_encoder_state(encsp p) { return p->error; }
 
 // ONLY QB3M_BASE and QB3M_CF are supported here
 template<typename T> static int enc(const T *source, oBits &s, encsp p)
@@ -490,6 +504,3 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
     return (p->error) ? 0 : s.tobyte();
 }
 
-int qb3_get_encoder_state(encsp p) {
-    return p->error;
-}

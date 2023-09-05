@@ -21,6 +21,15 @@ Contributors:  Lucian Plesea
 #include <cstring>
 #include <vector>
 
+// Main header
+// 4 sig
+// 2 xsize
+// 2 ysize
+// 1 nbands
+// 1 data type
+// 1 mode
+constexpr size_t QB3_HDRSZ = 4 + 2 + 2 + 1 + 1 + 1;
+
 void qb3_destroy_decoder(decsp p) {
     delete p;
 }

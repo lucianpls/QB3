@@ -139,7 +139,7 @@ void check(vector<uint8_t> &image, const Raster &raster,
             auto x = img[i];
             auto y = re[i];
             if (!((x == y) || ((x > y) && (y + hq >= x)) || ((y > x) && (x + hq >= y)))) {
-                cout << endl << "Difference at " << i << " "
+                cout << endl << "Difference at " << i << " expect "
                     << uint64_t(img[i]) << " != " << uint64_t(re[i]);
                 cout << endl << "y = " << i / (xsize * bands) <<
                     " x = " << (i / bands) % xsize <<
@@ -151,8 +151,8 @@ void check(vector<uint8_t> &image, const Raster &raster,
     else {
         for (size_t i = 0; i < img.size(); i++)
             if (img[i] != re[i]) {
-                cout << endl << "Difference at " << i << " "
-                    << img[i] << " " << re[i];
+                cout << endl << "Difference at " << i << " expect "
+                    << img[i] << " got " << re[i];
                 cout << endl << "y = " << i / (xsize * bands) <<
                     " x = " << (i / bands) % xsize <<
                     " c = " << i % bands;
@@ -186,7 +186,7 @@ void check(vector<uint16_t>& image, const Raster& raster, uint64_t m, int main_b
 
     std::vector<T> re(xsize * ysize * bands);
 
-    size_t image_size[3]; // Space for output values
+    size_t image_size[3] = {}; // Space for output values
     auto failed = false;
     auto expected_size = xsize * ysize * bands * 2; // 16bit data
     size_t actual_size(0);
@@ -216,16 +216,15 @@ void check(vector<uint16_t>& image, const Raster& raster, uint64_t m, int main_b
     if (fast)
         cout << "Fast";
 
-    if (img != re) {
-        for (size_t i = 0; i < img.size(); i++)
-            if (img[i] != re[i]) {
-                cout << endl << "Difference at " << i << " "
-                    << img[i] << " " << re[i];
-                cout << endl << "y = " << i / (xsize * bands) <<
-                    " x = " << (i / bands) % xsize <<
-                    " c = " << i % bands;
-                break;
-            }
+    if (img == re)
+        return;
+    for (size_t i = 0; i < img.size(); i++) if (img[i] != re[i]) {
+        cout << endl << "Difference at " << i << " "
+            << img[i] << " " << re[i];
+        cout << endl << "y = " << i / (xsize * bands) <<
+            " x = " << (i / bands) % xsize <<
+            " c = " << i % bands;
+        break;
     }
 }
 

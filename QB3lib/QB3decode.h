@@ -299,11 +299,11 @@ static bool gdecode(iBits &s, size_t rung, T * group, uint64_t acc, size_t abits
     return true;
 }
 
+// Absolute from mag-sign
+template<typename T> static T magsabs(T v) { return (v >> 1) + (v & 1); }
+
 // integer multiply val(in magsign) by cf(normal, positive)
-template<typename T>
-static T magsmul(T val, T cf) {
-    return magsabs(val) * (cf << 1) - (val & 1);
-}
+template<typename T> static T magsmul(T val, T cf) { return magsabs(val) * (cf << 1) - (val & 1); }
 
 // reports most but not all errors, for example if the input stream is too short for the last block
 template<typename T>
@@ -315,13 +315,13 @@ static bool decode(uint8_t *src, size_t len, T* image,
     const uint8_t xlut[16] = { 0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3 };
     const uint8_t ylut[16] = { 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3 };
     constexpr size_t UBITS(sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6);
-    constexpr auto LONG_MASK((1ull << (UBITS + 1)) - 1);
-    constexpr auto NORM_MASK(LONG_MASK >> 1);
-    T prev[QB3_MAXBANDS] = {}, group[B2] = {};
+    constexpr auto NORM_MASK((1ull << UBITS) - 1); // UBITS set
+    constexpr auto LONG_MASK(NORM_MASK * 2 + 1); // UBITS + 1 set
+    T prev[QB3_MAXBANDS] = {}, pcf[QB3_MAXBANDS] = {}, group[B2] = {};
     size_t runbits[QB3_MAXBANDS] = {}, offset[B2] = {};
+    const uint16_t* dsw(sizeof(T) == 1 ? DSW[3] : sizeof(T) == 2 ? DSW[4] : sizeof(T) == 4 ? DSW[5] : DSW[6]);
     for (size_t i = 0; i < B2; i++)
         offset[i] = (xsize * ylut[i] + xlut[i]) * bands;
-    const uint16_t* dsw(sizeof(T) == 1 ? DSW[3] : sizeof(T) == 2 ? DSW[4] : sizeof(T) == 4 ? DSW[5] : DSW[6]);
     iBits s(src, len);
 
     bool failed(false);
@@ -334,75 +334,87 @@ static bool decode(uint8_t *src, size_t len, T* image,
             if (x + B > xsize)
                 x = xsize - B;
             for (int c = 0; c < bands; c++) {
-                failed |= s.empty(); // Stream can't be empty here
+                failed |= s.empty();
                 uint64_t cs(0), abits(1), acc(s.peek());
                 if (acc & 1) { // Rung change
                     cs = dsw[(acc >> 1) & LONG_MASK];
                     abits = cs >> 12;
                 }
                 acc >>= abits;
-                
+
                 if (0 == cs || 0 != (cs & TBLMASK)) { // Normal decoding, not a signal
                     // abits is never > 8, so it's safe to call gdecode
                     auto rung = (runbits[c] + cs) & NORM_MASK;
                     failed |= !gdecode(s, rung, group, acc, abits);
                     runbits[c] = rung;
                 }
-                else { // signal, cf decodind
-                    bool read_cfrung = !(acc & 1); // No cfrung flag
-                    cs = dsw[(acc >> 1) & LONG_MASK];
+                else {
+                    cs = dsw[acc & LONG_MASK]; // rung, no flag
                     auto rung = (runbits[c] + cs) & NORM_MASK;
+                    failed |= (rung == NORM_MASK); // Not possible in CF encoding
                     auto cfrung(rung);
-                    failed |= (rung == 63); // can't be 63 since CF encoding looses at least one rung
-                    abits += cs >> 12;
-                    acc >>= cs >> 12;
-                    if (read_cfrung) { // read cfrung separately, no code switch flag
-                        cs = dsw[acc & LONG_MASK];
-                        abits += (cs >> 12) - 1;
-                        acc >>= (cs >> 12) - 1;
-                        cfrung = (rung + cs) & NORM_MASK;
-                        failed |= (rung == cfrung);
-                    }
-
-                    if (rung | cfrung) { // 0 < cfrung < 63
+                    acc >>= (cs >> 12) - 1;
+                    abits += (cs >> 12) - 1;
+                    T cf = pcf[c];
+                    size_t read_cfrung(0);
+                    if (acc & 1) { // different cf
+                        acc >>= 1;
+                        read_cfrung = acc & 1;
+                        abits += 2;
+                        acc >>= 1;
+                        if (0 != read_cfrung) {
+                            cs = dsw[acc & LONG_MASK];
+                            cfrung = (rung + cs) & NORM_MASK;
+                            failed |= (cfrung == rung);
+                            acc >>= (cs >> 12) - 1;
+                            abits += (cs >> 12) - 1;
+                        }
                         if (sizeof(T) == 8 && (cfrung + abits) > 62) {
                             s.advance(abits);
                             acc = s.peek();
                             abits = 0;
                         }
-                        // when rung != cfrung, cfrung is encoded one rung below and the rung bit is set
-                        auto p = qb3dsztbl(acc, cfrung - T(read_cfrung));
-                        T cf = static_cast<T>(p.second + 2 + (uint64_t(read_cfrung) << cfrung));
-                        s.advance(abits + p.first);
-                        acc = s.peek();
-                        if (rung > 0) {
+                        auto p = qb3dsztbl(acc, cfrung - read_cfrung);
+                        cf = static_cast<T>(p.second + (read_cfrung << cfrung));
+                        abits += p.first;
+                        acc >>= p.first;
+                    }
+                    else { // use old cf
+                        acc >>= 1;
+                        abits++;
+                        cfrung = topbit(cf | 1);
+                    }
+                    // Have cf and cfrung
+                    s.advance(abits);
+                    acc = s.peek();
+                    if (rung | cfrung) {
+                        if (rung > 0)
                             failed |= !gdecode(s, rung, group, acc, 0);
-                        }
-                        else { // Decode here, it is missing the all-zeros flag
+                        else { // decode group here, it is missing the all-zero flag
                             for (int i = 0; i < B2; i++, acc >>= 1)
                                 group[i] = acc & 1;
                             s.advance(B2);
                         }
-                        // Multiply by CF and get the max for the actual rung
-                        T maxval = magsmul(group[0], cf);
-                        group[0] = maxval;
+                        // Multiply group by CF and get the max for the actual rung
+                        cf += 2;
+                        T maxval(group[0] = magsmul(group[0], cf));
                         for (int i = 1; i < B2; i++) {
                             auto val = magsmul(group[i], cf);
                             if (maxval < val) maxval = val;
                             group[i] = val;
                         }
-                        failed |= 2 > maxval; // CF has to be at least 2
+                        failed |= cf > maxval;
                         runbits[c] = topbit(maxval);
+                        cf -= 2; // Stored biased down
                     }
                     else { // rung == cfrung == 0, decode here, single bit for data
-                        runbits[c] = 1ull + (acc & 1);
-                        T val((0b10 << (acc & 1)) + 1); // -2 or -3, premultiplied
-                        for (int i = 0; i < B2; i++) {
-                            acc >>= 1;
+                        runbits[c] = 1ull + cf; // rung
+                        T val((0b10 << cf) + 1); // -2 or -3 in mags, premultiplied
+                        for (int i = 0; i < B2; i++, acc >>= 1)
                             group[i] = (acc & 1) ? val : 0;
-                        }
-                        s.advance(abits + B2 + 1);
+                        s.advance(B2);
                     }
+                    pcf[c] = cf;
                 }
                 // Undo the delta encoding for this block
                 auto prv = prev[c];

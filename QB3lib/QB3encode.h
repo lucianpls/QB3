@@ -82,7 +82,10 @@ static const uint16_t csw6[] = { 0x1000, 0x6001, 0x6009, 0x6011, 0x6019, 0x6021,
 0x601d, 0x6015, 0x600d, 0x6005 };
 static const uint16_t* CSW[] = { nullptr, nullptr, nullptr, csw3, csw4, csw5, csw6 };
 
-// integer divide val(in magsign) by cf(normal)
+// Absolute from mag-sign
+template<typename T> static T magsabs(T v) { return (v >> 1) + (v & 1); }
+
+// integer divide val(in magsign) by cf(normal, positive)
 template<typename T> static T magsdiv(T val, T cf) {return ((magsabs(val) / cf) << 1) - (val & 1);}
 
 // greatest common factor (absolute) of a B2 sized vector of mag-sign values, Euclid algorithm
@@ -248,87 +251,82 @@ static void groupencode(T group[B2], T maxval, size_t oldrung, oBits& s) {
 
 // Group encode with cf
 template <typename T = uint8_t>
-static void cfgenc(oBits &bits, T group[B2], T cf, size_t oldrung) {
+static void cfgenc(oBits& bits, T group[B2], T cf, T pcf, size_t oldrung) {
     // Signal as switch to same rung, max-positive value, by UBITS
     const uint16_t SIGNAL[] = { 0x0, 0x0, 0x0, 0x5017, 0x6037, 0x7077, 0x80f7 };
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+    auto csw = CSW[UBITS];
+    // Start with the CF encoding signal
     uint64_t acc = SIGNAL[UBITS] & TBLMASK;
-    size_t abits = UBITS + 2; // SIGNAL[UBITS] >> 12;
-    // divide group values by CF and find the new maxvalue
+    size_t abits = UBITS + 2; // SIGNAL >> 12
+    // divide raw absolute group values by CF and find the new maxvalue
     T maxval = 0;
     for (size_t i = 0; i < B2; i++) if (group[i])
         maxval = std::max(maxval, group[i] = T(((magsabs(group[i]) / cf) << 1) - (group[i] & 1)));
     cf -= 2; // Bias down, 0 and 1 are not used
     auto trung = topbit(maxval | 1); // rung for the group values
     auto cfrung = topbit(cf | 1);    // rung for cf-2 value
-    auto cs = CSW[UBITS][(trung - oldrung) & ((1ull << UBITS) - 1)];
-    if ((cs >> 12) == 1) // Would be no-switch, use signal instead, it decodes to delta of zero
+    auto cs = csw[(trung - oldrung) & ((1ull << UBITS) - 1)];
+    if ((cs >> 12) == 1) // no-switch, use signal instead, it decodes to delta of zero
         cs = SIGNAL[UBITS];
-    // When trung is only somewhat larger than cfrung encode cf at same rung as data
-    if (trung >= cfrung && (trung < (cfrung + UBITS) || 0 == cfrung)) {
-        acc |= (cs & TBLMASK) << abits;
-        abits += cs >> 12;
-        if (trung == 0) { // Special encoding for single bit
-            // maxval can't be zero, so we don't use the all-zeros flag
-            // But we do need to save the CF bit
-            acc |= static_cast<uint64_t>(cf) << abits++;
-            // And the group bits
-            for (int i = 0; i < B2; i++)
-                acc |= static_cast<uint64_t>(group[i]) << abits++;
-            bits.push(acc, abits);
-            return;
+    // Always encode new rung, without the change flag
+    acc |= (cs & (TBLMASK - 1)) << (abits - 1);
+    abits += static_cast<size_t>((cs >> 12) - 1);
+    // Then encode the diff-cf flag
+    if (cf != pcf) {
+        acc |= 1ull << abits++;
+        if (trung >= cfrung && (trung < (cfrung + UBITS) || 0 == cfrung)) {
+            // cf encoded at trung
+            abits++;
+            if (0 == trung) { // Single bit encoding, maxval is 1, no need for the all-zero flag
+                acc |= static_cast<uint64_t>(cf) << abits++; // Last bit of cf
+                for (int i = 0; i < B2; i++)
+                    acc |= static_cast<uint64_t>(group[i]) << abits++;
+                bits.push(acc, abits);
+                return;
+            }
+            auto p = qb3csztbl(cf, trung);
+            bits.push(acc, abits); // could overflow, safter this way
+            acc = p.second;
+            abits = p.first;
         }
-        // Push the accumulator and the cf encoding, 0 < rung < 63
-        auto p = qb3csztbl(cf, trung);
-        bits.push(acc, abits);
-        acc = p.second;
-        abits = p.first;
-    }
-    else { // CF needs a different rung than the group, so the change is never 0
-        // First, encode trung using code-switch with the change bit cleared
-        acc |= (cs & (TBLMASK - 1)) << abits;
-        abits += cs >> 12;
-        // Then encode cfrung, using code-switch from trung, without the flag bit
-        cs = CSW[UBITS][(cfrung - trung) & ((1ull << UBITS) - 1)];
-        acc |= (cs & (TBLMASK - 1)) << (abits - 1);
-        abits += static_cast<size_t>(cs >> 12) - 1;
-        auto p = qb3csztbl(cf ^ (1ull << cfrung), cfrung - 1); // Can't overflow
-        if (p.first + abits > 64) { // Overflow, push the accumulator
-            bits.push(acc, abits);
-            acc = abits = 0;
-        }
-        acc |= p.second << abits;
-        abits += p.first;
-        if (0 == trung) { // encode the group bits directly, saves the flag bit
-            if (abits + B2 > 64) {
+        else {
+            // cf encoded with own rung, encoded as difference from trung
+            cs = csw[(cfrung - trung) & ((1ull << UBITS) - 1)]; // Never 0
+            acc |= (cs & TBLMASK) << abits;
+            abits += cs >> 12;
+            // Followed by cf itself, encoded one rung under where it should be
+            auto p = qb3csztbl(cf ^ (1ull << cfrung), cfrung - 1);
+            if (p.first + abits > 64) {
                 bits.push(acc, abits);
                 acc = abits = 0;
             }
+            acc |= p.second << abits;
+            abits += p.first;
+            // For trung == 0, save the flag bit, can't be all zeros
+            if (0 == trung) {
+                if (abits + B2 > 64) { // Large CF
+                    bits.push(acc, abits);
+                    acc = abits = 0;
+                }
+                for (int i = 0; i < B2; i++)
+                    acc |= static_cast<uint64_t>(group[i]) << abits++;
+                bits.push(acc, abits);
+                return;
+            }
+        }
+    }
+    else { // Same cf, encoded as a single zero bit
+        abits++;
+        if (0 == trung) { // Single bit group encoding, no need for the all-zero flag
             for (int i = 0; i < B2; i++)
                 acc |= static_cast<uint64_t>(group[i]) << abits++;
             bits.push(acc, abits);
             return;
         }
     }
+    // Encode the group, divided by CF
     groupencode(group, maxval, bits, acc, abits);
-}
-
-// Round to Zero Division, no overflow
-template<typename T>
-static T rto0div(T x, T y) {
-    static_assert(std::is_integral<T>(), "Integer types only");
-    T r = x / y, m = x % y;
-    y = (y >> 1);
-    return r + (!(x < 0) & (m > y)) - ((x < 0) & ((m + y) < 0));
-}
-
-// Round from Zero Division, no overflow
-template<typename T>
-static T rfr0div(T x, T y) {
-    static_assert(std::is_integral<T>(), "Integer types only");
-    T r = x / y, m = x % y;
-    y = (y >> 1) + (y & 1);
-    return r + (!(x < 0) & (m >= y)) - ((x < 0) & ((m + y) <= 0));
 }
 
 // Check that the parameters are valid
@@ -342,7 +340,6 @@ static int check_info(const encs& info) {
             return 2; // Band mapping error
     return 0;
 }
-
 
 // Only basic encoding
 template<typename T>
@@ -426,13 +423,15 @@ static int encode_best(const T *image, oBits& s, encs &info)
     const uint8_t ylut[16] = { 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3 };
     const size_t xsize(info.xsize), ysize(info.ysize), bands(info.nbands), *cband(info.cband);
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+    auto csw = CSW[UBITS];
     // Running code length, start with nominal value
     size_t runbits[QB3_MAXBANDS] = {};
-    // Previous value, per band
-    T prev[QB3_MAXBANDS] = {};
+    // Previous values, per band
+    T prev[QB3_MAXBANDS] = {}, pcf[QB3_MAXBANDS] = {};
     for (size_t c = 0; c < bands; c++) {
         runbits[c] = info.band[c].runbits;
         prev[c] = static_cast<T>(info.band[c].prev);
+        pcf[c] = static_cast<T>(info.band[c].cf);
     }
     size_t offsets[B2] = {};
     for (size_t i = 0; i < B2; i++)
@@ -472,10 +471,10 @@ static int encode_best(const T *image, oBits& s, encs &info)
                 auto oldrung = runbits[c];
                 const size_t rung = topbit(maxval | 1);
                 runbits[c] = rung;
-                if (0 == rung) { // only 1s and 0s, rung is -1 or 0, no point in trying cf
-                    uint64_t acc = CSW[UBITS][(rung - oldrung) & ((1ull << UBITS) - 1)];
+                if (0 == rung) { // only 1s and 0s, rung is -1 or 0, no cf
+                    uint64_t acc = csw[(rung - oldrung) & ((1ull << UBITS) - 1)];
                     size_t abits = acc >> 12;
-                    acc &= 0xff;
+                    acc &= TBLMASK;
                     acc |= static_cast<uint64_t>(maxval) << abits++; // Add the all-zero flag
                     if (0 != maxval)
                         for (size_t i = 0; i < B2; i++)
@@ -486,8 +485,10 @@ static int encode_best(const T *image, oBits& s, encs &info)
                 auto cf = gcf(group);
                 if (cf < 2)
                     groupencode(group, maxval, oldrung, s);
-                else // Always smaller in cf encoding
-                    cfgenc(s, group, cf, oldrung);
+                else { // Always smaller in cf encoding
+                    cfgenc(s, group, cf, pcf[c], oldrung);
+                    pcf[c] = cf - 2; // Bias
+                }
             }
         }
     }

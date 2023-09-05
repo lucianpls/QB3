@@ -27,7 +27,7 @@ Contributors:  Lucian Plesea
 #endif
 
 // Tables have 12bits of data, top 4 bits are size
-#define TBLMASK 0xfffull
+constexpr auto TBLMASK(0xfffull);
 
 // Block is 4x4 pixels
 constexpr size_t B(4);
@@ -80,7 +80,7 @@ static size_t setbits16(uint64_t val) {
 #endif
 
 struct band_state {
-    size_t prev, runbits;
+    size_t prev, runbits, cf;
 };
 
 // Encoder control structure
@@ -121,15 +121,6 @@ struct decs {
     size_t s_size;
 };
 
-// Main header
-// 4 sig
-// 2 xsize
-// 2 ysize
-// 1 nbands
-// 1 data type
-// 1 mode
-constexpr size_t QB3_HDRSZ = 4 + 2 + 2 + 1 + 1 + 1;
-
 // in decode.cpp
 extern const int typesizes[8];
 
@@ -146,11 +137,9 @@ static T mags(T v) {
 
 // Undo mag-sign without conditionals, as fast as C can make it
 template<typename T>
-static T smag(T v) { return (v >> 1) ^ (~T(0) * (v & 1)); }
-
-// Absolute from mag-sign
-template<typename T>
-static T magsabs(T v) { return (v >> 1) + (v & 1); }
+static T smag(T v) {
+    return (v >> 1) ^ (~T(0) * (v & 1));
+}
 
 // If the rung bits of the input values match 1*0*, returns the index of first 0, otherwise B2 + 1
 template<typename T>
