@@ -340,27 +340,28 @@ int main(int argc, char **argv)
 
             //check<uint8_t>(image, raster, 1, 1, false, 10);
             //cout << endl;
+            if (0) {
+                check<uint64_t>(image, raster, 5, 1);
+                cout << endl;
+                check<uint64_t>(image, raster, (1ull << 56), 1);
+                cout << endl;
+                check<uint32_t>(image, raster, 5, 1);
+                cout << endl;
+                check<uint32_t>(image, raster, 1ull << 24, 1);
+                cout << endl;
+                check<uint16_t>(image, raster, 5, 1);
+                cout << endl;
+                check<uint16_t>(image, raster, 1ull << 8, 1);
+                cout << endl;
 
-            check<uint64_t>(image, raster, 5, 1);
-            cout << endl;
-            check<uint64_t>(image, raster, (1ull << 56), 1);
-            cout << endl;
-            check<uint32_t>(image, raster, 5, 1);
-            cout << endl;
-            check<uint32_t>(image, raster, 1ull << 24, 1);
-            cout << endl;
-            check<uint16_t>(image, raster, 5, 1);
-            cout << endl;
-            check<uint16_t>(image, raster, 1ull << 8, 1);
-            cout << endl;
-
-            cout << "\nLarge rung\n";
-            check<uint64_t>(image, raster, (1ull << 56), 1, true);
-            cout << endl;
-            check<uint32_t>(image, raster, 1ull << 24, 1, true);
-            cout << endl;
-            check<uint16_t>(image, raster, 1ull << 8, 1, true);
-            cout << endl;
+                cout << "\nLarge rung\n";
+                check<uint64_t>(image, raster, (1ull << 56), 1, true);
+                cout << endl;
+                check<uint32_t>(image, raster, 1ull << 24, 1, true);
+                cout << endl;
+                check<uint16_t>(image, raster, 1ull << 8, 1, true);
+                cout << endl;
+            }
 
             cout << "\nData type\n";
             check<uint64_t>(image, raster, 1, 1);

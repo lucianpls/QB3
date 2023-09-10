@@ -18,6 +18,8 @@ Contributors:  Lucian Plesea
 #pragma once
 #include "QB3common.h"
 #include <algorithm>
+#include <iostream>
+#include <map>
 
 namespace QB3 {
 // Encoding tables for rungs up to 8, for speedup. Rung 0 and 1 are special
@@ -93,7 +95,7 @@ template<typename T> static T gcf(const T* group){
     static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
     // Work with absolute values
     int sz = 0;
-    T v[B2]; // No need to initialize
+    T v[B2] = {}; // No need to initialize
     for (int i = 0; i < B2; i++) {
         v[sz] = magsabs(group[i]);
         sz += 0 < v[sz]; // Skip the zeros
@@ -410,6 +412,81 @@ static int encode_fast(const T* image, oBits& s, encs &info)
     return 0;
 }
 
+// Dummy index encode, returns size
+template <typename T>
+static int ienc(const T grp[B2], size_t rung, size_t oldrung) {
+    const uint16_t SIGNAL[] = { 0x0, 0x0, 0x0, 0x5017, 0x6037, 0x7077, 0x80f7 };
+    constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+    constexpr auto NORM_MASK((1ull << UBITS) - 1); // UBITS set
+    auto csw = CSW[UBITS];
+
+    // Start with the CF encoding signal
+    uint64_t acc = SIGNAL[UBITS] & TBLMASK;
+    size_t abits = UBITS + 2; // SIGNAL >> 12
+
+    uint8_t buffer[50] = {} ; // 400 bits max
+    oBits os(buffer);
+
+    // Add the switch from oldrung to max rung, signal for index encoding
+    auto cs = csw[(NORM_MASK - oldrung) & ((1ull << UBITS) - 1)];
+    if ((cs >> 12) == 1) // no-switch, use signal instead, it decodes to delta of zero
+        cs = SIGNAL[UBITS];
+
+    // Always encode new rung, without the change flag
+    acc |= (cs & (TBLMASK - 1)) << (abits - 1);
+    abits += static_cast<size_t>((cs >> 12) - 1);
+
+    // Encode the real rung
+    cs = csw[(rung - oldrung) & ((1ull << UBITS) - 1)];
+    if ((cs >> 12) == 1) // no-switch, use signal instead, it decodes to delta of zero
+        cs = SIGNAL[UBITS];
+
+    // Always encode new rung, with the change flag
+    acc |= (cs & (TBLMASK - 1)) << (abits - 1);
+    abits += static_cast<size_t>((cs >> 12) - 1);
+
+    os.push(acc, abits);
+    acc = abits = 0;
+
+    // need the histogram
+    std::map<T, size_t> sh;
+    for (int i = 0; i < B2; i++)
+        sh[grp[i]] = sh[grp[i]] + 1;
+    // Create a group copy, sort by reverse frequency
+    std::pair<size_t, T> tgrp[B2];
+    for (int i = 0; i < B2; i++)
+        tgrp[i] = std::make_pair<>(sh[grp[i]], grp[i]);
+    // Sort it
+    std::sort(tgrp, tgrp + B2);
+    // size of index table
+    auto tgrpsz = std::unique_copy(tgrp, tgrp + B2, tgrp) - tgrp;
+    // map from value to index
+    std::map<T, size_t> lut;
+    for (int i = 0; i < tgrpsz; i++)
+        lut[tgrp[i].second] = i;
+
+    // Encode the index table, B2 entries at rung 2, can't overflow
+    auto t = CRG[2]; // Always at rung 2
+    for (int i = 0; i < B2; i++) {
+        auto c = t[lut[grp[i]]];
+        acc |= (c & TBLMASK) << abits;
+        abits += c >> 12;
+    }
+    os.push(acc, abits);
+    acc = abits = 0;
+
+    // Encode them in the order of frequency
+    for (int i = 0; i < tgrpsz; i++)
+        for (auto v : lut)
+            if (v.second == i) {
+                auto p = qb3csztbl(v.first, rung);
+                os.push(p.second, p.first);
+            }
+
+    // Finally, encode the values at the proper rung, in the right order
+    return os.position();
+}
+
 // Returns error code or 0 if success
 // TODO: Error code mapping
 template <typename T = uint8_t>
@@ -483,8 +560,37 @@ static int encode_best(const T *image, oBits& s, encs &info)
                     continue;
                 }
                 auto cf = gcf(group);
-                if (cf < 2)
+                if (cf < 2) {
+                    // Let's see if the group is index-able, work on a temporary 
+                    int idx = 0;
+                    if (rung > 3) {
+                        T tempg[B2] = {};
+                        memcpy(tempg, group, sizeof(tempg));
+                        // sort-unique
+                        std::sort(tempg, tempg + B2);
+                        auto vcount = std::unique_copy(tempg, tempg + B2, tempg) - tempg;
+                        if (vcount <= 6)
+                            idx = ienc(group, rung, oldrung);
+                    }
+                    auto start = s.position();
                     groupencode(group, maxval, oldrung, s);
+                    start = s.position() - start;
+                    if (idx) {
+                        if (idx < start) {
+                            static size_t delta = 0;
+                            delta += start - idx;
+                            std::cout << delta << "\t" << idx << " ++ " << start << std::endl;
+                        }
+                        else {
+                            // This is the bad part, much higher than the positive choices
+                            // It means it only works when the few unique numbers are small
+                            // or when the number of values is very small
+                            static size_t delta = 0;
+                            delta += idx - start;
+                            std::cout << "-" << delta << "\t" << idx << " ++ " << start << std::endl;
+                        }
+                    }
+                }
                 else { // Always smaller in cf encoding
                     cfgenc(s, group, cf, pcf[c], oldrung);
                     pcf[c] = cf - 2; // Bias
