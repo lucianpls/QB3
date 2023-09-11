@@ -20,6 +20,7 @@ Contributors:  Lucian Plesea
 #include <cassert>
 #include <type_traits>
 #include <limits>
+#include <utility>
 
 // Input bitstream, doesn't go past size
 class iBits {
@@ -93,6 +94,11 @@ public:
         for (; nbits > used; used += 8)
             v[(bitp + used) / 8] = static_cast<uint8_t>(val >> used);
         bitp += nbits;
+    }
+
+    template<typename T>
+    void push(std::pair<size_t, T> p) {
+        push(p.second, p.first);
     }
 
     // Number of bits written

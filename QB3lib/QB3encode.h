@@ -424,14 +424,10 @@ static int ienc(const T grp[B2], size_t rung, size_t oldrung) {
     uint64_t acc = SIGNAL[UBITS] & TBLMASK;
     size_t abits = UBITS + 2; // SIGNAL >> 12
 
-    uint8_t buffer[50] = {} ; // 400 bits max
-    oBits os(buffer);
-
     // Add the switch from oldrung to max rung, signal for index encoding
     auto cs = csw[(NORM_MASK - oldrung) & ((1ull << UBITS) - 1)];
     if ((cs >> 12) == 1) // no-switch, use signal instead, it decodes to delta of zero
         cs = SIGNAL[UBITS];
-
     // Always encode new rung, without the change flag
     acc |= (cs & (TBLMASK - 1)) << (abits - 1);
     abits += static_cast<size_t>((cs >> 12) - 1);
@@ -445,6 +441,8 @@ static int ienc(const T grp[B2], size_t rung, size_t oldrung) {
     acc |= (cs & (TBLMASK - 1)) << (abits - 1);
     abits += static_cast<size_t>((cs >> 12) - 1);
 
+    uint8_t buffer[100] = {}; // 800 bits max
+    oBits os(buffer);
     os.push(acc, abits);
     acc = abits = 0;
 
@@ -460,28 +458,27 @@ static int ienc(const T grp[B2], size_t rung, size_t oldrung) {
     std::sort(tgrp, tgrp + B2);
     // size of index table
     auto tgrpsz = std::unique_copy(tgrp, tgrp + B2, tgrp) - tgrp;
+    std::reverse(tgrp, tgrp + tgrpsz);
+
     // map from value to index
     std::map<T, size_t> lut;
     for (int i = 0; i < tgrpsz; i++)
         lut[tgrp[i].second] = i;
 
     // Encode the index table, B2 entries at rung 2, can't overflow
-    auto t = CRG[2]; // Always at rung 2
     for (int i = 0; i < B2; i++) {
-        auto c = t[lut[grp[i]]];
+        auto c = CRG[2][lut[grp[i]]];
         acc |= (c & TBLMASK) << abits;
         abits += c >> 12;
     }
     os.push(acc, abits);
-    acc = abits = 0;
 
-    // Encode them in the order of frequency
+    // Encode unique values in order of frequency
+    assert(rung < 63); // TODO: pair @ rung63 could be overflowing
     for (int i = 0; i < tgrpsz; i++)
         for (auto v : lut)
-            if (v.second == i) {
-                auto p = qb3csztbl(v.first, rung);
-                os.push(p.second, p.first);
-            }
+            if (v.second == i)
+                os.push(qb3csztbl(v.first, rung));
 
     // Finally, encode the values at the proper rung, in the right order
     return os.position();
@@ -569,7 +566,7 @@ static int encode_best(const T *image, oBits& s, encs &info)
                         // sort-unique
                         std::sort(tempg, tempg + B2);
                         auto vcount = std::unique_copy(tempg, tempg + B2, tempg) - tempg;
-                        if (vcount <= 6)
+                        if (vcount <= 8)
                             idx = ienc(group, rung, oldrung);
                     }
                     auto start = s.position();
@@ -577,6 +574,7 @@ static int encode_best(const T *image, oBits& s, encs &info)
                     start = s.position() - start;
                     if (idx) {
                         if (idx < start) {
+                            // cancel the normal encoding, replace it with the index one
                             static size_t delta = 0;
                             delta += start - idx;
                             std::cout << delta << "\t" << idx << " ++ " << start << std::endl;
@@ -585,9 +583,9 @@ static int encode_best(const T *image, oBits& s, encs &info)
                             // This is the bad part, much higher than the positive choices
                             // It means it only works when the few unique numbers are small
                             // or when the number of values is very small
-                            static size_t delta = 0;
-                            delta += idx - start;
-                            std::cout << "-" << delta << "\t" << idx << " ++ " << start << std::endl;
+                            //static size_t delta = 0;
+                            //delta += idx - start;
+                            //std::cout << "-" << delta << "\t" << idx << " ++ " << start << std::endl;
                         }
                     }
                 }
