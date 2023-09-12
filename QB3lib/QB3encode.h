@@ -415,29 +415,27 @@ static int encode_fast(const T* image, oBits& s, encs &info)
 // Dummy index encode, returns size
 template <typename T>
 static int ienc(const T grp[B2], size_t rung, size_t oldrung) {
+    assert(rung < 63); // TODO: pair @ rung63 would overflow
     const uint16_t SIGNAL[] = { 0x0, 0x0, 0x0, 0x5017, 0x6037, 0x7077, 0x80f7 };
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     constexpr auto NORM_MASK((1ull << UBITS) - 1); // UBITS set
     auto csw = CSW[UBITS];
 
-    // Start with the CF encoding signal
+    // Start with the encoding signal
     uint64_t acc = SIGNAL[UBITS] & TBLMASK;
     size_t abits = UBITS + 2; // SIGNAL >> 12
 
-    // Add the switch from oldrung to max rung, signal for index encoding
-    auto cs = csw[(NORM_MASK - oldrung) & ((1ull << UBITS) - 1)];
+    // Add the switch to max rung, signal for index encoding
+    auto cs = csw[(NORM_MASK - oldrung) & NORM_MASK];
     if ((cs >> 12) == 1) // no-switch, use signal instead, it decodes to delta of zero
         cs = SIGNAL[UBITS];
-    // Always encode new rung, without the change flag
     acc |= (cs & (TBLMASK - 1)) << (abits - 1);
     abits += static_cast<size_t>((cs >> 12) - 1);
 
     // Encode the real rung
-    cs = csw[(rung - oldrung) & ((1ull << UBITS) - 1)];
+    cs = csw[(rung - oldrung) & NORM_MASK];
     if ((cs >> 12) == 1) // no-switch, use signal instead, it decodes to delta of zero
         cs = SIGNAL[UBITS];
-
-    // Always encode new rung, with the change flag
     acc |= (cs & (TBLMASK - 1)) << (abits - 1);
     abits += static_cast<size_t>((cs >> 12) - 1);
 
@@ -450,37 +448,31 @@ static int ienc(const T grp[B2], size_t rung, size_t oldrung) {
     std::map<T, size_t> sh;
     for (int i = 0; i < B2; i++)
         sh[grp[i]] = sh[grp[i]] + 1;
+
     // Create a group copy, sort by reverse frequency
     std::pair<size_t, T> tgrp[B2];
     for (int i = 0; i < B2; i++)
         tgrp[i] = std::make_pair<>(sh[grp[i]], grp[i]);
     // Sort it
     std::sort(tgrp, tgrp + B2);
-    // size of index table
-    auto tgrpsz = std::unique_copy(tgrp, tgrp + B2, tgrp) - tgrp;
-    std::reverse(tgrp, tgrp + tgrpsz);
+    const auto tgrpsz = std::unique_copy(tgrp, tgrp + B2, tgrp) - tgrp;
 
-    // map from value to index
-    std::map<T, size_t> lut;
+    // remap value to index
     for (int i = 0; i < tgrpsz; i++)
-        lut[tgrp[i].second] = i;
+        sh[tgrp[i].second] = tgrpsz - i -1;
 
     // Encode the index table, B2 entries at rung 2, can't overflow
     for (int i = 0; i < B2; i++) {
-        auto c = CRG[2][lut[grp[i]]];
+        auto c = CRG[2][sh[grp[i]]];
         acc |= (c & TBLMASK) << abits;
         abits += c >> 12;
     }
     os.push(acc, abits);
 
     // Encode unique values in order of frequency
-    assert(rung < 63); // TODO: pair @ rung63 could be overflowing
-    for (int i = 0; i < tgrpsz; i++)
-        for (auto v : lut)
-            if (v.second == i)
-                os.push(qb3csztbl(v.first, rung));
+    for (int i = tgrpsz; i;)
+        os.push(qb3csztbl(tgrp[--i].second, rung));
 
-    // Finally, encode the values at the proper rung, in the right order
     return os.position();
 }
 
@@ -511,6 +503,7 @@ static int encode_best(const T *image, oBits& s, encs &info)
     for (size_t i = 0; i < B2; i++)
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
     T group[B2] = {}; // Current 2D group to encode, as array
+    static size_t delta = 0;
     for (size_t y = 0; y < ysize; y += B) {
         // If the last row is partial, roll it up
         if (y + B > ysize)
@@ -556,6 +549,7 @@ static int encode_best(const T *image, oBits& s, encs &info)
                     s.push(acc, abits);
                     continue;
                 }
+
                 auto cf = gcf(group);
                 if (cf < 2) {
                     // Let's see if the group is index-able, work on a temporary 
@@ -572,21 +566,9 @@ static int encode_best(const T *image, oBits& s, encs &info)
                     auto start = s.position();
                     groupencode(group, maxval, oldrung, s);
                     start = s.position() - start;
-                    if (idx) {
-                        if (idx < start) {
-                            // cancel the normal encoding, replace it with the index one
-                            static size_t delta = 0;
-                            delta += start - idx;
-                            std::cout << delta << "\t" << idx << " ++ " << start << std::endl;
-                        }
-                        else {
-                            // This is the bad part, much higher than the positive choices
-                            // It means it only works when the few unique numbers are small
-                            // or when the number of values is very small
-                            //static size_t delta = 0;
-                            //delta += idx - start;
-                            //std::cout << "-" << delta << "\t" << idx << " ++ " << start << std::endl;
-                        }
+                    if (idx && idx < start) {
+                        // cancel the normal encoding, replace it with the index one
+                        delta += start - idx;
                     }
                 }
                 else { // Always smaller in cf encoding
@@ -596,6 +578,7 @@ static int encode_best(const T *image, oBits& s, encs &info)
             }
         }
     }
+    std::cout << delta << std::endl;
     // Save the state
     for (size_t c = 0; c < bands; c++) {
         info.band[c].prev = static_cast<size_t>(prev[c]);
