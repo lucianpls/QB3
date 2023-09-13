@@ -423,11 +423,11 @@ static int ienc(const T grp[B2], size_t rung, size_t oldrung) {
         T val; // small unsigned int
     } KVP;
 
-    std::array<KVP, B2> v;
+    std::array<KVP, B2> v = {};
     size_t len = 0;
     // Add or increment the value
     for (int i = 0; i < B2; i++) {
-        int j = 0;
+        size_t j = 0;
         while (j < len && v[j].key != grp[i])
             j++;
         if (j == len)
@@ -561,8 +561,6 @@ static int encode_best(const T *image, oBits& s, encs &info)
                 }
 
                 auto cf = gcf(group);
-                int idx = ienc(group, rung, oldrung);
-
                 auto start = s.position();
                 if (cf < 2)
                     groupencode(group, maxval, oldrung, s);
@@ -571,8 +569,13 @@ static int encode_best(const T *image, oBits& s, encs &info)
                     pcf[c] = cf - 2; // Bias
                 }
                 start = s.position() - start;
-                if (idx < start)
-                    delta += start - idx;
+                // Check if it's even worth trying the index encoding
+                // That is the minimum size of a group with 2 discrete values
+                if (start >= (36 + 3 * UBITS + 2 * rung)) {
+                    int idx = ienc(group, rung, oldrung);
+                    if (idx < start)
+                        delta += start - idx;
+                }
             }
         }
     }

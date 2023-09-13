@@ -79,6 +79,7 @@ private:
 class oBits {
 public:
     oBits(uint8_t * data) : v(data), bitp(0) {}
+    void reset() { bitp = 0; } // Same buffer
 
     // Do not call with val having bits above "nbits" set, the results will be corrupt
     template<typename T>
