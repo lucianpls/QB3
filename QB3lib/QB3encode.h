@@ -509,7 +509,7 @@ static int encode_best(const T *image, oBits& s, encs &info)
     size_t offsets[B2] = {};
     for (size_t i = 0; i < B2; i++)
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
-    T group[B2] = {}; // Current 2D group to encode, as array
+    T group[B2] = {}, idxgrp[B2] = {}; // Current 2D group to encode, as array
     static size_t delta = 0;
     for (size_t y = 0; y < ysize; y += B) {
         // If the last row is partial, roll it up
@@ -521,6 +521,10 @@ static int encode_best(const T *image, oBits& s, encs &info)
                 x = xsize - B;
             size_t loc = (y * xsize + x) * bands; // Top-left pixel address
             for (size_t c = 0; c < bands; c++) { // blocks are always band interleaved
+                if (y == 0 && x < 30) {
+                    static auto diff = s.position();
+                    std::cout << y << " " << x << " " << c << " " << s.position() - diff << std::endl;
+                }
                 T maxval(0); // Maximum mag-sign value within this group
                 // Collect the block for this band, convert to running delta mag-sign
                 auto prv = prev[c];
@@ -559,24 +563,28 @@ static int encode_best(const T *image, oBits& s, encs &info)
 
                 auto cf = gcf(group);
                 auto start = s.position();
+                // save a copy, to try idx on
+                memcpy(idxgrp, group, sizeof(group) * sizeof(T));
                 if (cf < 2)
                     groupencode(group, maxval, oldrung, s);
-                else {
+                else 
                     cfgenc(s, group, cf, pcf[c], oldrung);
-                    pcf[c] = cf - 2; // Bias
-                }
-                // Check if it's even worth trying the index encoding
-                // That is the minimum size of a group with 2 discrete values
+
                 if (start >= (36 + 3 * UBITS + 2 * rung)) {
                     uint8_t buffer[100] = {}; // 800 bits max
                     oBits idxs(buffer);
-                    int idx = ienc(group, rung, oldrung, idxs);
+                    int idx = ienc(idxgrp, rung, oldrung, idxs);
                     if (idx < s.position() - start) {
                         delta += s.position() - start - idx;
                         s.rewind(start);
                         s += idxs;
+                        if (cf > 1)
+                            pcf[c] = cf - 2;
                     }
                 }
+                else
+                    if (cf > 1)
+                        pcf[c] = cf - 2;
             }
         }
     }

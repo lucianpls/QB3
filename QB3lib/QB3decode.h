@@ -17,6 +17,7 @@ Contributors:  Lucian Plesea
 
 #pragma once
 #include "QB3common.h"
+#include <iostream>
 
 namespace QB3 {
 // Decoding tables, twice as large as the encoding ones
@@ -334,6 +335,11 @@ static bool decode(uint8_t *src, size_t len, T* image,
             if (x + B > xsize)
                 x = xsize - B;
             for (int c = 0; c < bands; c++) {
+                if (y == 0 && x < 30) {
+                    static auto diff = s.position();
+                    std::cout << y << " " << x << " " << c << " " << s.position() - diff << std::endl;
+                }
+
                 failed |= s.empty();
                 uint64_t cs(0), abits(1), acc(s.peek());
                 if (acc & 1) { // Rung change
@@ -426,7 +432,7 @@ static bool decode(uint8_t *src, size_t len, T* image,
                         }
                         s.advance(abits);
                         T values[B2] = {};
-                        for (size_t i = 0; i < maxval; i++) {
+                        for (size_t i = 0; i <= maxval; i++) {
                             acc = s.peek();
                             auto v = qb3dsztbl(acc, rung);
                             values[i] = T(v.second);

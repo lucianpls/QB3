@@ -140,7 +140,7 @@ void check(vector<uint8_t> &image, const Raster &raster,
             auto y = re[i];
             if (!((x == y) || ((x > y) && (y + hq >= x)) || ((y > x) && (x + hq >= y)))) {
                 cout << endl << "Difference at " << i << " expect "
-                    << uint64_t(img[i]) << " != " << uint64_t(re[i]);
+                    << hex << uint64_t(img[i]) << " != " << uint64_t(re[i]) << dec;
                 cout << endl << "y = " << i / (xsize * bands) <<
                     " x = " << (i / bands) % xsize <<
                     " c = " << i % bands;
@@ -152,7 +152,7 @@ void check(vector<uint8_t> &image, const Raster &raster,
         for (size_t i = 0; i < img.size(); i++)
             if (img[i] != re[i]) {
                 cout << endl << "Difference at " << i << " expect "
-                    << img[i] << " got " << re[i];
+                    << hex << uint64_t(img[i]) << " got " << uint64_t(re[i]) << dec;
                 cout << endl << "y = " << i / (xsize * bands) <<
                     " x = " << (i / bands) % xsize <<
                     " c = " << i % bands;
