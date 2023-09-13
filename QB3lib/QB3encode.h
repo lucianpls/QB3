@@ -413,7 +413,7 @@ static int encode_fast(const T* image, oBits& s, encs &info)
 }
 
 template<typename T>
-static int ienc(const T grp[B2], size_t rung, size_t oldrung) {
+static int ienc(const T grp[B2], size_t rung, size_t oldrung, oBits &s) {
     constexpr int TOO_LARGE(800); // Larger than any possible size
     if (rung < 4 || rung == 63)
         return TOO_LARGE;
@@ -460,10 +460,7 @@ static int ienc(const T grp[B2], size_t rung, size_t oldrung) {
         cs = SIGNAL[UBITS];
     acc |= (cs & (TBLMASK - 1)) << (abits - 1);
     abits += static_cast<size_t>((cs >> 12) - 1);
-
-    uint8_t buffer[100] = {}; // 800 bits max
-    oBits os(buffer);
-    os.push(acc, abits);
+    s.push(acc, abits);
     acc = abits = 0;
 
     // Sort by descending frequency
@@ -479,11 +476,11 @@ static int ienc(const T grp[B2], size_t rung, size_t oldrung) {
         acc |= (c & TBLMASK) << abits;
         abits += c >> 12;
     }
-    os.push(acc, abits);
+    s.push(acc, abits);
     // Encode unique values in order of frequency
     for (int i = 0; i < len; i++)
-        os.push(qb3csztbl(v[i].key, rung));
-    return static_cast<int>(os.position());
+        s.push(qb3csztbl(v[i].key, rung));
+    return static_cast<int>(s.position());
 }
 
 // Returns error code or 0 if success
@@ -568,13 +565,17 @@ static int encode_best(const T *image, oBits& s, encs &info)
                     cfgenc(s, group, cf, pcf[c], oldrung);
                     pcf[c] = cf - 2; // Bias
                 }
-                start = s.position() - start;
                 // Check if it's even worth trying the index encoding
                 // That is the minimum size of a group with 2 discrete values
                 if (start >= (36 + 3 * UBITS + 2 * rung)) {
-                    int idx = ienc(group, rung, oldrung);
-                    if (idx < start)
-                        delta += start - idx;
+                    uint8_t buffer[100] = {}; // 800 bits max
+                    oBits idxs(buffer);
+                    int idx = ienc(group, rung, oldrung, idxs);
+                    if (idx < s.position() - start) {
+                        delta += s.position() - start - idx;
+                        s.rewind(start);
+                        s += idxs;
+                    }
                 }
             }
         }

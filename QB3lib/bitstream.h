@@ -79,7 +79,16 @@ private:
 class oBits {
 public:
     oBits(uint8_t * data) : v(data), bitp(0) {}
-    void reset() { bitp = 0; } // Same buffer
+    // Rewind to a bit position under the current one
+    size_t rewind(size_t pos = 0) {
+        // Don't go past the current end
+        if (pos < position()) {
+            bitp = pos;
+            if (bitp & 7) // clear partial bits in the last byte
+                v[bitp / 8] &= 0xff >> (8 - (bitp & 7));
+        }
+        return position();
+    }
 
     // Do not call with val having bits above "nbits" set, the results will be corrupt
     template<typename T>
@@ -98,8 +107,7 @@ public:
     }
 
     // Append content from other output bitstream
-    template<class T>
-    oBits& operator<<(const oBits&other) {
+    oBits& operator+=(const oBits&other) {
         iBits is(other.v, (other.bitp + 7) / 8);
 
         auto len = other.bitp;
