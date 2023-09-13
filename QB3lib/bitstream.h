@@ -96,6 +96,24 @@ public:
         bitp += nbits;
     }
 
+    // Append content from other output bitstream
+    template<class T>
+    oBits& operator<<(const oBits&other) {
+        iBits is(other.v, (other.bitp + 7) / 8);
+
+        auto len = other.bitp;
+        // Whole 64bit words
+        for(auto pv = reinterpret_cast<uint64_t *>(other.v); len >=64; len-=64, pv++)
+            push(*pv, 64);
+        // Bytes at the end
+        for(auto pv = other.v + other.bitp / 8 ; len >= 8; len-=8, pv++)
+            push(*pv, 8);
+        // Bits at the end
+        if (len)
+            push(*(other.v + other.bitp / 8), len);
+        return *this;
+    }
+
     template<typename T>
     void push(std::pair<size_t, T> p) {
         push(p.second, p.first);
