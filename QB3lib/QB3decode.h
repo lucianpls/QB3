@@ -347,63 +347,94 @@ static bool decode(uint8_t *src, size_t len, T* image,
                     failed |= !gdecode(s, rung, group, acc, abits);
                     runbits[c] = rung;
                 }
-                else { // CF encoding
+                else { // extra encoding
                     cs = dsw[acc & LONG_MASK]; // rung, no flag
                     auto rung = (runbits[c] + cs) & NORM_MASK;
-                    failed |= (rung == NORM_MASK); // Not allowed in CF encoding
-                    auto cfrung(rung);
-                    acc >>= (cs >> 12) - 1;
+                    acc >>= (cs >> 12) - 1; // No flag
                     abits += (cs >> 12) - 1;
-                    T cf = pcf[c];
-                    auto read_cfr = acc & 1;
-                    abits++;
-                    acc >>= 1;
-                    if (read_cfr) { // different cf, need to read it
-                        read_cfr = acc & 1;
+                    if (rung != NORM_MASK) { // CF encoding
+                        auto cfrung(rung);
+                        T cf = pcf[c];
+                        auto read_cfr = acc & 1;
                         abits++;
                         acc >>= 1;
-                        if (read_cfr) { // has own rung
-                            cs = dsw[acc & LONG_MASK];
-                            cfrung = (rung + cs) & NORM_MASK;
-                            failed |= (cfrung == rung);
-                            acc >>= (cs >> 12) - 1;
-                            abits += (cs >> 12) - 1;
+                        if (read_cfr) { // different cf, need to read it
+                            read_cfr = acc & 1;
+                            abits++;
+                            acc >>= 1;
+                            if (read_cfr) { // has own rung
+                                cs = dsw[acc & LONG_MASK];
+                                cfrung = (rung + cs) & NORM_MASK;
+                                failed |= (cfrung == rung);
+                                acc >>= (cs >> 12) - 1;
+                                abits += (cs >> 12) - 1;
+                            }
+                            if (sizeof(T) == 8 && (cfrung + abits) > 62) { // Rare
+                                s.advance(abits);
+                                acc = s.peek();
+                                abits = 0;
+                            }
+                            auto p = qb3dsztbl(acc, cfrung - read_cfr);
+                            pcf[c] = cf = static_cast<T>(p.second + (read_cfr << cfrung));
+                            abits += p.first;
+                            acc >>= p.first;
                         }
-                        if (sizeof(T) == 8 && (cfrung + abits) > 62) { // Rare
+                        cf += 2; // Use it unbiased
+                        if (rung) {
                             s.advance(abits);
-                            acc = s.peek();
-                            abits = 0;
+                            failed |= !gdecode(s, rung, group, s.peek(), 0);
+                            // Multiply group by CF and get the max for the actual rung
+                            T maxval(group[0] = magsmul(group[0], cf));
+                            for (int i = 1; i < B2; i++) {
+                                auto val = magsmul(group[i], cf);
+                                if (maxval < val) maxval = val;
+                                group[i] = val;
+                            }
+                            failed |= cf > maxval; // Can't be all zero
+                            runbits[c] = topbit(maxval | 1);
                         }
-                        auto p = qb3dsztbl(acc, cfrung - read_cfr);
-                        pcf[c] = cf = static_cast<T>(p.second + (read_cfr << cfrung));
-                        abits += p.first;
-                        acc >>= p.first;
+                        else { // Single bit for data, decode here
+                            if (abits + B2 > 64) {
+                                s.advance(abits);
+                                acc = s.peek();
+                                abits = 0;
+                            }
+                            T v[2] = { 0, magsmul(T(1), cf) };
+                            for (int i = 0; i < B2; i++)
+                                group[i] = v[(acc >> i) & 1];
+                            s.advance(B2 + abits);
+                            runbits[c] = topbit(v[1]);
+                        }
                     }
-                    cf += 2; // Use it unbiased
-                    if (rung) {
+                    else { // IDX encoding goes here
+                        cs = dsw[acc & LONG_MASK]; // rung, no flag
+                        auto rung = (runbits[c] + cs) & NORM_MASK;
+                        runbits[c] = rung;
+                        acc >>= (cs >> 12) - 1; // No flag
+                        abits += (cs >> 12) - 1;
+                        failed |= rung == 63; // Not NORM_MASK, only 63, it gets avoided by encoder
+                        // Read the 16 index values in group, max is 7
+                        T maxval(0);
+                        for (int i = 0; i < B2; i++) {
+                            // Could use ddrg2
+                            auto v = DRG[2][acc & 0xf];
+                            group[i] = static_cast<uint8_t>(v);
+                            if (maxval < group[i])
+                                maxval = group[i];
+                            acc >>= v >> 12;
+                            abits += v >> 12;
+                        }
                         s.advance(abits);
-                        failed |= !gdecode(s, rung, group, s.peek(), 0);
-                        // Multiply group by CF and get the max for the actual rung
-                        T maxval(group[0] = magsmul(group[0], cf));
-                        for (int i = 1; i < B2; i++) {
-                            auto val = magsmul(group[i], cf);
-                            if (maxval < val) maxval = val;
-                            group[i] = val;
-                        }
-                        failed |= cf > maxval; // Can't be all zero
-                        runbits[c] = topbit(maxval|1);
-                    }
-                    else { // Single bit for data, decode here
-                        if (abits + B2 > 64) {
-                            s.advance(abits);
+                        T values[B2] = {};
+                        for (size_t i = 0; i < maxval; i++) {
                             acc = s.peek();
-                            abits = 0;
+                            auto v = qb3dsztbl(acc, rung);
+                            values[i] = T(v.second);
+                            s.advance(v.first);
                         }
-                        T v[2] = { 0, magsmul(T(1), cf) };
+                        // Map indices back to values
                         for (int i = 0; i < B2; i++)
-                            group[i] = v[(acc >> i) & 1];
-                        s.advance(B2 + abits);
-                        runbits[c] = topbit(v[1]);
+                            group[i] = values[group[i]];
                     }
                 }
                 // Undo delta encoding for this block

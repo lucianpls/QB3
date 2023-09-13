@@ -79,7 +79,8 @@ private:
 class oBits {
 public:
     oBits(uint8_t * data) : v(data), bitp(0) {}
-    // Rewind to a bit position under the current one
+
+    // Rewind to a bit position before the current one
     size_t rewind(size_t pos = 0) {
         // Don't go past the current end
         if (pos < position()) {
@@ -115,7 +116,7 @@ public:
         for(auto pv = reinterpret_cast<uint64_t *>(other.v); len >=64; len-=64, pv++)
             push(*pv, 64);
         // Bytes at the end
-        for(auto pv = other.v + other.bitp / 8 ; len >= 8; len-=8, pv++)
+        for(auto pv = other.v + (other.bitp / 64) * 8 ; len >= 8; len-=8, pv++)
             push(*pv, 8);
         // Bits at the end
         if (len)
