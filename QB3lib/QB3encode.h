@@ -18,7 +18,6 @@ Contributors:  Lucian Plesea
 #pragma once
 #include "QB3common.h"
 #include <algorithm>
-#include <iostream>
 #include <array>
 
 namespace QB3 {
@@ -189,14 +188,13 @@ static void groupencode(T group[B2], T maxval, oBits& s,
             abits += t[group[i]] >> 12;
         }
         s.push(acc, abits);
-        return;
     }
     // Last part of table encoding, rung 6-7
     // Encoded data fits in 256 bits, 4 way interleaved
-    if ((sizeof(CRG) / sizeof(*CRG)) > rung) {
+    else if ((sizeof(CRG) / sizeof(*CRG)) > rung) {
         auto t = CRG[rung];
-        uint64_t a[4] = {acc, 0, 0, 0};
-        size_t asz[4] = {abits, 0, 0, 0};
+        uint64_t a[4] = { acc, 0, 0, 0 };
+        size_t asz[4] = { abits, 0, 0, 0 };
         for (size_t i = 0; i < B; i++) {
             for (size_t j = 0; j < B; j++) {
                 auto v = t[group[j * B + i]];
@@ -206,10 +204,9 @@ static void groupencode(T group[B2], T maxval, oBits& s,
         }
         for (size_t i = 0; i < B; i++)
             s.push(a[i], asz[i]);
-        return;
     }
     // Computed encoding, slower, works for rung > 1
-    if (1 < sizeof(T)) { // This vanishes in 8 bit mode
+    else if (1 < sizeof(T)) { // This vanishes in 8 bit mode
         if (sizeof(T) < 8 || rung < 31) { // low rung, can reuse acc
             for (int i = 0; i < B2; i++) {
                 auto p = qb3csz(group[i], rung);
@@ -241,6 +238,8 @@ static void groupencode(T group[B2], T maxval, oBits& s,
             }
         }
     }
+    if (stepp <= B2) // Leave the group as found
+        group[stepp - 1] ^= static_cast<T>(1ull << rung);
 }
 
 // Base QB3 group encode with code switch, returns encoded size
@@ -509,8 +508,7 @@ static int encode_best(const T *image, oBits& s, encs &info)
     size_t offsets[B2] = {};
     for (size_t i = 0; i < B2; i++)
         offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
-    T group[B2] = {}, idxgrp[B2] = {}; // Current 2D group to encode, as array
-    static size_t delta = 0;
+    T group[B2] = {}; // Current 2D group to encode, as array
     for (size_t y = 0; y < ysize; y += B) {
         // If the last row is partial, roll it up
         if (y + B > ysize)
@@ -521,10 +519,6 @@ static int encode_best(const T *image, oBits& s, encs &info)
                 x = xsize - B;
             size_t loc = (y * xsize + x) * bands; // Top-left pixel address
             for (size_t c = 0; c < bands; c++) { // blocks are always band interleaved
-                if (y == 0 && x < 30) {
-                    static auto diff = s.position();
-                    std::cout << y << " " << x << " " << c << " " << s.position() - diff << std::endl;
-                }
                 T maxval(0); // Maximum mag-sign value within this group
                 // Collect the block for this band, convert to running delta mag-sign
                 auto prv = prev[c];
@@ -563,32 +557,32 @@ static int encode_best(const T *image, oBits& s, encs &info)
 
                 auto cf = gcf(group);
                 auto start = s.position();
-                // save a copy, to try idx on
-                memcpy(idxgrp, group, sizeof(group) * sizeof(T));
                 if (cf < 2)
                     groupencode(group, maxval, oldrung, s);
-                else 
+                else {
+                    T tgrp[B2] = {};
+                    // Work on a copy of the group
+                    memcpy(tgrp, group, B2 * sizeof(T));
                     cfgenc(s, group, cf, pcf[c], oldrung);
+                    memcpy(group, tgrp, B2 * sizeof(T));
+                }
 
                 if (start >= (36 + 3 * UBITS + 2 * rung)) {
                     uint8_t buffer[100] = {}; // 800 bits max
                     oBits idxs(buffer);
-                    int idx = ienc(idxgrp, rung, oldrung, idxs);
+                    int idx = ienc(group, rung, oldrung, idxs);
                     if (idx < s.position() - start) {
-                        delta += s.position() - start - idx;
                         s.rewind(start);
                         s += idxs;
-                        if (cf > 1)
-                            pcf[c] = cf - 2;
-                    }
-                }
-                else
-                    if (cf > 1)
+                    } else if (cf > 1)
                         pcf[c] = cf - 2;
+
+                }
+                else if (cf > 1)
+                    pcf[c] = cf - 2;
             }
         }
     }
-    std::cout << "Saving: " << delta / 8 << std::endl;
     // Save the state
     for (size_t c = 0; c < bands; c++) {
         info.band[c].prev = static_cast<size_t>(prev[c]);
