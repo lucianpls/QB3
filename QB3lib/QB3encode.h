@@ -252,7 +252,7 @@ static void groupencode(T group[B2], T maxval, size_t oldrung, oBits& s) {
 
 // Group encode with cf
 template <typename T = uint8_t>
-static void cfgenc(oBits& bits, T group[B2], T cf, T pcf, size_t oldrung) {
+static void cfgenc(const T igrp[B2], T cf, T pcf, size_t oldrung, oBits& bits) {
     // Signal as switch to same rung, max-positive value, by UBITS
     const uint16_t SIGNAL[] = { 0x0, 0x0, 0x0, 0x5017, 0x6037, 0x7077, 0x80f7 };
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
@@ -262,8 +262,9 @@ static void cfgenc(oBits& bits, T group[B2], T cf, T pcf, size_t oldrung) {
     size_t abits = UBITS + 2; // SIGNAL >> 12
     // divide raw absolute group values by CF and find the new maxvalue
     T maxval = 0;
-    for (size_t i = 0; i < B2; i++) if (group[i])
-        maxval = std::max(maxval, group[i] = T(((magsabs(group[i]) / cf) << 1) - (group[i] & 1)));
+    T group[B2] = {};
+    for (size_t i = 0; i < B2; i++) if (igrp[i])
+        maxval = std::max(maxval, group[i] = T(((magsabs(igrp[i]) / cf) << 1) - (igrp[i] & 1)));
     cf -= 2; // Bias down, 0 and 1 are not used
     auto trung = topbit(maxval | 1); // rung for the group values
     auto cfrung = topbit(cf | 1);    // rung for cf-2 value
@@ -554,20 +555,13 @@ static int encode_best(const T *image, oBits& s, encs &info)
                     s.push(acc, abits);
                     continue;
                 }
-
                 auto cf = gcf(group);
                 auto start = s.position();
                 if (cf < 2)
                     groupencode(group, maxval, oldrung, s);
-                else {
-                    T tgrp[B2] = {};
-                    // Work on a copy of the group
-                    memcpy(tgrp, group, B2 * sizeof(T));
-                    cfgenc(s, group, cf, pcf[c], oldrung);
-                    memcpy(group, tgrp, B2 * sizeof(T));
-                }
-
-                if (start >= (36 + 3 * UBITS + 2 * rung)) {
+                else
+                    cfgenc(group, cf, pcf[c], oldrung, s);
+                if ((s.position() - start) >= (36 + 3 * UBITS + 2 * rung)) {
                     uint8_t buffer[100] = {}; // 800 bits max
                     oBits idxs(buffer);
                     int idx = ienc(group, rung, oldrung, idxs);
@@ -576,7 +570,6 @@ static int encode_best(const T *image, oBits& s, encs &info)
                         s += idxs;
                     } else if (cf > 1)
                         pcf[c] = cf - 2;
-
                 }
                 else if (cf > 1)
                     pcf[c] = cf - 2;
