@@ -406,14 +406,14 @@ static bool decode(uint8_t *src, size_t len, T* image,
                             runbits[c] = topbit(v[1]);
                         }
                     }
-                    else { // IDX encoding goes here
+                    else { // IDX decoding
                         cs = dsw[acc & LONG_MASK]; // rung, no flag
                         rung = (runbits[c] + cs) & NORM_MASK;
                         runbits[c] = rung;
                         acc >>= (cs >> 12) - 1; // No flag
                         abits += (cs >> 12) - 1;
-                        failed |= rung == 63; // Not NORM_MASK, only 63, it gets avoided by encoder
-                        // Read the 16 index values in group, max is 7
+                        failed |= rung == 63; // TODO: Deal with 64bit overflow
+                        // 16 index values in group, max is 7
                         T maxval(0);
                         for (int i = 0; i < B2; i++) {
                             // Could use ddrg2
@@ -425,16 +425,15 @@ static bool decode(uint8_t *src, size_t len, T* image,
                             abits += v >> 12;
                         }
                         s.advance(abits);
-                        T values[B2] = {};
+                        T idxarray[B2 / 2] = {};
                         for (size_t i = 0; i <= maxval; i++) {
                             acc = s.peek();
                             auto v = qb3dsztbl(acc, rung);
-                            values[i] = T(v.second);
                             s.advance(v.first);
+                            idxarray[i] = T(v.second);
                         }
-                        // Map indices back to values
                         for (int i = 0; i < B2; i++)
-                            group[i] = values[group[i]];
+                            group[i] = idxarray[group[i]];
                     }
                 }
                 // Undo delta encoding for this block

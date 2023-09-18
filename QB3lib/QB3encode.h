@@ -264,7 +264,8 @@ static void cfgenc(const T igrp[B2], T cf, T pcf, size_t oldrung, oBits& bits) {
     T maxval = 0;
     T group[B2] = {};
     for (size_t i = 0; i < B2; i++) if (igrp[i])
-        maxval = std::max(maxval, group[i] = T(((magsabs(igrp[i]) / cf) << 1) - (igrp[i] & 1)));
+        maxval = std::max(maxval, group[i] = magsdiv(igrp[i], cf));
+            //T(((magsabs(igrp[i]) / cf) << 1) - (igrp[i] & 1)));
     cf -= 2; // Bias down, 0 and 1 are not used
     auto trung = topbit(maxval | 1); // rung for the group values
     auto cfrung = topbit(cf | 1);    // rung for cf-2 value
@@ -412,20 +413,16 @@ static int encode_fast(const T* image, oBits& s, encs &info)
     return 0;
 }
 
+// Index based encoding
 template<typename T>
 static int ienc(const T grp[B2], size_t rung, size_t oldrung, oBits &s) {
     constexpr int TOO_LARGE(800); // Larger than any possible size
     if (rung < 4 || rung == 63)
         return TOO_LARGE;
-
-    typedef struct {
-        T key;
-        T val; // small unsigned int
-    } KVP;
-
+    // Build unsorted histogram
+    struct KVP { T key, val; };
     std::array<KVP, B2> v = {};
     size_t len = 0;
-    // Add or increment the value
     for (int i = 0; i < B2; i++) {
         size_t j = 0;
         while (j < len && v[j].key != grp[i])
