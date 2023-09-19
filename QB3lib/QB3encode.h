@@ -85,7 +85,7 @@ static const uint16_t* CSW[] = { nullptr, nullptr, nullptr, csw3, csw4, csw5, cs
 // Absolute from mag-sign
 template<typename T> static T magsabs(T v) { return (v >> 1) + (v & 1); }
 
-// integer divide val(in magsign) by cf(normal, positive)
+// integer divide count(in magsign) by cf(normal, positive)
 template<typename T> static T magsdiv(T val, T cf) {return ((magsabs(val) / cf) << 1) - (val & 1);}
 
 // greatest common factor (absolute) of a B2 sized vector of mag-sign values, Euclid algorithm
@@ -130,7 +130,7 @@ static std::pair<size_t, uint64_t> qb3csz(uint64_t val, size_t rung) {
     uint64_t tb = 1ull << rung;
     return std::make_pair<size_t, uint64_t>(rung + top + (top | nxt),
           ((~0ull * (1 & ~(top | nxt))) & (val << 1))                     // 0 0 SHORT    -> _x0
-        + ((~0ull * (1 & (~top & nxt))) & ((((val << 1) ^ tb) << 1) + 1)) // 0 1 NOMINAL  -> _01
+        + ((~0ull * (1 & (~top & nxt))) & ((((val << 1) ^ tb) << 1) | 1)) // 0 1 NOMINAL  -> _01
         + ((~0ull * (1 & top))          & (((val ^ tb) << 2) | 0b11)));   // 1 x LONG     -> _11
 }
 
@@ -147,8 +147,7 @@ static std::pair<size_t, uint64_t> qb3csztbl(uint64_t val, size_t rung) {
 // maxval is used to choose the rung for encoding
 // If abits > 0, the accumulator is also pushed into the stream
 template <typename T>
-static void groupencode(T group[B2], T maxval, oBits& s,
-    uint64_t acc = 0, size_t abits = 0)
+static void groupencode(T group[B2], T maxval, oBits& s, uint64_t acc, size_t abits)
 {
     assert(abits <= 64);
     const size_t rung = topbit(maxval | 1);
@@ -221,15 +220,13 @@ static void groupencode(T group[B2], T maxval, oBits& s,
         else { // sizeof(T) == 8
             s.push(acc, abits);
             if (rung < 63) { // high rung, no overflow
-                for (int i = 0; i < B2; i++) {
-                    auto p = qb3csz(group[i], rung);
-                    s.push(p.second, p.first);
-                }
+                for (int i = 0; i < B2; i++)
+                    s.push(qb3csz(group[i], rung));
             }
-            else { // top rung, might overflow
+            else { // rung 63 might overflow 64 bits
                 for (int i = 0; i < B2; i++) {
                     auto p = qb3csz(group[i], rung);
-                    size_t ovf = p.first & (p.first >> 6); // overflow flag
+                    size_t ovf = p.first & (p.first >> 6); // overflow
                     s.push(p.second, p.first ^ ovf); // changes 65 in 64
                     if (ovf)
                         s.push(1ull & (static_cast<uint64_t>(group[i]) >> 62), ovf);
@@ -242,7 +239,7 @@ static void groupencode(T group[B2], T maxval, oBits& s,
 }
 
 // Base QB3 group encode with code switch, returns encoded size
-template <typename T = uint8_t> 
+template <typename T>
 static void groupencode(T group[B2], T maxval, size_t oldrung, oBits& s) {
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     uint64_t acc = CSW[UBITS][(topbit(maxval | 1) - oldrung) & ((1ull << UBITS) - 1)];
@@ -250,7 +247,7 @@ static void groupencode(T group[B2], T maxval, size_t oldrung, oBits& s) {
 }
 
 // Group encode with cf
-template <typename T = uint8_t>
+template <typename T>
 static void cfgenc(const T igrp[B2], T cf, T pcf, size_t oldrung, oBits& bits) {
     // Signal as switch to same rung, max-positive value, by UBITS
     const uint16_t SIGNAL[] = { 0x0, 0x0, 0x0, 0x5017, 0x6037, 0x7077, 0x80f7 };
@@ -327,7 +324,7 @@ static void cfgenc(const T igrp[B2], T cf, T pcf, size_t oldrung, oBits& bits) {
             return;
         }
     }
-    // Encode the group, divided by CF
+    // Encode the group only, divided by CF
     groupencode(group, maxval, bits, acc, abits);
 }
 
@@ -386,16 +383,16 @@ static int encode_fast(const T* image, oBits& s, encs &info)
                     for (size_t i = 0; i < B2; i++) {
                         T g = image[loc + c + offsets[i]] - image[loc + cb + offsets[i]];
                         prv += g -= prv;
-                        group[i] = mags(g);
-                        maxval = std::max(maxval, mags(g));
+                        group[i] = g = mags(g);
+                        if (maxval < g) maxval = g;
                     }
                 }
                 else { // baseband
                     for (size_t i = 0; i < B2; i++) {
                         T g = image[loc + c + offsets[i]];
                         prv += g -= prv;
-                        group[i] = mags(g);
-                        maxval = std::max(maxval, mags(g));
+                        group[i] = g = mags(g);
+                        if (maxval < g) maxval = g;
                     }
                 }
                 prev[c] = prv;
@@ -418,21 +415,19 @@ static int ienc(const T grp[B2], size_t rung, size_t oldrung, oBits &s) {
     constexpr int TOO_LARGE(800); // Larger than any possible size
     if (rung < 4 || rung == 63)
         return TOO_LARGE;
-    // Build unsorted histogram
-    struct KVP { T key, val; };
-    KVP v[B2] = {};
+    struct KVP { T key, count; };
+    KVP v[B2 / 2] = {};
     size_t len = 0;
     for (int i = 0; i < B2; i++) {
         size_t j = 0;
         while (j < len && v[j].key != grp[i])
-            j++;
+            if (++j >= B2 /2)
+                return TOO_LARGE; // Too many unique values
         if (j == len)
             v[len++] = { grp[i], 1 };
         else
-            v[j].val++;
+            v[j].count++;
     }
-    if (len > B2 / 2)
-        return TOO_LARGE;
 
     const uint16_t SIGNAL[] = { 0x0, 0x0, 0x0, 0x5017, 0x6037, 0x7077, 0x80f7 };
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
@@ -458,14 +453,14 @@ static int ienc(const T grp[B2], size_t rung, size_t oldrung, oBits &s) {
     abits += static_cast<size_t>((cs >> 12) - 1);
     s.push(acc, abits);
     acc = abits = 0;
-    std::sort(v, v + len, [](const KVP& a, const KVP& b) { return a.val > b.val; });
+    std::sort(v, v + len, [](const KVP& a, const KVP& b) { return a.count > b.count; });
 
     // Encode indices
     for (int i = 0; i < B2; i++) {
         int j = 0;
         while (v[j].key != grp[i])
             j++;
-        auto c = CRG[2][j];
+        auto c = crg2[j];
         acc |= (c & TBLMASK) << abits;
         abits += c >> 12;
     }
@@ -499,10 +494,10 @@ static int encode_best(const T *image, oBits& s, encs &info)
         prev[c] = static_cast<T>(info.band[c].prev);
         pcf[c] = static_cast<T>(info.band[c].cf);
     }
-    size_t offsets[B2] = {};
+    size_t offset[B2] = {};
     for (size_t i = 0; i < B2; i++)
-        offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
-    T group[B2] = {}; // Current 2D group to encode, as array
+        offset[i] = (xsize * ylut[i] + xlut[i]) * bands;
+    T group[B2] = {}; // 2D group to encode
     for (size_t y = 0; y < ysize; y += B) {
         // If the last row is partial, roll it up
         if (y + B > ysize)
@@ -519,18 +514,18 @@ static int encode_best(const T *image, oBits& s, encs &info)
                 if (c != cband[c]) {
                     auto cb = cband[c];
                     for (size_t i = 0; i < B2; i++) {
-                        T g = image[loc + c + offsets[i]] - image[loc + cb + offsets[i]];
+                        T g = image[loc + c + offset[i]] - image[loc + cb + offset[i]];
                         prv += g -= prv;
-                        group[i] = mags(g);
-                        maxval = std::max(maxval, mags(g));
+                        group[i] = g = mags(g);
+                        if (maxval < g) maxval = g;
                     }
                 }
                 else {
                     for (size_t i = 0; i < B2; i++) {
-                        T g = image[loc + c + offsets[i]];
+                        T g = image[loc + c + offset[i]];
                         prv += g -= prv;
-                        group[i] = mags(g);
-                        maxval = std::max(maxval, mags(g));
+                        group[i] = g = mags(g);
+                        if (maxval < g) maxval = g;
                     }
                 }
                 prev[c] = prv;
@@ -557,16 +552,16 @@ static int encode_best(const T *image, oBits& s, encs &info)
                     cfgenc(group, cf, pcf[c], oldrung, s);
 
                 if ((s.position() - start) >= (36 + 3 * UBITS + 2 * rung)) {
-                    uint8_t buffer[100] = {}; // 800 bits max
+                    uint8_t buffer[128] = {};
                     oBits idxs(buffer);
                     int idx = ienc(group, rung, oldrung, idxs);
                     if (idx < s.position() - start) {
                         s.rewind(start);
                         s += idxs;
-                    } else if (cf > 1)
+                    } else if (cf > 1 && pcf[c] != cf - 2)
                         pcf[c] = cf - 2;
                 }
-                else if (cf > 1)
+                else if (cf > 1 && pcf[c] != cf - 2)
                     pcf[c] = cf - 2;
             }
         }

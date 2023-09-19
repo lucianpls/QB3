@@ -109,18 +109,17 @@ public:
 
     // Append content from other output bitstream
     oBits& operator+=(const oBits&other) {
-        iBits is(other.v, (other.bitp + 7) / 8);
-
         auto len = other.bitp;
-        // Whole 64bit words
-        for(auto pv = reinterpret_cast<uint64_t *>(other.v); len >=64; len-=64, pv++)
+        for(auto pv = reinterpret_cast<uint64_t *>(other.v); len >= 64; len -= 64, pv++)
             push(*pv, 64);
-        // Bytes at the end
-        for(auto pv = other.v + (other.bitp / 64) * 8 ; len >= 8; len-=8, pv++)
-            push(*pv, 8);
-        // Bits at the end
-        if (len)
-            push(*(other.v + other.bitp / 8), len);
+        // bits at the end
+        if (len) {
+            uint64_t acc = 0;
+            auto pv = other.v + (other.bitp / 64) * 8;
+            for (size_t i = 0; i * 8 < len; i++)
+                acc |= static_cast<uint64_t>(pv[i]) << (i * 8);
+            push(acc, len);
+        }
         return *this;
     }
 
