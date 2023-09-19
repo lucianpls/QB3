@@ -18,7 +18,6 @@ Contributors:  Lucian Plesea
 #pragma once
 #include "QB3common.h"
 #include <algorithm>
-#include <array>
 
 namespace QB3 {
 // Encoding tables for rungs up to 8, for speedup. Rung 0 and 1 are special
@@ -421,7 +420,7 @@ static int ienc(const T grp[B2], size_t rung, size_t oldrung, oBits &s) {
         return TOO_LARGE;
     // Build unsorted histogram
     struct KVP { T key, val; };
-    std::array<KVP, B2> v = {};
+    KVP v[B2] = {};
     size_t len = 0;
     for (int i = 0; i < B2; i++) {
         size_t j = 0;
@@ -459,10 +458,7 @@ static int ienc(const T grp[B2], size_t rung, size_t oldrung, oBits &s) {
     abits += static_cast<size_t>((cs >> 12) - 1);
     s.push(acc, abits);
     acc = abits = 0;
-
-    // Sort by descending frequency
-    std::sort(v.begin(), v.begin() + len,
-        [](const KVP& a, const KVP& b) { return a.val > b.val; });
+    std::sort(v, v + len, [](const KVP& a, const KVP& b) { return a.val > b.val; });
 
     // Encode indices
     for (int i = 0; i < B2; i++) {
@@ -552,12 +548,14 @@ static int encode_best(const T *image, oBits& s, encs &info)
                     s.push(acc, abits);
                     continue;
                 }
+
                 auto cf = gcf(group);
                 auto start = s.position();
                 if (cf < 2)
                     groupencode(group, maxval, oldrung, s);
                 else
                     cfgenc(group, cf, pcf[c], oldrung, s);
+
                 if ((s.position() - start) >= (36 + 3 * UBITS + 2 * rung)) {
                     uint8_t buffer[100] = {}; // 800 bits max
                     oBits idxs(buffer);

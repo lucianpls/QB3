@@ -139,7 +139,6 @@ static const uint16_t dsw6[] = { 0x6001, 0x7009, 0x603f, 0x8011, 0x6002, 0x7037,
 0x6008, 0x7034, 0x6038, 0x8024, 0x6001, 0x700d, 0x603f, 0x801d, 0x6002, 0x7033, 0x603e, 0x8023, 0x6003, 0x700e, 0x603d, 0x801e,
 0x6004, 0x7032, 0x603c, 0x8022, 0x6005, 0x700f, 0x603b, 0x801f, 0x6006, 0x7031, 0x603a, 0x8021, 0x6007, 0x7010, 0x6039, 0x8000,
 0x6008, 0x7030, 0x6038, 0x8020 };
-const uint16_t* DSW[] = { nullptr, nullptr, nullptr, dsw3, dsw4, dsw5, dsw6 };
 
 // Computed decode, does not work for rung 0 or 1
 static std::pair<size_t, uint64_t> qb3dsz(uint64_t val, size_t rung) {
@@ -169,11 +168,10 @@ static std::pair<size_t, uint64_t> qb3dsztbl(uint64_t val, size_t rung) {
 // For rung 1, it works with 47bits or more
 // returns false on failure
 template<typename T>
-static bool gdecode(iBits &s, size_t rung, T * group, uint64_t acc, size_t abits) {
-     assert(((rung > 1) && (abits <= 8))
-         || ((rung == 1) && (abits <= 17)) // B2 + 1
-         || ((rung == 0) && (abits <= 47)) // 3 * B2 - 1
-     );
+static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits) {
+    assert(((rung > 1) && (abits <= 8))
+        || ((rung == 1) && (abits <= 17)) // B2 + 1
+        || ((rung == 0) && (abits <= 47))); // 3 * B2 - 1
     if (0 == rung) { // single bits, direct decoding
         if (0 != (acc & 1)) {
             abits += B2;
@@ -319,7 +317,7 @@ static bool decode(uint8_t *src, size_t len, T* image,
     constexpr auto LONG_MASK(NORM_MASK * 2 + 1); // UBITS + 1 set
     T prev[QB3_MAXBANDS] = {}, pcf[QB3_MAXBANDS] = {}, group[B2] = {};
     size_t runbits[QB3_MAXBANDS] = {}, offset[B2] = {};
-    const uint16_t* dsw(sizeof(T) == 1 ? DSW[3] : sizeof(T) == 2 ? DSW[4] : sizeof(T) == 4 ? DSW[5] : DSW[6]);
+    const uint16_t* dsw = sizeof(T) == 1 ? dsw3 : sizeof(T) == 2 ? dsw4 : sizeof(T) == 4 ? dsw5 : dsw6;
     for (size_t i = 0; i < B2; i++)
         offset[i] = (xsize * ylut[i] + xlut[i]) * bands;
     iBits s(src, len);
@@ -447,8 +445,7 @@ static bool decode(uint8_t *src, size_t len, T* image,
         } // per block
         if (failed) break;
         // For performance apply band delta per block stip, in linear order
-        for (int c = 0; c < bands; c++) {
-            if (c == cband[c]) continue;
+        for (int c = 0; c < bands; c++) if (c != cband[c]) {
             auto dimg = image + bands * xsize * y + c;
             auto simg = image + bands * xsize * y + cband[c];
             for (int i = 0; i < B * xsize; i++, dimg += bands, simg += bands)
