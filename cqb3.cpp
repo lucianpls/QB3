@@ -18,6 +18,7 @@ Contributors:  Lucian Plesea
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <sstream>
 #include <chrono>
 #include <string>
 #include <vector>
@@ -38,6 +39,7 @@ struct options {
         rle(false), // non-default RLE (off for best, on for fast)
         verbose(false), 
         decode(false),
+        time(0),
         quanta(0)
     {};
 
@@ -68,6 +70,7 @@ int Usage(const options &opt) {
         << "\t     RLE is only used if applicable\n"
         << "\t-t : trim input to multiple of 4x4 pixels\n"
         << "\t-m <b,b,b> : core band mapping\n"
+        << "\t-m x : exhaustive band mapping search\n"
         ;
     return 1;
 }
@@ -114,7 +117,7 @@ bool parse_args(int argc, char** argv, options& opt) {
             case 'm':
                 // The next parameter is a comma separated band list if it starts with a digit
                 opt.mapping = "-"; // Disable mapping
-                if (i < argc && (argv[i + 1] == "x" || isbandmap(argv[i + 1])))
+                if (i < argc && (string(argv[i + 1]) == "x" || isbandmap(argv[i + 1])))
                         opt.mapping = argv[++i];
                 break;
             case 'r':
@@ -225,12 +228,20 @@ int decode_main(options& opts) {
             throw 2;
         }
         if (opts.verbose) {
+            auto bands = image_size[2];
             cout << "Input:\nSize " << src.size() << " Image "
-                << image_size[0] << "x" << image_size[1] << "@"
-                << image_size[2] << endl;
+                << image_size[0] << "x" << image_size[1] << "@" << bands << endl;
             cout << "QB3 mode :" << mode_string(qb3_get_mode(qdec)) << endl;
             if (qb3_get_quanta(qdec) > 1)
                 cout << " Quanta " << qb3_get_quanta(qdec) << endl;
+            size_t bandmap[QB3_MAXBANDS] = {};
+            if (bands > 1 && qb3_get_coreband(qdec, bandmap)) { // Why would it fail?
+                ostringstream bmap;
+                for (int i = 0; i < bands - 1; i++)
+                    bmap << bandmap[i] << ",";
+                bmap << bandmap[bands - 1]; // Last one
+                cout << "Band mapping " << bmap.str() << endl;
+            }
         }
         raw.resize(qb3_decoded_size(qdec));
         auto t1 = high_resolution_clock::now();
@@ -341,7 +352,7 @@ void trim(Raster& raster, vector<unsigned char> &buffer) {
     swap(buffer, outbuffer);
 }
 
-// 
+// Handles the QB encoding
 int encode(Raster &raster, std::vector<std::uint8_t> &image, std::vector<std::uint8_t> &dest, options &opts) {
     qb3_dtype dt = raster.dt == ICDT_Byte ? QB3_U8 : ICDT_UInt16 ? QB3_U16 : QB3_I16;
     auto bands = raster.size.c;
@@ -350,7 +361,6 @@ int encode(Raster &raster, std::vector<std::uint8_t> &image, std::vector<std::ui
     size_t outsize(0);
 
     if (!opts.mapping.empty()) {
-        // Modify band mapping
         size_t bmap[QB3_MAXBANDS];
         if (opts.mapping == "-") {
             for (int i = 0; i < bands; i++)
@@ -400,7 +410,7 @@ int encode(Raster &raster, std::vector<std::uint8_t> &image, std::vector<std::ui
         t1 = high_resolution_clock::now();
         outsize = qb3_encode(qenc, static_cast<void*>(image.data()), dest.data());
         t2 = high_resolution_clock::now();
-        opts.time = duration_cast<duration<double>>(t2 - t1).count();
+        opts.time += duration_cast<duration<double>>(t2 - t1).count();
         if (outsize > dest.size()) { // Too late to catch, buffer did overflow
             cerr << "QB3 output exceeds calculated maximum\n";
             throw 2;
@@ -474,9 +484,41 @@ int encode_main(options& opts) {
     }
 
     vector<uint8_t> dest;
-    auto status = encode(raster, image, dest, opts);
-    if (status)
-        return status;
+    auto bands = raster.size.c;
+    if (opts.mapping != "x" || bands < 3) { // Ignore the bands for 1 and 2 band images
+        opts.time = 0;
+        if (opts.mapping == "x")
+            opts.mapping = ""; // Back to default
+        auto status = encode(raster, image, dest, opts);
+        if (status)
+            return status;
+    }
+    else { // Try all mappings for RGB bands. Takes 9-ish times longer than the default
+        // TODO: Run them in parallel, which would take a lot more RAM?
+        if (bands > 4 || bands < 3) {
+            cerr << "Exhaustive band mix implemented only for RGB/RGBA inputs\n";
+            return 1; // Use error
+        }
+        string RGB_combo[] = { // Keep the alpha separate if it exists
+            "1,1,1", "0,0,0", "0,0,2", "0,1,0", "0,1,1",
+            "0,1,2", "1,1,2", "2,1,2", "2,2,2"
+        };
+        opts.time = 0; // To start accumulating
+        for (auto& combo : RGB_combo) {
+            vector<uint8_t> temp;
+            opts.mapping = combo;
+            auto status = encode(raster, image, temp, opts);
+            if (status)
+                return status;
+            if (dest.size() == 0 || dest.size() > temp.size()) {
+                // Found a smaller encoding
+                if (opts.verbose)
+                    cout << "Band mix " << combo << ", size " << temp.size() << endl;
+                dest.resize(temp.size());
+                memcpy(dest.data(), temp.data(), dest.size());
+            }
+        }
+    }
 
     auto outsize = dest.size();
     time_span = opts.time;
