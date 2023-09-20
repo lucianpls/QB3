@@ -70,6 +70,9 @@ DLLEXPORT encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb
 // Call when done with the encoder
 DLLEXPORT void qb3_destroy_encoder(encsp p);
 
+// Reset state, allowing encoder to be reused
+DLLEXPORT void qb3_reset_encoder(encsp p);
+
 // Change the default core band mapping.
 // The default assumes bands are independent, except for 3 or 4 bands
 // when RGB(A) is assumed and R-G and B-G is used

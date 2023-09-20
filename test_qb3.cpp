@@ -304,8 +304,12 @@ int main(int argc, char **argv)
 
             std::vector<uint8_t> image(params.get_buffer_size());
             auto t = high_resolution_clock::now();
-            stride_decode(params, source, image.data());
+            auto err_message = stride_decode(params, source, image.data());
             auto time_span = duration_cast<duration<double>>(high_resolution_clock::now() - t).count();
+            if (err_message) {
+                cerr << err_message << endl;
+                return 1;
+            }
             cout << "Decode time " << time_span << " rate " << image.size() / time_span / 1024 / 1024 << " MB/s" << endl;
 
             cout << "Size\tRatio %\tEnc (MB/s)\t(s)\tDec (MB/s)\t(s)\tT_Size\n\n";
@@ -386,8 +390,13 @@ int main(int argc, char **argv)
         else if (raster.dt == ICDT_Int16 || raster.dt == ICDT_UInt16) {
             std::vector<uint16_t> image(params.get_buffer_size() / 2);
             auto t = high_resolution_clock::now();
-            stride_decode(params, source, image.data());
+            auto err_message = stride_decode(params, source, image.data());
             auto time_span = duration_cast<duration<double>>(high_resolution_clock::now() - t).count();
+            if (err_message) {
+                cerr << err_message << endl;
+                return 1;
+            }
+
             cout << "Decode time " << time_span << endl;
 
             cout << "Compressed\tRatio\tEncode\tDecode\tType\n\n";

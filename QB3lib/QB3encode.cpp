@@ -52,6 +52,16 @@ encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt
     return p;
 }
 
+void qb3_reset_encoder(encsp p) {
+    for (size_t c = 0; c < p->nbands; c++) {
+        p->band[c].runbits = 0;
+        p->band[c].prev = 0;
+        p->band[c].cf = 0;
+        p->cband[c] = static_cast<uint8_t>(c);
+    }
+    p->error = 0;
+}
+
 void qb3_destroy_encoder(encsp p) {
     delete p;
 }

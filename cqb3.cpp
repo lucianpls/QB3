@@ -46,6 +46,7 @@ struct options {
     string out_fname;
     string error;
     string mapping; // band mapping, if provided
+    double time;
     bool best;
     bool trim; // Trim input to a multiple of 4x4 blocks
     bool rle; // Skip RLE
@@ -113,8 +114,8 @@ bool parse_args(int argc, char** argv, options& opt) {
             case 'm':
                 // The next parameter is a comma separated band list if it starts with a digit
                 opt.mapping = "-"; // Disable mapping
-                if (i < argc && isbandmap(argv[i + 1]))
-                    opt.mapping = argv[++i];
+                if (i < argc && (argv[i + 1] == "x" || isbandmap(argv[i + 1])))
+                        opt.mapping = argv[++i];
                 break;
             case 'r':
                 opt.rle = true;
@@ -340,66 +341,14 @@ void trim(Raster& raster, vector<unsigned char> &buffer) {
     swap(buffer, outbuffer);
 }
 
-int encode_main(options& opts) {
-    string fname = opts.in_fname;
-    FILE* f = fopen(fname.c_str(), "rb");
-    if (!f) {
-        cerr << "Can't open input file\n";
-        return errno;
-    }
-    fseek(f, 0, SEEK_END);
-    auto fsize = ftell(f);
-    rewind(f);
-    std::vector<uint8_t> src(fsize);
-    storage_manager source = { src.data(), src.size() };
-    fread(source.buffer, fsize, 1, f);
-    fclose(f);
-    Raster raster;
-    auto error_message = image_peek(source, raster);
-    if (error_message) {
-        cerr << error_message << endl;
-        return 1;
-    }
-
-    if (opts.verbose)
-        cout << "Input " << raster.size.x << "x" << raster.size.y << "@"
-        << raster.size.c << "\nSize " << fsize
-        << ((raster.dt != ICDT_Byte) ? " 16bit\n" : "\n");
-
-    if (raster.size.x < 4 || raster.size.y < 4) {
-        cerr << "QB3 requires input size between 4 and 65536 pixels\n";
-        return 2;
-    }
-
-    if (raster.dt != ICDT_Byte && raster.dt != ICDT_UInt16 && raster.dt != ICDT_Short) {
-        cerr << "Only conversion from 8 and 16 bit data implemented\n";
-        return 2;
-    }
-
-    codec_params params(raster);
-    std::vector<uint8_t> image(params.get_buffer_size());
-    auto t = high_resolution_clock::now();
-    stride_decode(params, source, image.data());
-    auto time_span = duration_cast<duration<double>>(high_resolution_clock::now() - t).count();
-
-    if (opts.verbose)
-        cerr << "Decode time: " << time_span << "s\nRatio " << fsize * 100.0 / image.size() << "%, rate: "
-        << image.size() / time_span / 1024 / 1024 << " MB/s\n\n";
-
-    if ((raster.size.x % 4 || raster.size.y % 4) && opts.trim) {
-        trim(raster, image);
-        if (opts.verbose)
-            cerr << "Trimmed to " << raster.size.x << "x" << raster.size.y << endl;
-    }
-
-    size_t xsize = raster.size.x;
-    size_t ysize = raster.size.y;
-    size_t bands = raster.size.c;
+// 
+int encode(Raster &raster, std::vector<std::uint8_t> &image, std::vector<std::uint8_t> &dest, options &opts) {
     qb3_dtype dt = raster.dt == ICDT_Byte ? QB3_U8 : ICDT_UInt16 ? QB3_U16 : QB3_I16;
-
-    auto qenc = qb3_create_encoder(xsize, ysize, bands, dt);
-    vector<uint8_t> outvec(qb3_max_encoded_size(qenc), 0);
+    auto bands = raster.size.c;
+    auto qenc = qb3_create_encoder(raster.size.x, raster.size.y, bands, dt);
+    dest.resize(qb3_max_encoded_size(qenc));
     size_t outsize(0);
+
     if (!opts.mapping.empty()) {
         // Modify band mapping
         size_t bmap[QB3_MAXBANDS];
@@ -443,14 +392,20 @@ int encode_main(options& opts) {
             if (!qb3_set_encoder_quanta(qenc, opts.quanta, true)) {
                 cerr << "Invalid quanta\n";
                 throw 1;
-            } else if (opts.verbose) {
+            }
+            else if (opts.verbose) {
                 cout << "Lossy compression, quantized by " << opts.quanta << endl;
             }
         }
         t1 = high_resolution_clock::now();
-        outsize = qb3_encode(qenc, static_cast<void*>(image.data()), outvec.data());
+        outsize = qb3_encode(qenc, static_cast<void*>(image.data()), dest.data());
         t2 = high_resolution_clock::now();
-        time_span = duration_cast<duration<double>>(t2 - t1).count();
+        opts.time = duration_cast<duration<double>>(t2 - t1).count();
+        if (outsize > dest.size()) { // Too late to catch, buffer did overflow
+            cerr << "QB3 output exceeds calculated maximum\n";
+            throw 2;
+        }
+        dest.resize(outsize);
     }
     catch (int err_code) {
         cerr << opts.error << endl;
@@ -458,15 +413,73 @@ int encode_main(options& opts) {
         return err_code;
     }
     qb3_destroy_encoder(qenc);
+    return 0; // success, encoded result in dest vector
+}
 
-    // DEBUG only, dump the data
-    //#if defined(_DEBUG)
-    //    { // Write the raw data
-    //        FILE* f = fopen("debug.raw", "wb");
-    //        fwrite(outvec.data() + 20, outsize - 20, 1, f);
-    //        fclose(f);
-    //    }
-    //#endif
+int encode_main(options& opts) {
+    string fname = opts.in_fname;
+    FILE* f = fopen(fname.c_str(), "rb");
+    if (!f) {
+        cerr << "Can't open input file\n";
+        return errno;
+    }
+    fseek(f, 0, SEEK_END);
+    auto fsize = ftell(f);
+    rewind(f);
+    std::vector<uint8_t> src(fsize);
+    storage_manager source = { src.data(), src.size() };
+    fread(source.buffer, fsize, 1, f);
+    fclose(f);
+    Raster raster;
+    auto error_message = image_peek(source, raster);
+    if (error_message) {
+        cerr << error_message << endl;
+        return 1;
+    }
+
+    if (opts.verbose)
+        cout << "Input " << raster.size.x << "x" << raster.size.y << "@"
+        << raster.size.c << "\nSize " << fsize
+        << ((raster.dt != ICDT_Byte) ? " 16bit\n" : "\n");
+
+    if (raster.size.x < 4 || raster.size.y < 4) {
+        cerr << "QB3 requires input size between 4 and 65536 pixels\n";
+        return 2;
+    }
+
+    if (raster.dt != ICDT_Byte && raster.dt != ICDT_UInt16 && raster.dt != ICDT_Short) {
+        cerr << "Only conversion from 8 and 16 bit data implemented\n";
+        return 2;
+    }
+
+    codec_params params(raster);
+    std::vector<uint8_t> image(params.get_buffer_size());
+    auto t = high_resolution_clock::now();
+    auto message = stride_decode(params, source, image.data());
+    auto time_span = duration_cast<duration<double>>(high_resolution_clock::now() - t).count();
+
+    if (message) {
+        cerr << message << endl;
+        return 2;
+    }
+
+    if (opts.verbose)
+        cerr << "Decode time: " << time_span << "s\nRatio " << fsize * 100.0 / image.size() << "%, rate: "
+        << image.size() / time_span / 1024 / 1024 << " MB/s\n\n";
+
+    if ((raster.size.x % 4 || raster.size.y % 4) && opts.trim) {
+        trim(raster, image);
+        if (opts.verbose)
+            cerr << "Trimmed to " << raster.size.x << "x" << raster.size.y << endl;
+    }
+
+    vector<uint8_t> dest;
+    auto status = encode(raster, image, dest, opts);
+    if (status)
+        return status;
+
+    auto outsize = dest.size();
+    time_span = opts.time;
 
     if (opts.verbose) {
         cout << "Output\nSize: " << outsize << "\nEncode time : " << time_span << "s\n"
@@ -480,7 +493,7 @@ int encode_main(options& opts) {
         cerr << "Can't open output file\n";
         exit(errno);
     }
-    fwrite(outvec.data(), outsize, 1, f);
+    fwrite(dest.data(), outsize, 1, f);
     fclose(f);
     return 0;
 }

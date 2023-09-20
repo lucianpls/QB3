@@ -90,7 +90,7 @@ struct encs {
     size_t nbands;
     size_t quanta;
 
-    // Persistent stage by band
+    // Persistent state by band
     band_state band[QB3_MAXBANDS];
     // band which will be subtracted, by band
     size_t cband[QB3_MAXBANDS];
