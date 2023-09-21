@@ -474,6 +474,10 @@ int encode_main(options& opts) {
         return 2;
     }
 
+    // Warnings
+    if (strlen(params.error_message))
+        cerr << fname << " " << params.error_message << endl;
+
     if (opts.verbose)
         cerr << "Decode time: " << time_span << "s\nRatio " << fsize * 100.0 / image.size() << "%, rate: "
         << image.size() / time_span / 1024 / 1024 << " MB/s\n\n";
