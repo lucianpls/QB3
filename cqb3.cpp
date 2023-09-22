@@ -1,6 +1,5 @@
 /*
-
-Basic QB3 image encode and decode, uses libicd for input
+Content: QB3 image encode and decode utility
 
 Copyright 2023 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,9 @@ Contributors:  Lucian Plesea
 
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
+#include <sstream>
 #include <chrono>
 #include <string>
 #include <vector>
@@ -36,16 +37,22 @@ struct options {
     options() : 
         best(false),
         trim(false),
+        rle(false), // non-default RLE (off for best, on for fast)
         verbose(false), 
-        decode(false) 
+        decode(false),
+        time(0),
+        quanta(0)
     {};
 
+    uint64_t quanta;
     string in_fname;
     string out_fname;
     string error;
     string mapping; // band mapping, if provided
+    double time;
     bool best;
     bool trim; // Trim input to a multiple of 4x4 blocks
+    bool rle; // Skip RLE
     bool verbose;
     bool decode;
 };
@@ -59,8 +66,12 @@ int Usage(const options &opt) {
         << "\n"
         << "Compression only options:\n"
         << "\t-b : best compression\n"
+        << "\t-q <n> : quanta\n"
+        << "\t-r : reverse RLE behavior, off for best, on for fast\n"
+        << "\t     RLE is only used if applicable\n"
         << "\t-t : trim input to multiple of 4x4 pixels\n"
         << "\t-m <b,b,b> : core band mapping\n"
+        << "\t-m x : exhaustive band mapping search\n"
         ;
     return 1;
 }
@@ -99,11 +110,19 @@ bool parse_args(int argc, char** argv, options& opt) {
             case 't':
                 opt.trim = true;
                 break;
+            case 'q':
+                opt.quanta = 2; // Default
+                if ((i < argc) && isdigit(argv[i + 1][0]))
+                    opt.quanta = strtoull(argv[++i], nullptr, 10);
+                break;
             case 'm':
                 // The next parameter is a comma separated band list if it starts with a digit
                 opt.mapping = "-"; // Disable mapping
-                if (i < argc && isbandmap(argv[i + 1]))
-                    opt.mapping = argv[++i];
+                if (i < argc && (string(argv[i + 1]) == "x" || isbandmap(argv[i + 1])))
+                        opt.mapping = argv[++i];
+                break;
+            case 'r':
+                opt.rle = true;
                 break;
             default:
                 opt.error = "Uknown option provided";
@@ -165,10 +184,19 @@ bool parse_args(int argc, char** argv, options& opt) {
             return Usage(opt);
         }
     }
-    else {
-
-    }
     return true;
+}
+
+const char *mode_string(qb3_mode m) {
+    switch (m) {
+    case QB3M_BASE: return "Base";
+    case QB3M_CF: return "CF";
+    case QB3M_RLE: return "Base + RLE";
+    case QB3M_CF_RLE: return "CF + RLE";
+    case QB3M_STORED: return "Stored";
+    default:
+        return "Unknown mode";
+    }
 }
 
 int decode_main(options& opts) {
@@ -201,13 +229,28 @@ int decode_main(options& opts) {
             throw 2;
         }
         if (opts.verbose) {
+            auto bands = image_size[2];
             cout << "Input:\nSize " << src.size() << " Image "
-                << image_size[0] << "x" << image_size[1] << "@"
-                << image_size[2] << endl;
+                << image_size[0] << "x" << image_size[1] << "@" << bands << endl;
+            cout << "QB3 mode :" << mode_string(qb3_get_mode(qdec)) << endl;
+            if (qb3_get_quanta(qdec) > 1)
+                cout << " Quanta " << qb3_get_quanta(qdec) << endl;
+            size_t bandmap[QB3_MAXBANDS] = {};
+            if (bands > 1 && qb3_get_coreband(qdec, bandmap)) { // Why would it fail?
+                ostringstream bmap;
+                for (int i = 0; i < bands - 1; i++)
+                    bmap << bandmap[i] << ",";
+                bmap << bandmap[bands - 1]; // Last one
+                cout << "Band mapping " << bmap.str() << endl;
+            }
         }
         raw.resize(qb3_decoded_size(qdec));
         auto t1 = high_resolution_clock::now();
         auto rbytes = qb3_read_data(qdec, raw.data());
+        if (rbytes != raw.size()) {
+            opts.error = "Error reading qb3 file data";
+            throw 2;
+        }
         auto t2 = high_resolution_clock::now();
         time_span = duration_cast<duration<double>>(t2 - t1).count();
     }
@@ -221,13 +264,20 @@ int decode_main(options& opts) {
     auto dt = qb3_get_type(qdec);
     qb3_destroy_decoder(qdec);
     if (opts.verbose) {
-        cerr << "Decode time: " << time_span << " rate: "
+        cerr << "Decode time: " << time_span << "s, rate: "
             << raw.size() / time_span / 1024 / 1024 << " MB/s\n";
     }
 
     if (dt != QB3_U8 && dt != QB3_U16) {
         cerr << "Only 8 and 16 bit PNG supported as output";
         return 1;
+    }
+
+    if (dt == QB3_U16) {
+        // Bug in libicd, it expects input 16 bit data to be in big endian
+        uint16_t * p = (uint16_t*)raw.data();
+        for (size_t i = 0; i < raw.size() / 2; ++i)
+            p[i] = (p[i] << 8) | (p[i] >> 8);
     }
 
     // Convert to PNG using libicd
@@ -303,68 +353,15 @@ void trim(Raster& raster, vector<unsigned char> &buffer) {
     swap(buffer, outbuffer);
 }
 
-int encode_main(options& opts) {
-    string fname = opts.in_fname;
-    FILE* f = fopen(fname.c_str(), "rb");
-    if (!f) {
-        cerr << "Can't open input file\n";
-        return errno;
-    }
-    fseek(f, 0, SEEK_END);
-    auto fsize = ftell(f);
-    rewind(f);
-    std::vector<uint8_t> src(fsize);
-    storage_manager source = { src.data(), src.size() };
-    fread(source.buffer, fsize, 1, f);
-    fclose(f);
-    Raster raster;
-    auto error_message = image_peek(source, raster);
-    if (error_message) {
-        cerr << error_message << endl;
-        return 1;
-    }
-
-    if (opts.verbose)
-        cout << "Image " << raster.size.x << "x" << raster.size.y << "@"
-            << raster.size.c << "\nSize " << fsize
-            << ((raster.dt != ICDT_Byte) ? " 16bit\n" : "\n");
-
-    if (raster.size.x < 4 || raster.size.y < 4) {
-        cerr << "QB3 requires input size to be a multiple of 4\n";
-        return 2;
-    }
-
-    if (raster.dt != ICDT_Byte && raster.dt != ICDT_UInt16 && raster.dt != ICDT_Short) {
-        cerr << "Only conversion from 8 and 16 bit data implemented\n";
-        return 2;
-    }
-
-    codec_params params(raster);
-    std::vector<uint8_t> image(params.get_buffer_size());
-    auto t = high_resolution_clock::now();
-    stride_decode(params, source, image.data());
-    auto time_span = duration_cast<duration<double>>(high_resolution_clock::now() - t).count();
-
-    if (opts.verbose)
-        cerr << "Decode time: " << time_span << "s\nRatio " << fsize * 100.0 / image.size() << "%, rate: "
-        << image.size() / time_span / 1024 / 1024 << " MB/s\n";
-
-    if ((raster.size.x % 4 || raster.size.y % 4) && opts.trim) {
-        trim(raster, image);
-        if (opts.verbose)
-            cerr << "Trimmed to " << raster.size.x << "x" << raster.size.y << endl;
-    }
-
-    size_t xsize = raster.size.x;
-    size_t ysize = raster.size.y;
-    size_t bands = raster.size.c;
+// Handles the QB encoding
+int encode(Raster &raster, std::vector<std::uint8_t> &image, std::vector<std::uint8_t> &dest, options &opts) {
     qb3_dtype dt = raster.dt == ICDT_Byte ? QB3_U8 : ICDT_UInt16 ? QB3_U16 : QB3_I16;
-
-    auto qenc = qb3_create_encoder(xsize, ysize, bands, dt);
-    vector<uint8_t> outvec(qb3_max_encoded_size(qenc), 0);
+    auto bands = raster.size.c;
+    auto qenc = qb3_create_encoder(raster.size.x, raster.size.y, bands, dt);
+    dest.resize(qb3_max_encoded_size(qenc));
     size_t outsize(0);
+
     if (!opts.mapping.empty()) {
-        // Modify band mapping
         size_t bmap[QB3_MAXBANDS];
         if (opts.mapping == "-") {
             for (int i = 0; i < bands; i++)
@@ -387,13 +384,39 @@ int encode_main(options& opts) {
         if (!success)
             cerr << "Invalid band mapping, adjusted\n";
     }
+
     try {
         high_resolution_clock::time_point t1, t2;
-        qb3_set_encoder_mode(qenc, opts.best ? qb3_mode::QB3M_BEST : qb3_mode::QB3M_BASE);
+        // Pick a mode
+        qb3_mode mode = opts.best ? qb3_mode::QB3M_BEST : qb3_mode::QB3M_BASE;
+        // If the RLE is set, pick more careful
+        if (opts.rle) {
+            if (QB3M_BEST == mode) {
+                mode = QB3M_CF; // Disable RLE for best
+            }
+            else if (QB3M_BASE == mode) {
+                mode = QB3M_RLE;
+            }
+        }
+        qb3_set_encoder_mode(qenc, mode);
+        if (opts.quanta > 1) {
+            if (!qb3_set_encoder_quanta(qenc, opts.quanta, true)) {
+                cerr << "Invalid quanta\n";
+                throw 1;
+            }
+            else if (opts.verbose) {
+                cout << "Lossy compression, quantized by " << opts.quanta << endl;
+            }
+        }
         t1 = high_resolution_clock::now();
-        outsize = qb3_encode(qenc, static_cast<void*>(image.data()), outvec.data());
+        outsize = qb3_encode(qenc, static_cast<void*>(image.data()), dest.data());
         t2 = high_resolution_clock::now();
-        time_span = duration_cast<duration<double>>(t2 - t1).count();
+        opts.time += duration_cast<duration<double>>(t2 - t1).count();
+        if (outsize > dest.size()) { // Too late to catch, buffer did overflow
+            cerr << "QB3 output exceeds calculated maximum\n";
+            throw 2;
+        }
+        dest.resize(outsize);
     }
     catch (int err_code) {
         cerr << opts.error << endl;
@@ -401,12 +424,115 @@ int encode_main(options& opts) {
         return err_code;
     }
     qb3_destroy_encoder(qenc);
+    return 0; // success, encoded result in dest vector
+}
+
+int encode_main(options& opts) {
+    string fname = opts.in_fname;
+    FILE* f = fopen(fname.c_str(), "rb");
+    if (!f) {
+        cerr << "Can't open input file\n";
+        return errno;
+    }
+    fseek(f, 0, SEEK_END);
+    auto fsize = ftell(f);
+    rewind(f);
+    std::vector<uint8_t> src(fsize);
+    storage_manager source = { src.data(), src.size() };
+    fread(source.buffer, fsize, 1, f);
+    fclose(f);
+    Raster raster;
+    auto error_message = image_peek(source, raster);
+    if (error_message) {
+        cerr << error_message << endl;
+        return 1;
+    }
+
+    if (opts.verbose)
+        cout << "Input " << raster.size.x << "x" << raster.size.y << "@"
+        << raster.size.c << "\nSize " << fsize
+        << ((raster.dt != ICDT_Byte) ? " 16bit\n" : "\n");
+
+    if (raster.size.x < 4 || raster.size.y < 4) {
+        cerr << "QB3 requires input size between 4 and 65536 pixels\n";
+        return 2;
+    }
+
+    if (raster.dt != ICDT_Byte && raster.dt != ICDT_UInt16 && raster.dt != ICDT_Short) {
+        cerr << "Only conversion from 8 and 16 bit data implemented\n";
+        return 2;
+    }
+
+    codec_params params(raster);
+    std::vector<uint8_t> image(params.get_buffer_size());
+    auto t = high_resolution_clock::now();
+    auto message = stride_decode(params, source, image.data());
+    auto time_span = duration_cast<duration<double>>(high_resolution_clock::now() - t).count();
+
+    if (message) {
+        cerr << message << endl;
+        return 2;
+    }
+
+    // Warnings
+    if (strlen(params.error_message))
+        cerr << fname << " " << params.error_message << endl;
+
+    if (opts.verbose)
+        cerr << "Decode time: " << time_span << "s\nRatio " << fsize * 100.0 / image.size() << "%, rate: "
+        << image.size() / time_span / 1024 / 1024 << " MB/s\n\n";
+
+    if ((raster.size.x % 4 || raster.size.y % 4) && opts.trim) {
+        trim(raster, image);
+        if (opts.verbose)
+            cerr << "Trimmed to " << raster.size.x << "x" << raster.size.y << endl;
+    }
+
+    vector<uint8_t> dest;
+    auto bands = raster.size.c;
+    if (opts.mapping != "x" || bands < 3) { // Ignore the bands for 1 and 2 band images
+        opts.time = 0;
+        if (opts.mapping == "x")
+            opts.mapping = ""; // Back to default
+        auto status = encode(raster, image, dest, opts);
+        if (status)
+            return status;
+    }
+    else { // Try all mappings for RGB bands. Takes 9-ish times longer than the default
+        // TODO: Run them in parallel, which would take a lot more RAM?
+        if (bands > 4 || bands < 3) {
+            cerr << "Exhaustive band mix implemented only for RGB/RGBA inputs\n";
+            return 1; // Use error
+        }
+        string RGB_combo[] = { // Keep the alpha separate if it exists
+            "1,1,1", "0,0,0", "0,0,2", "0,1,0", "0,1,1",
+            "0,1,2", "1,1,2", "2,1,2", "2,2,2"
+        };
+        opts.time = 0; // To start accumulating
+        for (auto& combo : RGB_combo) {
+            vector<uint8_t> temp;
+            opts.mapping = combo;
+            auto status = encode(raster, image, temp, opts);
+            if (status)
+                return status;
+            if (dest.size() == 0 || dest.size() > temp.size()) {
+                // Found a smaller encoding
+                if (opts.verbose)
+                    cout << "Band mix " << combo << ", size " << temp.size() << endl;
+                dest.resize(temp.size());
+                memcpy(dest.data(), temp.data(), dest.size());
+            }
+        }
+    }
+
+    auto outsize = dest.size();
+    time_span = opts.time;
 
     if (opts.verbose) {
-        cerr << "Output\nSize: " << outsize << "\nEncode time : " << time_span << "s\nRatio "
-            << outsize * 100.0 / image.size() << "%, encode rate : "
-            << image.size() / time_span / 1024 / 1024 << " MB/s\n";
-        cerr << outsize * 100.0 / fsize << "% of the input\n";
+        cout << "Output\nSize: " << outsize << "\nEncode time : " << time_span << "s\n"
+            "Ratio " << outsize * 100.0 / image.size() << "%, "
+            "rate : " << image.size() / time_span / 1024 / 1024 << " MB/s\n";
+        cout << outsize * 100.0 / fsize << "% of the input\n";
     }
 
     f = fopen(opts.out_fname.c_str(), "wb");
@@ -414,7 +540,7 @@ int encode_main(options& opts) {
         cerr << "Can't open output file\n";
         exit(errno);
     }
-    fwrite(outvec.data(), outsize, 1, f);
+    fwrite(dest.data(), outsize, 1, f);
     fclose(f);
     return 0;
 }

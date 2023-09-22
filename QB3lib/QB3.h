@@ -1,4 +1,6 @@
 /*
+Content: Public API for QB3 library
+
 Copyright 2021-2022 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -9,8 +11,6 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-
-Content: Forward definition headers, to be used when linking with QB3 library
 
 Contributors:  Lucian Plesea
 */
@@ -41,8 +41,19 @@ typedef struct decs * decsp; // decoder
 
 // Types
 enum qb3_dtype { QB3_U8 = 0, QB3_I8, QB3_U16, QB3_I16, QB3_U32, QB3_I32, QB3_U64, QB3_I64 };
-// Encode mode
-enum qb3_mode { QB3M_DEFAULT = 0, QB3M_BASE = 0, QB3M_BEST };
+
+// Encode mode, default is QB3M_BASE, pure QB3 encoding. Fastest
+// QB3M_BEST is the best compression, may change
+enum qb3_mode { 
+    QB3M_DEFAULT = 0, 
+    QB3M_BASE = 0, 
+    QB3M_CF = 1, // With common factor
+    QB3M_RLE = 2, // BASE + RLE
+    QB3M_CF_RLE = 3, // BASE + CF + RLE
+    QB3M_BEST = 3,
+    QB3M_STORED = 255, // Raw bypass
+    QB3M_INVALID = -1 // Invalid mode
+}; // Best compression, one of the above
 
 // Errors
 enum qb3_error {
@@ -58,6 +69,9 @@ enum qb3_error {
 DLLEXPORT encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt);
 // Call when done with the encoder
 DLLEXPORT void qb3_destroy_encoder(encsp p);
+
+// Reset state, allowing encoder to be reused
+DLLEXPORT void qb3_reset_encoder(encsp p);
 
 // Change the default core band mapping.
 // The default assumes bands are independent, except for 3 or 4 bands
@@ -79,8 +93,8 @@ DLLEXPORT size_t qb3_max_encoded_size(const encsp p);
 // If mode value is out of range, it returns the previous mode value of p
 DLLEXPORT qb3_mode qb3_set_encoder_mode(encsp p, qb3_mode mode);
 
-// Generate raw qb3 stream, no headers
-DLLEXPORT void qb3_set_encoder_raw(encsp p);
+//// Generate raw qb3 stream, no headers
+//DLLEXPORT void qb3_set_encoder_raw(encsp p);
 
 // Encode the source into destination buffer, which should be at least qb3_max_encoded_size
 // Source organization is expected to be y major, then x, then band (interleaved)
@@ -93,20 +107,6 @@ DLLEXPORT int qb3_get_encoder_state(encsp p);
 
 // In QB3decode.cpp
 
-// To be used by raw and formatted QB3 streams
-DLLEXPORT void qb3_destroy_decoder(decsp p);
-
-// Raw functions
-DLLEXPORT decsp qb3_create_raw_decoder(size_t width, size_t height, size_t bands, qb3_dtype dt);
-
-DLLEXPORT size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination);
-
-DLLEXPORT size_t qb3_decoded_size(const decsp p);
-
-DLLEXPORT qb3_dtype qb3_get_type(const decsp p);
-
-// Formatted stream decode functions
-
 // Starts reading a formatted QB3 source. Reads the main header, which only contains the output size information
 // returns nullptr if it fails, usually because the source is not in the correct format
 // If successful, size containts 3 values, x size, y size and number of bands
@@ -117,6 +117,23 @@ DLLEXPORT bool qb3_read_info(decsp p);
 
 // Call after qb3_read_info, reads all the data, returns bytes read
 DLLEXPORT size_t qb3_read_data(decsp p, void* destination);
+
+DLLEXPORT void qb3_destroy_decoder(decsp p);
+
+DLLEXPORT size_t qb3_decoded_size(const decsp p);
+
+DLLEXPORT qb3_dtype qb3_get_type(const decsp p);
+
+// Query settings, valid after qb3_read_info
+
+// Encoding mode used, returns QB3M_INVALID if failed
+DLLEXPORT qb3_mode qb3_get_mode(const decsp p);
+
+// Returns the number of quantization bits used, returns 0 if failed
+DLLEXPORT size_t qb3_get_quanta(const decsp p);
+
+// Sets the cband array and returns true if successful
+DLLEXPORT bool qb3_get_coreband(const decsp p, size_t *cband);
 
 #if defined(__cplusplus)
 }

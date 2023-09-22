@@ -82,12 +82,12 @@
     <PostBuildEvent>
       <Command>copy /y $(TargetPath) $(Prefix)bin
 copy /y $(TargetDir)$(TargetName).lib $(Prefix)lib
-copy /y $(ProjectDir)QB3.h $(Prefix)include</Command>
+copy /y $(ProjectDir)..\QB3lib\QB3.h $(Prefix)include</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <WarningLevel>Level3</WarningLevel>
+      <WarningLevel>Level4</WarningLevel>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>

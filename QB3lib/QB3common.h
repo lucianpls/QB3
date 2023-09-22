@@ -1,4 +1,6 @@
 /*
+Content: QB3 parts used by both the encoder and the decoder
+
 Copyright 2020-2023 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -11,9 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 Contributors:  Lucian Plesea
-
-Content: QB3 parts used by both the encoder and the decoder
-
 */
 
 #pragma once
@@ -28,7 +27,7 @@ Content: QB3 parts used by both the encoder and the decoder
 #endif
 
 // Tables have 12bits of data, top 4 bits are size
-#define TBLMASK 0xfffull
+constexpr auto TBLMASK(0xfffull);
 
 // Block is 4x4 pixels
 constexpr size_t B(4);
@@ -40,7 +39,7 @@ constexpr size_t B2(B * B);
 #endif
 
 #if defined(_WIN32)
-// rank of top set bit, result is undefined for val == 0
+// blog2 of val, result is undefined for val == 0
 static size_t topbit(uint64_t val) {
     return 63 - __lzcnt64(val);
 }
@@ -59,11 +58,14 @@ static size_t setbits16(uint64_t val) {
 }
 
 #else // no builtins, portable C
-static size_t topbit(uint64_t val) {
-    unsigned r = 0;
-    while (val >>= 1)
-        r++;
-    return r;
+// blog2 of val, result is undefined for val == 0
+static size_t topbit(uint64_t v) {
+    size_t r, t;
+    r = size_t(0 != (v >> 32)) << 5; v >>= r;
+    t = size_t(0 != (v >> 16)) << 4; v >>= t; r |= t;
+    t = size_t(0 != (v >> 8)) << 3;  v >>= t; r |= t;
+    t = size_t(0 != (v >> 4)) << 2;  v >>= t; r |= t;
+    return r + ((0xffffaa50ull >> (v << 1)) & 0x3);
 }
 
 // My own portable byte bitcount
@@ -77,24 +79,27 @@ static size_t setbits16(uint64_t val) {
 
 #endif
 
+struct band_state {
+    size_t prev, runbits, cf;
+};
+
 // Encoder control structure
 struct encs {
     size_t xsize;
     size_t ysize;
     size_t nbands;
     size_t quanta;
+
+    // Persistent state by band
+    band_state band[QB3_MAXBANDS];
     // band which will be subtracted, by band
     size_t cband[QB3_MAXBANDS];
 
-    // end state
-    size_t prev[QB3_MAXBANDS];
-    size_t runbits[QB3_MAXBANDS];
+    int error; // Holds the code for error, 0 if everything is fine
 
     qb3_mode mode;
     qb3_dtype type;
-    int error; // Holds the code for error, 0 if everything is fine
     bool away; // Round up instead of down when quantizing
-    bool raw;  // Write QB3 raw stream
 };
 
 // Decoder control structure
@@ -103,33 +108,38 @@ struct decs {
     size_t ysize;
     size_t nbands;
     size_t quanta;
-    // band which will be subtracted, by band
-    size_t cband[QB3_MAXBANDS];
+    int error;
+    int stage;
+
+    // band which will be added, by band
+    uint8_t cband[QB3_MAXBANDS];
     qb3_mode mode;
     qb3_dtype type;
-    int error;
-    int state;
-    bool raw;
 
     // Input buffer
     uint8_t* s_in;
     size_t s_size;
 };
 
-// Main header
-// 4 sig
-// 2 xsize
-// 2 ysize
-// 1 nbands
-// 1 data type
-// 1 mode
-constexpr size_t QB3_HDRSZ = 4 + 2 + 2 + 1 + 1 + 1;
-
 // in decode.cpp
 extern const int typesizes[8];
 
-// Absolute value from mag-sign
-template<typename T> static T magsabs(T val) { return (val >> 1) + (val & 1); }
+// Encode integers as magnitude and sign, with bit 0 for sign.
+// This encoding has the top bits always zero, regardless of sign
+// To keep the range the same as two's complement, the magnitude of 
+// negative values is biased down by one (no negative zero)
+
+// Change to mag-sign without conditionals, as fast as C can make it
+template<typename T>
+static T mags(T v) {
+    return (v << 1) ^ (~T(0) * (v >> (8 * sizeof(T) - 1)));
+}
+
+// Undo mag-sign without conditionals, as fast as C can make it
+template<typename T>
+static T smag(T v) {
+    return (v >> 1) ^ (~T(0) * (v & 1));
+}
 
 // If the rung bits of the input values match 1*0*, returns the index of first 0, otherwise B2 + 1
 template<typename T>

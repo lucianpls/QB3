@@ -69,7 +69,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>libicd.lib;libQB3.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>libicdd.lib;libQB3.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>copy /y $(TargetPath) $(Prefix)bin</Command>

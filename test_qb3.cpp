@@ -1,4 +1,6 @@
 /*
+Content: Debugging aid
+
 Copyright 2020-2023 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -48,78 +50,10 @@ vector<outT> toplus(vector<inT>& v, outT m) {
     return result;
 }
 
-// Adds m instead of multiplying
-template<typename T>
-void check_plus(vector<uint8_t>& image, const Raster& raster, uint64_t m, int main_band = 0, bool fast = 0) {
-    size_t xsize = raster.size.x;
-    size_t ysize = raster.size.y;
-    size_t bands = raster.size.c;
-    high_resolution_clock::time_point t1, t2;
-    double time_span;
-
-    auto img = toplus(image, static_cast<T>(m));
-    auto tp = sizeof(T) == 8 ? qb3_dtype::QB3_I64 : sizeof(T) == 4 ? qb3_dtype::QB3_I32 :
-        sizeof(T) == 2 ? qb3_dtype::QB3_I16 : qb3_dtype::QB3_I8;
-    auto qenc = qb3_create_encoder(xsize, ysize, bands, tp);
-    vector<uint8_t> outvec(qb3_max_encoded_size(qenc));
-
-    if (main_band != 1) {
-        std::vector<size_t> cbands(bands);
-        if (-1 == main_band)
-            for (size_t i = 0; i < bands; i++)
-                cbands[i] = i;
-        qb3_set_encoder_coreband(qenc, bands, cbands.data());
-    }
-    qb3_set_encoder_mode(qenc, fast ? qb3_mode::QB3M_BASE : qb3_mode::QB3M_BEST);
-    t1 = high_resolution_clock::now();
-    auto outsize = qb3_encode(qenc, static_cast<void*>(img.data()), outvec.data());
-    t2 = high_resolution_clock::now();
-    time_span = duration_cast<duration<double>>(t2 - t1).count();
-
-    if (fast)
-        cout << "Fast ";
-    if (m != 1)
-        cout << "Sum " << m;
-    cout << " \tBPV " << sizeof(T) << '\t' << outsize << "\t"
-        << outsize * 100.0 / image.size() / sizeof(T) << "\t"
-        << time_span << "\t";
-
-    std::vector<T> re(xsize * ysize * bands);
-
-    auto qdec = qb3_create_raw_decoder(xsize, ysize, bands, tp);
-    if (main_band != 1) {
-        std::vector<size_t> cbands(bands);
-        if (-1 == main_band)
-            for (size_t i = 0; i < bands; i++)
-                cbands[i] = i;
-        qb3_set_decoder_coreband(qdec, bands, cbands.data());
-    }
-    t1 = high_resolution_clock::now();
-    qb3_decode(qdec, outvec.data(), outsize, re.data());
-    t2 = high_resolution_clock::now();
-    qb3_destroy_decoder(qdec);
-
-    time_span = duration_cast<duration<double>>(t2 - t1).count();
-    cout << time_span;
-
-    if (img != re) {
-        for (size_t i = 0; i < img.size(); i++)
-            if (img[i] != re[i]) {
-                cout << endl << "Difference at " << i << " "
-                    << img[i] << " " << re[i];
-                cout << endl << "y = " << i / (xsize * bands) <<
-                    " x = " << (i / bands) % xsize <<
-                    " c = " << i % bands;
-                break;
-            }
-    }
-}
-
 template<typename T>
 void check(vector<uint8_t> &image, const Raster &raster,
     uint64_t m, int main_band = 0,
-    bool fast = 0, uint64_t q = 1, bool away = false,
-    bool headers = true)
+    bool fast = 0, uint64_t q = 1, bool away = false)
 {
     size_t xsize = raster.size.x;
     size_t ysize = raster.size.y;
@@ -153,13 +87,6 @@ void check(vector<uint8_t> &image, const Raster &raster,
         qb3_set_encoder_quanta(qenc, q, away);
     qb3_set_encoder_mode(qenc, fast ? qb3_mode::QB3M_BASE : qb3_mode::QB3M_BEST);
 
-    if (headers) { // Anything to do here?
-
-    }
-    else {
-        qb3_set_encoder_raw(qenc);
-    }
-
     t1 = high_resolution_clock::now();
     auto outsize = qb3_encode(qenc, static_cast<void *>(img.data()), outvec.data());
     time_span = duration_cast<duration<double>>(high_resolution_clock::now() - t1).count();
@@ -168,7 +95,8 @@ void check(vector<uint8_t> &image, const Raster &raster,
     qenc = nullptr;
 
     cout << outsize << '\t' << outsize * 100.0 / image.size() / sizeof(T) 
-        << '\t' << image.size() * sizeof(T) / time_span / 1024 / 1024 << '\t' << time_span << '\t';
+        << '\t' << image.size() * sizeof(T) / time_span / 1024 / 1024 
+        << '\t' << time_span << '\t';
     if (err)
         cout << "\nFailed\n";
 
@@ -176,33 +104,22 @@ void check(vector<uint8_t> &image, const Raster &raster,
 
     decsp qdec = nullptr;
     try {
-        
-        if (headers) { // If the output is formatted, the process is different
-            size_t image_size[3]; // Space for output values
-            qdec = qb3_read_start(outvec.data(), outsize, image_size);
-            if (!qdec)
-                throw "Can't read formatted stream header";
-            // Check the size
-            if (xsize != image_size[0] || ysize != image_size[1] || bands != image_size[2])
-                throw "Wrong decoded size";
-            if (!qb3_read_info(qdec))
-                throw "Reading QB3 headers failed";
-            // Could query metadata here
-            if (re.size() * sizeof(T) != qb3_decoded_size(qdec))
-                throw "Wrong expected decoded size";
-            t1 = high_resolution_clock::now();
-            if (!qb3_read_data(qdec, re.data()))
-                throw "Reading QB3 data failed";
-            t2 = high_resolution_clock::now();
-        }
-        else {
-            auto qdec = qb3_create_raw_decoder(xsize, ysize, bands, tp);
-            //if (q > 1)
-            //    qb3_set_decoder_quanta(qdec, q);
-            t1 = high_resolution_clock::now();
-            qb3_decode(qdec, outvec.data(), outsize, re.data());
-            t2 = high_resolution_clock::now();
-        }
+        size_t image_size[3]; // Space for output values
+        qdec = qb3_read_start(outvec.data(), outsize, image_size);
+        if (!qdec)
+            throw "Can't read formatted stream header";
+        // Check the size
+        if (xsize != image_size[0] || ysize != image_size[1] || bands != image_size[2])
+            throw "Wrong decoded size";
+        if (!qb3_read_info(qdec))
+            throw "Reading QB3 headers failed";
+        // Could query metadata here
+        if (re.size() * sizeof(T) != qb3_decoded_size(qdec))
+            throw "Wrong expected decoded size";
+        t1 = high_resolution_clock::now();
+        if (!qb3_read_data(qdec, re.data()))
+            throw "Reading QB3 data failed";
+        t2 = high_resolution_clock::now();
     }
     catch (const char* error) {
         cerr << "Error: " << error << endl;
@@ -222,8 +139,8 @@ void check(vector<uint8_t> &image, const Raster &raster,
             auto x = img[i];
             auto y = re[i];
             if (!((x == y) || ((x > y) && (y + hq >= x)) || ((y > x) && (x + hq >= y)))) {
-                cout << endl << "Difference at " << i << " "
-                    << uint64_t(img[i]) << " != " << uint64_t(re[i]);
+                cout << endl << "Difference at " << i << " expect "
+                    << hex << uint64_t(img[i]) << " != " << uint64_t(re[i]) << dec;
                 cout << endl << "y = " << i / (xsize * bands) <<
                     " x = " << (i / bands) % xsize <<
                     " c = " << i % bands;
@@ -234,8 +151,8 @@ void check(vector<uint8_t> &image, const Raster &raster,
     else {
         for (size_t i = 0; i < img.size(); i++)
             if (img[i] != re[i]) {
-                cout << endl << "Difference at " << i << " "
-                    << img[i] << " " << re[i];
+                cout << endl << "Difference at " << i << " expect "
+                    << hex << uint64_t(img[i]) << " got " << uint64_t(re[i]) << dec;
                 cout << endl << "y = " << i / (xsize * bands) <<
                     " x = " << (i / bands) % xsize <<
                     " c = " << i % bands;
@@ -245,7 +162,7 @@ void check(vector<uint8_t> &image, const Raster &raster,
 }
 
 template<typename T>
-void check(vector<uint16_t>& image, const Raster& raster, uint64_t m, int main_band = 0, bool fast = 0, bool headers = 1) {
+void check(vector<uint16_t>& image, const Raster& raster, uint64_t m, int main_band = 0, bool fast = 0) {
     size_t xsize = raster.size.x;
     size_t ysize = raster.size.y;
     size_t bands = raster.size.c;
@@ -259,12 +176,6 @@ void check(vector<uint16_t>& image, const Raster& raster, uint64_t m, int main_b
     vector<uint8_t> outvec(qb3_max_encoded_size(qenc));
 
     qb3_set_encoder_mode(qenc, fast ? qb3_mode::QB3M_BASE : qb3_mode::QB3M_BEST);
-    if (headers) { // Anything to do here?
-
-    }
-    else {
-        qb3_set_encoder_raw(qenc);
-    }
 
     t1 = high_resolution_clock::now();
     auto outsize = qb3_encode(qenc, img.data(), outvec.data());
@@ -275,12 +186,28 @@ void check(vector<uint16_t>& image, const Raster& raster, uint64_t m, int main_b
 
     std::vector<T> re(xsize * ysize * bands);
 
-    auto qdec = qb3_create_raw_decoder(xsize, ysize, bands, tp);
+    size_t image_size[3] = {}; // Space for output values
+    auto failed = false;
+    auto expected_size = xsize * ysize * bands * 2; // 16bit data
+    size_t actual_size(0);
     t1 = high_resolution_clock::now();
-    qb3_decode(qdec, outvec.data(), outsize, re.data());
+    auto qdec = qb3_read_start(outvec.data(), outsize, image_size);
+    if (!qdec) failed = true; 
+    else if (!qb3_read_info(qdec)) failed = true;
+    else {
+        failed |= xsize != image_size[0] || ysize != image_size[1] || bands != image_size[2];
+        if (!failed)
+            actual_size = qb3_read_data(qdec, re.data());
+    }
     t2 = high_resolution_clock::now();
+    failed |= expected_size != actual_size;
+
     qb3_destroy_decoder(qdec);
     qdec = nullptr;
+    if (failed) {
+        cerr << "Error: " << "Decoding failed" << endl;
+        return;
+    }
 
     time_span = duration_cast<duration<double>>(t2 - t1).count();
     cout << time_span;
@@ -289,16 +216,15 @@ void check(vector<uint16_t>& image, const Raster& raster, uint64_t m, int main_b
     if (fast)
         cout << "Fast";
 
-    if (img != re) {
-        for (size_t i = 0; i < img.size(); i++)
-            if (img[i] != re[i]) {
-                cout << endl << "Difference at " << i << " "
-                    << img[i] << " " << re[i];
-                cout << endl << "y = " << i / (xsize * bands) <<
-                    " x = " << (i / bands) % xsize <<
-                    " c = " << i % bands;
-                break;
-            }
+    if (img == re)
+        return;
+    for (size_t i = 0; i < img.size(); i++) if (img[i] != re[i]) {
+        cout << endl << "Difference at " << i << " "
+            << img[i] << " " << re[i];
+        cout << endl << "y = " << i / (xsize * bands) <<
+            " x = " << (i / bands) % xsize <<
+            " c = " << i % bands;
+        break;
     }
 }
 
@@ -378,16 +304,15 @@ int main(int argc, char **argv)
 
             std::vector<uint8_t> image(params.get_buffer_size());
             auto t = high_resolution_clock::now();
-            stride_decode(params, source, image.data());
+            auto err_message = stride_decode(params, source, image.data());
             auto time_span = duration_cast<duration<double>>(high_resolution_clock::now() - t).count();
+            if (err_message) {
+                cerr << err_message << endl;
+                return 1;
+            }
             cout << "Decode time " << time_span << " rate " << image.size() / time_span / 1024 / 1024 << " MB/s" << endl;
 
             cout << "Size\tRatio %\tEnc (MB/s)\t(s)\tDec (MB/s)\t(s)\tT_Size\n\n";
-
-            // Check that offsetting the input around max doesn't really change the compression
-            // This is obvious because only differences are encoded
-            // check_plus<uint8_t>(image, raster, 127, 1, 1);
-            // cout << endl;
 
             // The sign really messes things up for normal images, because transitions through 128 are frequent
             // and become massive
@@ -444,14 +369,20 @@ int main(int argc, char **argv)
             cout << "\nData type\n";
             check<uint64_t>(image, raster, 1, 1);
             cout << endl;
-            check<uint32_t>(image, raster, 1, 1);
-            cout << endl;
-            check<uint16_t>(image, raster, 1, 1);
-            cout << endl;
-            check<uint8_t>(image, raster, 1, 1);
+            check<uint64_t>(image, raster, 1, 1, true);
             cout << endl;
 
+            check<uint32_t>(image, raster, 1, 1);
+            cout << endl;
+            check<uint32_t>(image, raster, 1, 1, true);
+            cout << endl;
+
+            check<uint16_t>(image, raster, 1, 1);
+            cout << endl;
             check<uint16_t>(image, raster, 1, 1, true);
+            cout << endl;
+
+            check<uint8_t>(image, raster, 1, 1);
             cout << endl;
             check<uint8_t>(image, raster, 1, 1, true);
             cout << endl;
@@ -459,8 +390,13 @@ int main(int argc, char **argv)
         else if (raster.dt == ICDT_Int16 || raster.dt == ICDT_UInt16) {
             std::vector<uint16_t> image(params.get_buffer_size() / 2);
             auto t = high_resolution_clock::now();
-            stride_decode(params, source, image.data());
+            auto err_message = stride_decode(params, source, image.data());
             auto time_span = duration_cast<duration<double>>(high_resolution_clock::now() - t).count();
+            if (err_message) {
+                cerr << err_message << endl;
+                return 1;
+            }
+
             cout << "Decode time " << time_span << endl;
 
             cout << "Compressed\tRatio\tEncode\tDecode\tType\n\n";

@@ -20,6 +20,7 @@ Contributors:  Lucian Plesea
 #include <cassert>
 #include <type_traits>
 #include <limits>
+#include <utility>
 
 // Input bitstream, doesn't go past size
 class iBits {
@@ -79,6 +80,17 @@ class oBits {
 public:
     oBits(uint8_t * data) : v(data), bitp(0) {}
 
+    // Rewind to a bit position before the current one
+    size_t rewind(size_t pos = 0) {
+        // Don't go past the current end
+        if (pos < position()) {
+            bitp = pos;
+            if (bitp & 7) // clear partial bits in the last byte
+                v[bitp / 8] &= 0xff >> (8 - (bitp & 7));
+        }
+        return position();
+    }
+
     // Do not call with val having bits above "nbits" set, the results will be corrupt
     template<typename T>
     void push(T val, size_t nbits) {
@@ -95,6 +107,28 @@ public:
         bitp += nbits;
     }
 
+    // Append content from other output bitstream
+    oBits& operator+=(const oBits&other) {
+        auto len = other.bitp;
+        for(auto pv = reinterpret_cast<uint64_t *>(other.v); len >= 64; len -= 64, pv++)
+            push(*pv, 64);
+        // bits at the end
+        if (len) {
+            uint64_t acc = 0;
+            auto pv = other.v + (other.bitp / 64) * 8;
+            for (size_t i = 0; i * 8 < len; i++)
+                acc |= static_cast<uint64_t>(pv[i]) << (i * 8);
+            push(acc, len);
+        }
+        return *this;
+    }
+
+    template<typename T>
+    void push(std::pair<size_t, T> p) {
+        push(p.second, p.first);
+    }
+
+    // Number of bits written
     size_t position() const {
         return bitp;
     }
