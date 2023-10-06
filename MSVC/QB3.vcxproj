@@ -50,12 +50,14 @@
     <LinkIncremental>true</LinkIncremental>
     <IncludePath>$(Prefix)include;$(IncludePath)</IncludePath>
     <LibraryPath>$(Prefix)lib;$(LibraryPath)</LibraryPath>
+    <TargetName>test_qb3</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <IncludePath>$(Prefix)include;$(IncludePath)</IncludePath>
     <LibraryPath>$(Prefix)lib;$(LibraryPath)</LibraryPath>
     <ExecutablePath>$(Prefix)bin;$(ExecutablePath)</ExecutablePath>
+    <TargetName>test_qb3</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
