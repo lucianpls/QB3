@@ -6,7 +6,7 @@ and unsigned, from 8 to 64bit per value.
 
 # Library
 The library, located in [QB3lib](QB3lib) provides the core QB3 
-algorithm implementation and provides a C language API.
+algorithm implementation and a C language API.
 It is implemented in C++11 and can be built for various platforms using 
 cmake. It requires a little endian, two's complement architecture with 8, 16, 32 
 and 64 bit integers, which includes the common AMD64 and ARM64 platforms.
