@@ -2,7 +2,7 @@
 
 QB3 is a raster specific lossless compression that compresses better then PNG for natural images
 while being more than one hundred times faster. QB3 works on 2D rasters of integer values, signed 
-and unsigned, from 8 to 64bit per value.
+and unsigned, from 8 to 64bit per value. Multiple color bands are supported.
 
 # Library
 The library, located in [QB3lib](QB3lib) provides the core QB3 
