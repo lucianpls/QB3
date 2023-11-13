@@ -348,8 +348,12 @@ static int encode_fast(const T* image, oBits& s, encs &info)
     if (check_info(info))
         return check_info(info);
     // Best block traversal order in most cases
-    const uint8_t xlut[16] = { 0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3 };
-    const uint8_t ylut[16] = { 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3 };
+    // Original, Z-order
+    //const uint8_t xlut[16] = { 0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3 };
+    //const uint8_t ylut[16] = { 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3 };
+    // Hilbert curve
+    const uint8_t xlut[16] = { 0, 1, 1, 0, 0, 0, 1, 1,  2, 2, 3, 3, 3, 2, 2, 3 };
+    const uint8_t ylut[16] = { 0, 0, 1, 1, 2, 3, 3, 2,  2, 3, 3, 2, 1, 1, 0, 0 };
     const size_t xsize(info.xsize), ysize(info.ysize), bands(info.nbands), *cband(info.cband);
     // Running code length, start with nominal value
     size_t runbits[QB3_MAXBANDS] = {};
@@ -479,9 +483,13 @@ static int encode_best(const T *image, oBits& s, encs &info)
     static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
     if (check_info(info))
         return check_info(info);
-    // Best block traversal order in most cases
-    const uint8_t xlut[16] = { 0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3 };
-    const uint8_t ylut[16] = { 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3 };
+    //// Best block traversal order, Z-order
+    //const uint8_t xlut[16] = { 0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3 };
+    //const uint8_t ylut[16] = { 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3 };
+    // Hilbert curve
+    const uint8_t xlut[16] = { 0, 1, 1, 0, 0, 0, 1, 1,  2, 2, 3, 3, 3, 2, 2, 3 };
+    const uint8_t ylut[16] = { 0, 0, 1, 1, 2, 3, 3, 2,  2, 3, 3, 2, 1, 1, 0, 0 };
+
     const size_t xsize(info.xsize), ysize(info.ysize), bands(info.nbands), *cband(info.cband);
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     auto csw = CSW[UBITS];

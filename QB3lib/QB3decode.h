@@ -312,9 +312,13 @@ static bool decode(uint8_t *src, size_t len, T* image,
     size_t xsize, size_t ysize, size_t bands, uint8_t *cband)
 {
     static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
-    // Best block traversal order in most cases
-    const uint8_t xlut[16] = { 0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3 };
-    const uint8_t ylut[16] = { 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3 };
+    // Z-order curve, original
+    //const uint8_t xlut[16] = { 0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3 };
+    //const uint8_t ylut[16] = { 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3 };
+    // Hilbert curve, better compression in almost all cases
+    const uint8_t xlut[16] = { 0, 1, 1, 0, 0, 0, 1, 1,  2, 2, 3, 3, 3, 2, 2, 3 };
+    const uint8_t ylut[16] = { 0, 0, 1, 1, 2, 3, 3, 2,  2, 3, 3, 2, 1, 1, 0, 0 };
+
     constexpr size_t UBITS(sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6);
     constexpr auto NORM_MASK((1ull << UBITS) - 1); // UBITS set
     constexpr auto LONG_MASK(NORM_MASK * 2 + 1); // UBITS + 1 set
