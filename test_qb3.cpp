@@ -1,5 +1,5 @@
 /*
-Content: Debugging aid
+Content: QB3 algorithm testing
 
 Copyright 2020-2023 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
