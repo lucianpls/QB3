@@ -19,16 +19,8 @@ Contributors:  Lucian Plesea
 // For size_t
 #include <stddef.h>
 
-#if defined(_WIN32)
-#if defined(libQB3_EXPORTS)
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT __declspec(dllimport)
-#endif
-#else
-// Not windows
-#define DLLEXPORT 
-#endif
+// CMake will generate LIBQB3_EXPORT linkage as needed
+#include "libqb3_export.h"
 
 // Keep this close to plain C so it can have a C API
 #define QB3_MAXBANDS 16
@@ -66,12 +58,12 @@ enum qb3_error {
 // In QB3encode.cpp
 
 // Call before anything else
-DLLEXPORT encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt);
+LIBQB3_EXPORT encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt);
 // Call when done with the encoder
-DLLEXPORT void qb3_destroy_encoder(encsp p);
+LIBQB3_EXPORT void qb3_destroy_encoder(encsp p);
 
 // Reset state, allowing encoder to be reused
-DLLEXPORT void qb3_reset_encoder(encsp p);
+LIBQB3_EXPORT void qb3_reset_encoder(encsp p);
 
 // Change the default core band mapping.
 // The default assumes bands are independent, except for 3 or 4 bands
@@ -80,29 +72,29 @@ DLLEXPORT void qb3_reset_encoder(encsp p);
 // Returns false if band number differs from the one used to create p
 // Only values < bands are acceptable in cband array
 // The cband array might be modified if core bands are not valid or iterrative
-DLLEXPORT bool qb3_set_encoder_coreband(encsp p, size_t bands, size_t *cband);
+LIBQB3_EXPORT bool qb3_set_encoder_coreband(encsp p, size_t bands, size_t *cband);
 
 // Sets quantization parameters, returns true on success
 // away = true -> round away from zero
-DLLEXPORT bool qb3_set_encoder_quanta(encsp p, size_t q, bool away);
+LIBQB3_EXPORT bool qb3_set_encoder_quanta(encsp p, size_t q, bool away);
 
 // Upper bound of encoded size, without taking the header into consideration
-DLLEXPORT size_t qb3_max_encoded_size(const encsp p);
+LIBQB3_EXPORT size_t qb3_max_encoded_size(const encsp p);
 
 // Sets and returns the mode which will be used.
 // If mode value is out of range, it returns the previous mode value of p
-DLLEXPORT qb3_mode qb3_set_encoder_mode(encsp p, qb3_mode mode);
+LIBQB3_EXPORT qb3_mode qb3_set_encoder_mode(encsp p, qb3_mode mode);
 
 //// Generate raw qb3 stream, no headers
-//DLLEXPORT void qb3_set_encoder_raw(encsp p);
+//LIBQB3_EXPORT void qb3_set_encoder_raw(encsp p);
 
 // Encode the source into destination buffer, which should be at least qb3_max_encoded_size
 // Source organization is expected to be y major, then x, then band (interleaved)
 // Returns actual size, the encoder can be reused
-DLLEXPORT size_t qb3_encode(encsp p, void *source, void *destination);
+LIBQB3_EXPORT size_t qb3_encode(encsp p, void *source, void *destination);
 
 // Returns !0 if last encode call failed
-DLLEXPORT int qb3_get_encoder_state(encsp p);
+LIBQB3_EXPORT int qb3_get_encoder_state(encsp p);
 
 
 // In QB3decode.cpp
@@ -110,30 +102,30 @@ DLLEXPORT int qb3_get_encoder_state(encsp p);
 // Starts reading a formatted QB3 source. Reads the main header, which only contains the output size information
 // returns nullptr if it fails, usually because the source is not in the correct format
 // If successful, size containts 3 values, x size, y size and number of bands
-DLLEXPORT decsp qb3_read_start(void* source, size_t source_size, size_t* image_size);
+LIBQB3_EXPORT decsp qb3_read_start(void* source, size_t source_size, size_t* image_size);
 
 // Call after qb3_read_start, reads all headers until the raster data, returns false if it fails
-DLLEXPORT bool qb3_read_info(decsp p);
+LIBQB3_EXPORT bool qb3_read_info(decsp p);
 
 // Call after qb3_read_info, reads all the data, returns bytes read
-DLLEXPORT size_t qb3_read_data(decsp p, void* destination);
+LIBQB3_EXPORT size_t qb3_read_data(decsp p, void* destination);
 
-DLLEXPORT void qb3_destroy_decoder(decsp p);
+LIBQB3_EXPORT void qb3_destroy_decoder(decsp p);
 
-DLLEXPORT size_t qb3_decoded_size(const decsp p);
+LIBQB3_EXPORT size_t qb3_decoded_size(const decsp p);
 
-DLLEXPORT qb3_dtype qb3_get_type(const decsp p);
+LIBQB3_EXPORT qb3_dtype qb3_get_type(const decsp p);
 
 // Query settings, valid after qb3_read_info
 
 // Encoding mode used, returns QB3M_INVALID if failed
-DLLEXPORT qb3_mode qb3_get_mode(const decsp p);
+LIBQB3_EXPORT qb3_mode qb3_get_mode(const decsp p);
 
 // Returns the number of quantization bits used, returns 0 if failed
-DLLEXPORT size_t qb3_get_quanta(const decsp p);
+LIBQB3_EXPORT size_t qb3_get_quanta(const decsp p);
 
 // Sets the cband array and returns true if successful
-DLLEXPORT bool qb3_get_coreband(const decsp p, size_t *cband);
+LIBQB3_EXPORT bool qb3_get_coreband(const decsp p, size_t *cband);
 
 #if defined(__cplusplus)
 }

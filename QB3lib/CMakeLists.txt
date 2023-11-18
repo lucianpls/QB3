@@ -27,10 +27,17 @@ add_library(${PROJECT_NAME})
 target_sources(${PROJECT_NAME} 
     PRIVATE QB3encode.cpp QB3encode.h QB3decode.cpp QB3decode.h QB3common.h bitstream.h QB3.h
 )
-set_target_properties(${PROJECT_NAME} PROPERTIES 
-    PUBLIC_HEADER QB3.h
+
+set_target_properties(${PROJECT_NAME} PROPERTIES
+    PUBLIC_HEADER "QB3.h;${CMAKE_CURRENT_BINARY_DIR}/libqb3_export.h"
     DEBUG_POSTFIX "d"
     PREFIX ""
+)
+
+include(GenerateExportHeader)
+generate_export_header(${PROJECT_NAME})
+target_include_directories(${PROJECT_NAME}  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
 )
 
 include(GNUInstallDirs)
