@@ -61,8 +61,9 @@ enum qb3_mode {
 enum qb3_error {
     QB3E_OK = 0,
     QB3E_EINV, // Invalid parameter
-    QB3E_UNKN, // Unknown 
-    QB3E_ERR   // Last, unspecified error
+    QB3E_UNKN, // Unknown
+    QB3E_ERR,   // unspecified error
+    QB3E_LIBERR = 255 // internal QB33 error, should not happen
 };
 
 // In QB3encode.cpp

@@ -442,8 +442,26 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
     auto const mode = p->mode; // save the user chosen mode
     // Turn off the RLE for now
     bool rle = (QB3M_RLE == mode || QB3M_CF_RLE == mode);
-    if (rle)
-        p->mode = (QB3M_RLE == mode) ? QB3M_BASE : QB3M_CF;
+    if (rle) {
+        switch (mode) {
+        case QB3M_RLE:
+            p->mode = QB3M_BASE_Z;
+            break;
+        case QB3M_CF_RLE:
+            p->mode = QB3M_CF;
+            break;
+        case QB3M_RLE_H:
+            p->mode = QB3M_BASE_H;
+            break;
+        case QB3M_CF_RLE_H:
+            p->mode = QB3M_CF_H;
+            break;
+        default: // Library internal error
+            p->error = 255;
+            return 0;
+        }
+        //p->mode = (QB3M_RLE == mode) ? QB3M_BASE : QB3M_CF;
+    }
 
     uint8_t* const d = reinterpret_cast<uint8_t*>(destination);
     oBits s(d);
@@ -474,7 +492,7 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
 
     auto len = (s.position() + 7) / 8; // current output position in bytes
     if (rle) {
-        p->mode = mode; // restore the user selected mode
+        p->mode = mode; // restore the user selected mode that includes RLE
         if (p->error) // Bail out if there was an error
             return 0;
 
@@ -499,7 +517,7 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
                 write_headers(p, srle);
                 if (p->error)
                     return 0;
-                // Copy the RLE0FFFF data at the current position, they are not overlapping
+                // Copy the RLE encoded data at the current position, they are not overlapping
                 memcpy(d + srle.tobyte(), d + len, rle_size);
                 // Return the new size
                 return srle.tobyte() + rle_size;

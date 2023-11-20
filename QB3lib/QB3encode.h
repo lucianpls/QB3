@@ -357,15 +357,16 @@ static int encode_fast(const T* image, oBits& s, encs &info)
         runbits[c] = info.band[c].runbits;
         prev[c] = static_cast<T>(info.band[c].prev);
     }
-
     // Set up block offsets based on traversal order, defaults to HILBERT
+    // Best block traversal order
+    uint64_t order(info.order);
+    if (0 == order)
+        order = HILBERT;
     size_t offset[B2] = {};
-    uint64_t order = info.order == 0 ? HILBERT : info.order;
-    // Best block traversal order in most cases
     for (size_t i = 0; i < B2; i++) {
         // Pick up one nibbles, in top to bottom order
         size_t n = (order >> ((B2 - 1 - i) << 2));
-        offset[i] = (xsize * ((n >> 2) & 0b11)  + (n & 0b11)) * bands;
+        offset[i] = (xsize * ((n >> 2) & 0b11) + (n & 0b11)) * bands;
     }
     T group[B2] = {};
     for (size_t y = 0; y < ysize; y += B) {
@@ -495,7 +496,6 @@ static int encode_best(const T *image, oBits& s, encs &info)
         prev[c] = static_cast<T>(info.band[c].prev);
         pcf[c] = static_cast<T>(info.band[c].cf);
     }
-
     // Set up block offsets based on traversal order, defaults to HILBERT
     uint64_t order(info.order);
     if (0 == order)
@@ -506,7 +506,6 @@ static int encode_best(const T *image, oBits& s, encs &info)
         size_t n = (order >> ((B2 - 1 - i) << 2));
         offset[i] = (xsize * ((n >> 2) & 0b11) + (n & 0b11)) * bands;
     }
-
     T group[B2] = {}; // 2D group to encode
     for (size_t y = 0; y < ysize; y += B) {
         // If the last row is partial, roll it up
