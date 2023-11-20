@@ -347,13 +347,6 @@ static int encode_fast(const T* image, oBits& s, encs &info)
     static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
     if (check_info(info))
         return check_info(info);
-    // Best block traversal order in most cases
-    // Original, Z-order
-    //const uint8_t xlut[16] = { 0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3 };
-    //const uint8_t ylut[16] = { 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3 };
-    // Hilbert curve
-    const uint8_t xlut[16] = { 0, 1, 1, 0, 0, 0, 1, 1,  2, 2, 3, 3, 3, 2, 2, 3 };
-    const uint8_t ylut[16] = { 0, 0, 1, 1, 2, 3, 3, 2,  2, 3, 3, 2, 1, 1, 0, 0 };
     const size_t xsize(info.xsize), ysize(info.ysize), bands(info.nbands), *cband(info.cband);
     // Running code length, start with nominal value
     size_t runbits[QB3_MAXBANDS] = {};
@@ -364,9 +357,16 @@ static int encode_fast(const T* image, oBits& s, encs &info)
         runbits[c] = info.band[c].runbits;
         prev[c] = static_cast<T>(info.band[c].prev);
     }
-    size_t offsets[B2] = {};
-    for (size_t i = 0; i < B2; i++)
-        offsets[i] = (xsize * ylut[i] + xlut[i]) * bands;
+
+    // Set up block offsets based on traversal order, defaults to HILBERT
+    size_t offset[B2] = {};
+    uint64_t order = info.order == 0 ? HILBERT : info.order;
+    // Best block traversal order in most cases
+    for (size_t i = 0; i < B2; i++) {
+        // Pick up one nibbles, in top to bottom order
+        size_t n = (order >> ((B2 - 1 - i) << 2));
+        offset[i] = (xsize * ((n >> 2) & 0b11)  + (n & 0b11)) * bands;
+    }
     T group[B2] = {};
     for (size_t y = 0; y < ysize; y += B) {
         // If the last row is partial, roll it up
@@ -385,7 +385,7 @@ static int encode_fast(const T* image, oBits& s, encs &info)
                 if (c != cband[c]) {
                     auto cb = cband[c];
                     for (size_t i = 0; i < B2; i++) {
-                        T g = image[loc + c + offsets[i]] - image[loc + cb + offsets[i]];
+                        T g = image[loc + c + offset[i]] - image[loc + cb + offset[i]];
                         prv += g -= prv;
                         group[i] = g = mags(g);
                         if (maxval < g) maxval = g;
@@ -393,7 +393,7 @@ static int encode_fast(const T* image, oBits& s, encs &info)
                 }
                 else { // baseband
                     for (size_t i = 0; i < B2; i++) {
-                        T g = image[loc + c + offsets[i]];
+                        T g = image[loc + c + offset[i]];
                         prv += g -= prv;
                         group[i] = g = mags(g);
                         if (maxval < g) maxval = g;
@@ -483,13 +483,6 @@ static int encode_best(const T *image, oBits& s, encs &info)
     static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
     if (check_info(info))
         return check_info(info);
-    //// Best block traversal order, Z-order
-    //const uint8_t xlut[16] = { 0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3 };
-    //const uint8_t ylut[16] = { 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3 };
-    // Hilbert curve
-    const uint8_t xlut[16] = { 0, 1, 1, 0, 0, 0, 1, 1,  2, 2, 3, 3, 3, 2, 2, 3 };
-    const uint8_t ylut[16] = { 0, 0, 1, 1, 2, 3, 3, 2,  2, 3, 3, 2, 1, 1, 0, 0 };
-
     const size_t xsize(info.xsize), ysize(info.ysize), bands(info.nbands), *cband(info.cband);
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     auto csw = CSW[UBITS];
@@ -502,9 +495,18 @@ static int encode_best(const T *image, oBits& s, encs &info)
         prev[c] = static_cast<T>(info.band[c].prev);
         pcf[c] = static_cast<T>(info.band[c].cf);
     }
+
+    // Set up block offsets based on traversal order, defaults to HILBERT
+    uint64_t order(info.order);
+    if (0 == order)
+        order = HILBERT;
     size_t offset[B2] = {};
-    for (size_t i = 0; i < B2; i++)
-        offset[i] = (xsize * ylut[i] + xlut[i]) * bands;
+    for (size_t i = 0; i < B2; i++) {
+        // Pick up one nibble, in top to bottom order
+        size_t n = (order >> ((B2 - 1 - i) << 2));
+        offset[i] = (xsize * ((n >> 2) & 0b11) + (n & 0b11)) * bands;
+    }
+
     T group[B2] = {}; // 2D group to encode
     for (size_t y = 0; y < ysize; y += B) {
         // If the last row is partial, roll it up

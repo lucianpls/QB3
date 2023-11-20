@@ -125,6 +125,15 @@ decsp qb3_read_start(void* source, size_t source_size, size_t *image_size) {
     image_size[1] = p->ysize;
     image_size[2] = p->nbands;
 
+    switch (p->mode) {
+    case QB3M_BASE_Z:
+    case QB3M_CF:
+    case QB3M_CF_RLE:
+    case QB3M_RLE:
+        p->order = ZCURVE;
+        break;
+    }
+
     p->error = QB3E_OK;
     p->stage = 1; // Read main header
     return p; // Looks reasonable
@@ -154,8 +163,8 @@ bool qb3_read_info(decsp p) {
                 p->error = QB3E_EINV;
                 break;
             }
-            s.advance(16 + 16); // Skip the bytes we read
-            p->quanta = s.pull(len * 8);
+            s.advance(32); // Skip the bytes we read
+            p->quanta = s.pull(size_t(len) * 8);
             // Could check that the quanta is consistent with the data type
             if (p->quanta < 2)
                 p->error = QB3E_EINV;
@@ -166,7 +175,7 @@ bool qb3_read_info(decsp p) {
                 p->error = QB3E_EINV;
                 break;
             }
-            s.advance(16 + 16); // CHUNK + LEN
+            s.advance(32); // CHUNK + LEN
             for (size_t i = 0; i < p->nbands; i++) {
                 p->cband[i] = 0xff & s.pull(8);
                 if (p->cband[i] >= p->nbands)
@@ -215,7 +224,7 @@ int64_t deRLE0FFFF(const uint8_t* s, size_t slen, uint8_t* d, size_t dlen) {
             s += 2;
             slen -= 2;
             if (c != 0xff) { // zero run
-                dlen -= 3 + c;
+                dlen -= size_t(3) + c;
                 if (dlen < 0)
                     break; // output error, will exit
                 *d++ = 0;
@@ -304,7 +313,8 @@ static size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination
     }
 
 #define DEC(T) QB3::decode(src, src_sz, reinterpret_cast<T*>(destination), \
-    p->xsize, p->ysize, p->nbands, p->cband)
+    *p)
+//    p->xsize, p->ysize, p->nbands, p->cband)
 
     switch (p->type) {
     case qb3_dtype::QB3_U8:

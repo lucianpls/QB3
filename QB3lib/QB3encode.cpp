@@ -33,11 +33,12 @@ encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt
     p->xsize = width;
     p->ysize = height;
     p->nbands = bands;
+    p->order = 0; // will get changed to HILBERT
     p->type = static_cast<qb3_dtype>(dt);
     p->quanta = 1; // No quantization
     p->away = false; // Round to zero
     //p->raw = false;  // Write image header
-    p->mode = QB3M_DEFAULT; // Base
+    p->mode = QB3M_DEFAULT; // Fast
     // Start with no inter-band differential
     for (size_t c = 0; c < bands; c++) {
         p->band[c].runbits = 0;
@@ -99,19 +100,19 @@ bool qb3_set_encoder_quanta(encsp p, size_t q, bool away) {
     bool error = false;
     switch (p->type) {
 #define TOO_LARGE(Q, T) (Q > uint64_t(std::numeric_limits<T>::max()))
-    case qb3_dtype::QB3_I8:
+    case QB3_I8:
         error |= TOO_LARGE(p->quanta, int8_t);
-    case qb3_dtype::QB3_U8:
+    case QB3_U8:
         error |= TOO_LARGE(p->quanta, uint8_t);
-    case qb3_dtype::QB3_I16:
+    case QB3_I16:
         error |= TOO_LARGE(p->quanta, int16_t);
-    case qb3_dtype::QB3_U16:
+    case QB3_U16:
         error |= TOO_LARGE(p->quanta, uint16_t);
-    case qb3_dtype::QB3_I32:
+    case QB3_I32:
         error |= TOO_LARGE(p->quanta, int32_t);
-    case qb3_dtype::QB3_U32:
+    case QB3_U32:
         error |= TOO_LARGE(p->quanta, uint32_t);
-    case qb3_dtype::QB3_I64:
+    case QB3_I64:
         error |= TOO_LARGE(p->quanta, int64_t);
     } // data type
 #undef TOO_LARGE
@@ -134,6 +135,15 @@ size_t qb3_max_encoded_size(const encsp p) {
 qb3_mode qb3_set_encoder_mode(encsp p, qb3_mode mode) {
     if (mode <= qb3_mode::QB3M_BEST)
         p->mode = mode;
+    // Default curve is HILBERT, change it if needed
+    switch (p->mode) {
+    case QB3M_BASE_Z:
+    case QB3M_CF:
+    case QB3M_CF_RLE:
+    case QB3M_RLE:
+        p->order = ZCURVE;
+        break;
+    }
     return p->mode;
 }
 
@@ -431,9 +441,9 @@ template<typename T> static int enc(const T *source, oBits &s, encsp p)
 size_t qb3_encode(encsp p, void* source, void* destination) {
     auto const mode = p->mode; // save the user chosen mode
     // Turn off the RLE for now
-    bool rle = (mode == qb3_mode::QB3M_RLE || mode == qb3_mode::QB3M_CF_RLE);
+    bool rle = (QB3M_RLE == mode || QB3M_CF_RLE == mode);
     if (rle)
-        p->mode = (mode == qb3_mode::QB3M_RLE) ? QB3M_BASE : QB3M_CF;
+        p->mode = (QB3M_RLE == mode) ? QB3M_BASE : QB3M_CF;
 
     uint8_t* const d = reinterpret_cast<uint8_t*>(destination);
     oBits s(d);

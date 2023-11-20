@@ -20,7 +20,7 @@ Contributors:  Lucian Plesea
 #include <stddef.h>
 
 // CMake will generate LIBQB3_EXPORT linkage as needed
-#include "libqb3_export.h"
+#include <libqb3_export.h>
 
 // Keep this close to plain C so it can have a C API
 #define QB3_MAXBANDS 16
@@ -34,15 +34,25 @@ typedef struct decs * decsp; // decoder
 // Types
 enum qb3_dtype { QB3_U8 = 0, QB3_I8, QB3_U16, QB3_I16, QB3_U32, QB3_I32, QB3_U64, QB3_I64 };
 
-// Encode mode, default is QB3M_BASE, pure QB3 encoding. Fastest
-// QB3M_BEST is the best compression, may change
-enum qb3_mode { 
-    QB3M_DEFAULT = 0, 
-    QB3M_BASE = 0, 
+// Encode mode, default is fastest, best is best compression
+enum qb3_mode {
+    // Aliases, values might change
+    QB3M_DEFAULT = 4,
+    QB3M_BASE = 4,
+    QB3M_BEST = 7,
+
+    // original z-curve
+    QB3M_BASE_Z = 0, // Base QB3 with z-curve parsing order
     QB3M_CF = 1, // With common factor
     QB3M_RLE = 2, // BASE + RLE
     QB3M_CF_RLE = 3, // BASE + CF + RLE
-    QB3M_BEST = 3,
+
+    // better, with Hilbert curve
+    QB3M_BASE_H = 4, // Base QB33
+    QB3M_CF_H = 5, // QB3 Hilbert + CF
+    QB3M_RLE_H = 6, // QB3 Hilbert + RLE
+    QB3M_CF_RLE_H = 7, // QB3 Hilbert + CF + RLE
+
     QB3M_STORED = 255, // Raw bypass
     QB3M_INVALID = -1 // Invalid mode
 }; // Best compression, one of the above

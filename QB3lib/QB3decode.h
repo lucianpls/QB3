@@ -308,27 +308,44 @@ template<typename T> static T magsmul(T v, T m) { return magsabs(v) * (m << 1) -
 
 // reports most but not all errors, for example if the input stream is too short for the last block
 template<typename T>
-static bool decode(uint8_t *src, size_t len, T* image, 
-    size_t xsize, size_t ysize, size_t bands, uint8_t *cband)
+//static bool decode(uint8_t *src, size_t len, T* image, 
+//    size_t xsize, size_t ysize, size_t bands, uint8_t *cband)
+static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
 {
+    size_t xsize(info.xsize);
+    size_t ysize(info.ysize);
+    size_t bands(info.nbands);
+    auto cband = info.cband;
     static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
     // Z-order curve, original
     //const uint8_t xlut[16] = { 0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3 };
     //const uint8_t ylut[16] = { 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3 };
     // Hilbert curve, better compression in almost all cases
-    const uint8_t xlut[16] = { 0, 1, 1, 0, 0, 0, 1, 1,  2, 2, 3, 3, 3, 2, 2, 3 };
-    const uint8_t ylut[16] = { 0, 0, 1, 1, 2, 3, 3, 2,  2, 3, 3, 2, 1, 1, 0, 0 };
+    //const uint8_t xlut[16] = { 0, 1, 1, 0, 0, 0, 1, 1,  2, 2, 3, 3, 3, 2, 2, 3 };
+    //const uint8_t ylut[16] = { 0, 0, 1, 1, 2, 3, 3, 2,  2, 3, 3, 2, 1, 1, 0, 0 };
 
     constexpr size_t UBITS(sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6);
     constexpr auto NORM_MASK((1ull << UBITS) - 1); // UBITS set
     constexpr auto LONG_MASK(NORM_MASK * 2 + 1); // UBITS + 1 set
     T prev[QB3_MAXBANDS] = {}, pcf[QB3_MAXBANDS] = {}, group[B2] = {};
-    size_t runbits[QB3_MAXBANDS] = {}, offset[B2] = {};
+    size_t runbits[QB3_MAXBANDS] = {};
     const uint16_t* dsw = sizeof(T) == 1 ? dsw3 : sizeof(T) == 2 ? dsw4 : sizeof(T) == 4 ? dsw5 : dsw6;
-    for (size_t i = 0; i < B2; i++)
-        offset[i] = (xsize * ylut[i] + xlut[i]) * bands;
-    iBits s(src, len);
 
+    // Set up block offsets based on traversal order, defaults to HILBERT
+    uint64_t order(info.order);
+    if (0 == order)
+        order = HILBERT;
+    size_t offset[B2] = {};
+    for (size_t i = 0; i < B2; i++) {
+        // Pick up one nibbles, in top to bottom order
+        size_t n = (order >> ((B2 - 1 - i) << 2));
+        offset[i] = (xsize * ((n >> 2) & 0b11) + (n & 0b11)) * bands;
+    }
+
+    //for (size_t i = 0; i < B2; i++)
+    //    offset[i] = (xsize * ylut[i] + xlut[i]) * bands;
+
+    iBits s(src, len);
     bool failed(false);
     for (size_t y = 0; y < ysize; y += B) {
         // If the last row is partial, roll it up
