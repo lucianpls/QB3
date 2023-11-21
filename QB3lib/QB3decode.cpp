@@ -277,6 +277,10 @@ size_t deRLE0FFFFSize(const uint8_t* s, size_t slen) {
     return count;
 }
 
+static bool needs_rle(qb3_mode mode) {
+    return (QB3M_RLE == mode || QB3M_RLE_H == mode || QB3M_CF_RLE == mode || QB3M_CF_RLE_H == mode);
+}
+
 // returns 0 if an error is detected
 // TODO: Error reporting
 // source points to data to decode
@@ -298,7 +302,7 @@ static size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination
 
     std::vector<uint8_t> buffer;
     // If RLE is needed, it is expensive, allocates a whole new buffer
-    if (p->mode == QB3M_RLE || p->mode == QB3M_CF_RLE) {
+    if (needs_rle(p->mode)) {
         // RLE needs to be decoded into a temporary buffer
         auto sz = deRLE0FFFFSize(src, src_sz);
         buffer.resize(sz);

@@ -381,16 +381,19 @@ static size_t raw_size(encsp const &p) {
 
 int qb3_get_encoder_state(encsp p) { return p->error; }
 
+static bool is_fast(qb3_mode mode) {
+    return (QB3M_BASE_H == mode) || (QB3M_BASE_Z == mode);
+}
+
 // ONLY QB3M_BASE and QB3M_CF are supported here
 template<typename T> static int enc(const T *source, oBits &s, encsp p)
 {
     int error(0);
     if (p->quanta < 2) {
-        if (p->mode == qb3_mode::QB3M_DEFAULT)
-            error = QB3::encode_fast(source, s, *p);
+        if (is_fast(p->mode))
+            return QB3::encode_fast(source, s, *p);
         else
-            error = QB3::encode_best(source, s, *p);
-        return error;
+            return QB3::encode_best(source, s, *p);
     }
 
     // Quantized encoding
@@ -406,13 +409,21 @@ template<typename T> static int enc(const T *source, oBits &s, encsp p)
     std::vector<char> buffer(linesize * subimg.ysize);
     auto src = reinterpret_cast<const char*>(source);
 
-#define QENC(T) quantize(reinterpret_cast<T *>(buffer.data()), s, subimg);\
-                if (subimg.mode == qb3_mode::QB3M_DEFAULT) \
-                    error = QB3::encode_fast(\
-                        reinterpret_cast<std::make_unsigned<T>::type *>(buffer.data()), s, subimg);\
-                else\
-                    error = QB3::encode_best(\
-                        reinterpret_cast<std::make_unsigned<T>::type *>(buffer.data()), s, subimg);
+#define QENC(T)\
+    quantize(reinterpret_cast<T *>(buffer.data()), s, subimg);\
+    if (is_fast(subimg.mode))\
+        error = QB3::encode_fast(\
+            reinterpret_cast<std::make_unsigned<T>::type *>(buffer.data()), s, subimg);\
+    else\
+        error = QB3::encode_best(\
+            reinterpret_cast<std::make_unsigned<T>::type *>(buffer.data()), s, subimg);
+
+    //if (subimg.mode == qb3_mode::QB3M_DEFAULT)\
+    //    error = QB3::encode_fast(\
+    //        reinterpret_cast<std::make_unsigned<T>::type*>(buffer.data()), s, subimg); \
+    //else\
+    //    error = QB3::encode_best(\
+    //        reinterpret_cast<std::make_unsigned<T>::type*>(buffer.data()), s, subimg);
 
     for (size_t y = 0; y < ysz; y += subimg.ysize) {
         // Shift the last strip up to handle the edge
@@ -441,7 +452,7 @@ template<typename T> static int enc(const T *source, oBits &s, encsp p)
 size_t qb3_encode(encsp p, void* source, void* destination) {
     auto const mode = p->mode; // save the user chosen mode
     // Turn off the RLE for now
-    bool rle = (QB3M_RLE == mode || QB3M_CF_RLE == mode);
+    bool rle = (QB3M_RLE == mode || QB3M_CF_RLE == mode || QB3M_CF_RLE_H == mode || QB3M_RLE_H == mode);
     if (rle) {
         switch (mode) {
         case QB3M_RLE:
