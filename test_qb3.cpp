@@ -346,10 +346,10 @@ int main(int argc, char **argv)
             check<uint8_t>(image, raster, 1, 1, true, 10);
             cout << endl;
 
-            //cout << 10 << "qb ";
-            //check<uint8_t>(image, raster, 1, 1, false, 10);
-            //cout << endl;
-            //cout << endl;
+            cout << 10 << "qb ";
+            check<uint8_t>(image, raster, 1, 1, false, 10);
+            cout << endl;
+            cout << endl;
 
             check<uint64_t>(image, raster, 5, 1);
             cout << endl;

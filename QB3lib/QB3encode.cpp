@@ -405,9 +405,9 @@ template<typename T> static int enc(const T *source, oBits &s, encsp p)
     auto ysz(p->ysize);
     // In bytes
     auto linesize = p->xsize * p->nbands * typesizes[p->type];
-    // Temporary data buffer for a strip
-    std::vector<char> buffer(linesize * subimg.ysize);
-    auto src = reinterpret_cast<const char*>(source);
+    // Temporary data buffer for a single strip
+    std::vector<uint8_t> buffer(linesize * subimg.ysize);
+    auto src = reinterpret_cast<const uint8_t*>(source);
 
 #define QENC(T)\
     quantize(reinterpret_cast<T *>(buffer.data()), s, subimg);\
@@ -417,13 +417,6 @@ template<typename T> static int enc(const T *source, oBits &s, encsp p)
     else\
         error = QB3::encode_best(\
             reinterpret_cast<std::make_unsigned<T>::type *>(buffer.data()), s, subimg);
-
-    //if (subimg.mode == qb3_mode::QB3M_DEFAULT)\
-    //    error = QB3::encode_fast(\
-    //        reinterpret_cast<std::make_unsigned<T>::type*>(buffer.data()), s, subimg); \
-    //else\
-    //    error = QB3::encode_best(\
-    //        reinterpret_cast<std::make_unsigned<T>::type*>(buffer.data()), s, subimg);
 
     for (size_t y = 0; y < ysz; y += subimg.ysize) {
         // Shift the last strip up to handle the edge
@@ -517,7 +510,6 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
                 // Encode it at the end of the data
                 auto new_size = RLE0FFFF(d + data_position, data_size, d + len);
                 // Check that it worked
-                assert(new_size == rle_size);
                 if (new_size != rle_size) { // Paranoid check
                     p->error = QB3E_EINV; // Something went wrong, bail out
                     return 0;

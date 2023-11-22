@@ -579,6 +579,7 @@ static int encode_best(const T *image, oBits& s, encs &info)
     for (size_t c = 0; c < bands; c++) {
         info.band[c].prev = static_cast<size_t>(prev[c]);
         info.band[c].runbits = runbits[c];
+        info.band[c].cf = static_cast<size_t>(pcf[c]);
     }
     return 0;
 }
