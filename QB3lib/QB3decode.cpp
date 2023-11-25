@@ -54,12 +54,18 @@ uint64_t qb3_get_quanta(const decsp p) {
     return p->quanta;
 }
 
+// Get a copy of the coreband mapping, as read from QB3 header
 bool qb3_get_coreband(const decsp p, size_t *coreband) {
     if (p->stage != 2)
         return false; // Error
     for (int c = 0; c < p->nbands; c++)
         coreband[c] = p->cband[c];
     return true;
+}
+
+// Change the line to line stride, defaults to line size
+void qb3_set_decoder_stride(decsp p, size_t stride) {
+    p->stride = stride;
 }
 
 // Integer multiply but don't overflow, at least on the positive side

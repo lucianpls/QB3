@@ -310,7 +310,7 @@ template<typename T> static T magsmul(T v, T m) { return magsabs(v) * (m << 1) -
 template<typename T>
 static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
 {
-    auto xsize(info.xsize), ysize(info.ysize), bands(info.nbands);
+    auto xsize(info.xsize), ysize(info.ysize), bands(info.nbands), stride(info.stride);
     auto cband = info.cband;
     static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
     constexpr size_t UBITS(sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6);
@@ -319,18 +319,15 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
     T prev[QB3_MAXBANDS] = {}, pcf[QB3_MAXBANDS] = {}, group[B2] = {};
     size_t runbits[QB3_MAXBANDS] = {};
     const uint16_t* dsw = sizeof(T) == 1 ? dsw3 : sizeof(T) == 2 ? dsw4 : sizeof(T) == 4 ? dsw5 : dsw6;
-
+    stride = stride ? stride : xsize * bands;
     // Set up block offsets based on traversal order, defaults to HILBERT
     uint64_t order(info.order);
-    if (0 == order)
-        order = HILBERT;
+    order = order ? order : HILBERT;
     size_t offset[B2] = {};
     for (size_t i = 0; i < B2; i++) {
-        // Pick up one nibbles, in top to bottom order
         size_t n = (order >> ((B2 - 1 - i) << 2));
-        offset[i] = (xsize * ((n >> 2) & 0b11) + (n & 0b11)) * bands;
+        offset[i] = ((n >> 2) & 0b11) * stride + (n & 0b11) * bands;
     }
-
     iBits s(src, len);
     bool failed(false);
     for (size_t y = 0; y < ysize; y += B) {
@@ -446,7 +443,7 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
                 }
                 // Undo delta encoding for this block
                 auto prv = prev[c];
-                T* const blockp = image + (y * xsize + x) * bands + c;
+                T* const blockp = image + y * stride + x * bands + c;
                 for (int i = 0; i < B2; i++)
                     blockp[offset[i]] = prv += smag(group[i]);
                 prev[c] = prv;
@@ -454,12 +451,14 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
             if (failed) break;
         } // per block
         if (failed) break;
-        // For performance apply band delta per block stip, in linear order
+        // For performance apply band delta per block strip, in linear order
         for (int c = 0; c < bands; c++) if (c != cband[c]) {
-            auto dimg = image + bands * xsize * y + c;
-            auto simg = image + bands * xsize * y + cband[c];
-            for (int i = 0; i < B * xsize; i++, dimg += bands, simg += bands)
-                *dimg += *simg;
+            for (size_t j = 0; j < B; j++) {
+                auto dimg = image + stride * (y + j) + c;
+                auto simg = image + stride * (y + j) + cband[c];
+                for (int i = 0; i < xsize; i++, dimg += bands, simg += bands)
+                    *dimg += *simg;
+            }
         }
     } // per block strip
     // It might not catch all errors
