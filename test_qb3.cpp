@@ -32,6 +32,7 @@ using namespace std;
 using namespace chrono;
 NS_ICD_USE
 
+// multiply a vector by a constant, with type conversion
 template<typename inT, typename outT>
 vector<outT> to(vector<inT> &v, outT m) {
     vector<outT> result(v.size());
@@ -156,6 +157,89 @@ void check(vector<uint8_t> &image, const Raster &raster,
                 cout << endl << "y = " << i / (xsize * bands) <<
                     " x = " << (i / bands) % xsize <<
                     " c = " << i % bands;
+                break;
+            }
+    }
+}
+
+// check stride decoding
+template<typename T>
+void check(vector<uint8_t>& image, const Raster& raster, size_t stride, bool fast = 0) {
+
+    if (0 == stride)
+        return check<T>(image, raster, 1, 0, fast, 1, false);
+
+    size_t xsize = raster.size.x;
+    size_t ysize = raster.size.y;
+    size_t bands = raster.size.c;
+    high_resolution_clock::time_point t1, t2;
+    double time_span;
+
+    auto img = to(image, static_cast<T>(1));
+    qb3_dtype tp(QB3_U8);
+    if (is_signed<T>()) {
+        tp = sizeof(T) == 8 ? qb3_dtype::QB3_I64 : sizeof(T) == 4 ? qb3_dtype::QB3_I32 :
+            sizeof(T) == 2 ? qb3_dtype::QB3_I16 : qb3_dtype::QB3_I8;
+    }
+    else {
+        tp = sizeof(T) == 8 ? qb3_dtype::QB3_U64 : sizeof(T) == 4 ? qb3_dtype::QB3_U32 :
+            sizeof(T) == 2 ? qb3_dtype::QB3_U16 : qb3_dtype::QB3_U8;
+    }
+
+    auto qenc = qb3_create_encoder(xsize, ysize, bands, tp);
+    vector<uint8_t> outvec(qb3_max_encoded_size(qenc));
+
+    t1 = high_resolution_clock::now();
+    auto outsize = qb3_encode(qenc, static_cast<void*>(img.data()), outvec.data());
+    time_span = duration_cast<duration<double>>(high_resolution_clock::now() - t1).count();
+    auto err = qb3_get_encoder_state(qenc);
+    qb3_destroy_encoder(qenc);
+    qenc = nullptr;
+
+    cout << outsize << '\t' << outsize * 100.0 / image.size() / sizeof(T)
+        << '\t' << image.size() * sizeof(T) / time_span / 1024 / 1024
+        << '\t' << time_span << '\t';
+    if (err)
+        cout << "\nFailed\n";
+
+    std::vector<T> re(stride * ysize, 0);
+    decsp qdec = nullptr;
+    try {
+        size_t image_size[3]; // Space for output values
+        qdec = qb3_read_start(outvec.data(), outsize, image_size);
+        if (!qdec)
+            throw "Can't read qb3 formatted stream header";
+        // Check the size
+        if (xsize != image_size[0] || ysize != image_size[1] || bands != image_size[2])
+            throw "Wrong decoded size";
+        if (!qb3_read_info(qdec))
+            throw "Reading QB3 headers failed";
+        qb3_set_decoder_stride(qdec, stride);
+
+        t1 = high_resolution_clock::now();
+        if (!qb3_read_data(qdec, re.data()))
+            throw "Reading QB3 data failed";
+        t2 = high_resolution_clock::now();
+    }
+    catch (const char* error) {
+        cerr << "Error: " << error << endl;
+    }
+    qb3_destroy_decoder(qdec);
+
+    time_span = duration_cast<duration<double>>(t2 - t1).count();
+    cout << sizeof(T) * image.size() / time_span / 1024 / 1024 << '\t'
+        << time_span << '\t' << sizeof(T) << '\t' << 1 << '\t';
+    if (fast)
+        cout << "Fast";
+
+    // verify that the stride was respected
+    for (size_t y = 0; y < ysize; y++) {
+        auto src = img.data() + xsize * bands * y;
+        auto dst = re.data() + stride * y;
+        for (size_t x = 0; x < xsize * bands; x++)
+            if (src[x] != dst[x]) {
+                cout << endl << "Difference at line " << y << " column " << x / bands << " c " << x % bands 
+                    << ", expect " << hex << uint64_t(src[x]) << " got " << uint64_t(dst[x]) << dec;
                 break;
             }
     }
@@ -313,6 +397,31 @@ int main(int argc, char **argv)
             cout << "Decode time " << time_span << " rate " << image.size() / time_span / 1024 / 1024 << " MB/s" << endl;
 
             cout << "Size\tRatio %\tEnc (MB/s)\t(s)\tDec (MB/s)\t(s)\tT_Size\n\n";
+
+            // check stride, any value larger than sizex * sizec
+            //cout << "Stride ";
+            //check<uint8_t>(image, raster, raster.size.x * raster.size.c + 9, true);
+            //cout << endl << endl;
+
+            //cout << "Stride ";
+            //check<uint8_t>(image, raster, raster.size.x * raster.size.c + 10, true);
+            //cout << endl << endl;
+
+            //cout << "Stride ";
+            //check<uint8_t>(image, raster, raster.size.x * raster.size.c + 11, true);
+            //cout << endl << endl;
+
+            //cout << "Stride ";
+            //check<uint8_t>(image, raster, raster.size.x * raster.size.c + 90, false);
+            //cout << endl << endl;
+
+            //cout << "Stride ";
+            //check<uint8_t>(image, raster, raster.size.x * raster.size.c + 91, false);
+            //cout << endl << endl;
+
+            //cout << "Stride ";
+            //check<uint8_t>(image, raster, raster.size.x * raster.size.c + 92, false);
+            //cout << endl << endl;
 
             // The sign really messes things up for normal images, because transitions through 128 are frequent
             // and become massive

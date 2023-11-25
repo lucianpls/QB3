@@ -418,7 +418,7 @@ static int encode_fast(const T* image, oBits& s, encs &info)
 template<typename T>
 static int ienc(const T grp[B2], size_t rung, size_t oldrung, oBits &s) {
     constexpr int TOO_LARGE(800); // Larger than any possible size
-    if (rung < 4 || rung == 63)
+    if (rung < 4 || rung == 63) // TODO: encode rung 63
         return TOO_LARGE;
     struct KVP { T key, count; };
     KVP v[B2 / 2] = {};

@@ -452,8 +452,8 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
         } // per block
         if (failed) break;
         // For performance apply band delta per block strip, in linear order
-        for (int c = 0; c < bands; c++) if (c != cband[c]) {
-            for (size_t j = 0; j < B; j++) {
+        for (size_t j = 0; j < B; j++) {
+            for (int c = 0; c < bands; c++) if (c != cband[c]) {
                 auto dimg = image + stride * (y + j) + c;
                 auto simg = image + stride * (y + j) + cband[c];
                 for (int i = 0; i < xsize; i++, dimg += bands, simg += bands)

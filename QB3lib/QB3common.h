@@ -109,6 +109,7 @@ struct decs {
     size_t xsize;
     size_t ysize;
     size_t nbands;
+    // Line to line stride
     size_t stride;
     // micro block scanning order
     uint64_t order;
