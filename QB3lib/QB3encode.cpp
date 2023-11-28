@@ -171,10 +171,10 @@ bool quantize(T* source, oBits& , encs& p) {
     if (q == 2) { // Easy to optimize for 2, common
         if (p.away)
             for (size_t i = 0; i < nV; i++)
-                source[i] = source[i] / 2 + source[i] % 2;
+                source[i] = source[i] / T(2) + source[i] % T(2);
         else
             for (size_t i = 0; i < nV; i++)
-                source[i] /= 2;
+                source[i] /= T(2);
         return 0;
     }
 

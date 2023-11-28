@@ -28,6 +28,12 @@ Contributors:  Lucian Plesea
 #include <icd_codecs.h>
 #include "QB3lib/QB3.h"
 
+#if defined(_WIN32) || defined(_WIN64)
+#include <windows.h>
+#include <WinBase.h>
+#include <processthreadsapi.h>
+#endif
+
 using namespace std;
 using namespace chrono;
 NS_ICD_USE
@@ -344,6 +350,22 @@ int test(string fname) {
 int main(int argc, char **argv)
 {
     bool test_QB3 = true;
+
+#if defined(_WIN32) || defined(_WIN64)
+    // Get the thread id
+    DWORD tid = GetCurrentThreadId();
+    // Set the thread affinity to the first core
+    HANDLE thread = OpenThread(THREAD_ALL_ACCESS, FALSE, tid);
+    // error checking
+    if (thread == NULL)
+        cerr << "Failed to get thread handle\n";
+    else {
+        DWORD_PTR mask = 1;
+        if (!SetThreadAffinityMask(thread, mask))
+            cerr << "Failed to set thread affinity\n";
+        CloseHandle(thread);
+    }
+#endif
 
     if (test_QB3) {
         if (argc < 2) {
