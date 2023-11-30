@@ -170,7 +170,7 @@ void check(vector<uint8_t> &image, const Raster &raster,
 
 // check stride decoding
 template<typename T>
-void check(vector<uint8_t>& image, const Raster& raster, size_t stride, bool fast = 0) {
+void check(vector<uint8_t>& image, const Raster& raster, size_t stride, bool fast = 0, uint64_t q = 0) {
 
     if (0 == stride)
         return check<T>(image, raster, 1, 0, fast, 1, false);
@@ -194,6 +194,8 @@ void check(vector<uint8_t>& image, const Raster& raster, size_t stride, bool fas
 
     auto qenc = qb3_create_encoder(xsize, ysize, bands, tp);
     vector<uint8_t> outvec(qb3_max_encoded_size(qenc));
+    if (q > 1)
+        qb3_set_encoder_quanta(qenc, q, 0);
 
     t1 = high_resolution_clock::now();
     auto outsize = qb3_encode(qenc, static_cast<void*>(img.data()), outvec.data());
@@ -239,14 +241,29 @@ void check(vector<uint8_t>& image, const Raster& raster, size_t stride, bool fas
         cout << "Fast";
 
     // verify that the stride was respected
-    for (size_t y = 0; y < ysize; y++) {
+    bool failed = false;
+    auto hq = T(q / 2); // precision
+    for (size_t y = 0; !failed && y < ysize; y++) {
         auto src = img.data() + xsize * bands * y;
         auto dst = re.data() + stride * y;
         for (size_t x = 0; x < xsize * bands; x++)
-            if (src[x] != dst[x]) {
-                cout << endl << "Difference at line " << y << " column " << x / bands << " c " << x % bands 
-                    << ", expect " << hex << uint64_t(src[x]) << " got " << uint64_t(dst[x]) << dec;
-                break;
+            if (q > 1) {
+                auto s = src[x];
+                auto d = dst[x];
+                if (!((s == d) || ((s > d) && (d + hq >= s)) || ((s < d) && (s + hq >= d)))) {
+                    cout << endl << "Difference at line " << y << " column " << x / bands << " c " << x % bands
+                        << ", expect " << hex << uint64_t(s) << " != " << uint64_t(d) << dec;
+                    failed = true;
+                    break;
+                }
+            }
+            else {
+                if (src[x] != dst[x]) {
+                    cout << endl << "Difference at line " << y << " column " << x / bands << " c " << x % bands
+                        << ", expect " << hex << uint64_t(src[x]) << " got " << uint64_t(dst[x]) << dec;
+                    failed = true;
+                    break;
+                }
             }
     }
 }
@@ -360,7 +377,7 @@ int main(int argc, char **argv)
     if (thread == NULL)
         cerr << "Failed to get thread handle\n";
     else {
-        DWORD_PTR mask = 1;
+        DWORD_PTR mask = 3; // First core, either CPU
         if (!SetThreadAffinityMask(thread, mask))
             cerr << "Failed to set thread affinity\n";
         CloseHandle(thread);
@@ -420,11 +437,6 @@ int main(int argc, char **argv)
 
             cout << "Size\tRatio %\tEnc (MB/s)\t(s)\tDec (MB/s)\t(s)\tT_Size\n\n";
 
-            // check stride, any value larger than sizex * sizec
-            //cout << "Stride ";
-            //check<uint8_t>(image, raster, raster.size.x * raster.size.c + 9, true);
-            //cout << endl << endl;
-
             //cout << "Stride ";
             //check<uint8_t>(image, raster, raster.size.x * raster.size.c + 10, true);
             //cout << endl << endl;
@@ -463,6 +475,11 @@ int main(int argc, char **argv)
             // Same exact as above, for odd quanta there is no difference
             cout << 3 << "q- ";
             check<uint8_t>(image, raster, 1, 1, true, 3, true);
+            cout << endl;
+
+            // check stride, any value larger than sizex * sizec, same size as above
+            cout << "Stride and quanta \n3q  ";
+            check<uint8_t>(image, raster, raster.size.x* raster.size.c + 9, true, 3);
             cout << endl;
 
             cout << 4 << "q  ";

@@ -75,12 +75,26 @@ static void dequantize(T* d, const decsp p) {
     const T q = static_cast<T>(p->quanta);
     const T mai = std::numeric_limits<T>::max() / q; // Top valid value
     const T mii = std::numeric_limits<T>::min() / q; // Bottom valid value
-    for (size_t i = 0; i < sz; i++) {
-        auto data = d[i];
-        d[i] = (data <= mai) * (data * q) 
-            + (!(data <= mai)) * std::numeric_limits<T>::max();
-        if (std::is_signed<T>() && q > 2 && (data < mii))
-            d[i] = std::numeric_limits<T>::min();
+    if (p->stride == 0 || p->stride == p->xsize * p->nbands * sizeof(T)) {
+        for (size_t i = 0; i < sz; i++) {
+            auto data = d[i];
+            d[i] = (data <= mai) * (data * q)
+                + (!(data <= mai)) * std::numeric_limits<T>::max();
+            if (std::is_signed<T>() && q > 2 && (data < mii))
+                d[i] = std::numeric_limits<T>::min();
+        }
+        return;
+    }
+    // With line stride
+    for (size_t y = 0; y < p->ysize; y++) {
+        auto dst = reinterpret_cast<T*>(reinterpret_cast<uint8_t*>(d) + y * p->stride);
+        for (size_t i = 0; i < p->nbands * p->xsize; i++) {
+            auto data = dst[i];
+            dst[i] = (data <= mai) * (data * q)
+                + (!(data <= mai)) * std::numeric_limits<T>::max();
+            if (std::is_signed<T>() && q > 2 && (data < mii))
+                dst[i] = std::numeric_limits<T>::min();
+        }
     }
 }
 
