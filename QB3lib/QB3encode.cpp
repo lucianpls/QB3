@@ -175,16 +175,26 @@ bool quantize(T* source, oBits& , encs& p) {
         else
             for (size_t i = 0; i < nV; i++)
                 source[i] /= T(2);
-        return 0;
+        return false;
     }
 
-    if (p.away)
+    if (q == 3) { // Another optimized version, not rounding direction dependent
         for (size_t i = 0; i < nV; i++)
-            source[i] = rfr0div(source[i], q);
-    else
+            source[i] = source[i] / T(3) + (source[i] % T(3)) / 2;
+        return false;
+    }
+
+    // Odd quanta is not rounding direction dependent
+    if (!p.away || (0 != q % 2)) {
         for (size_t i = 0; i < nV; i++)
             source[i] = rto0div(source[i], q);
-    return 0;
+        return false;
+    }
+
+    // even quanta, round from zero
+    for (size_t i = 0; i < nV; i++)
+        source[i] = rfr0div(source[i], q);
+    return false;
 }
 
 // A chunk signature is two characters
