@@ -152,7 +152,7 @@ template<typename T> static T rto0div(T x, T y) {
     static_assert(std::is_integral<T>(), "Integer types only");
     T r = x / y, m = x % y;
     y = (y >> 1);
-    return r + (!(x < 0) & (m > y)) - ((x < 0) & ((m + y) < 0));
+    return r + ((!(x < 0)) & (m > y)) - ((x < 0) & ((m + y) < 0));
 }
 
 // Round from Zero Division, no overflow
@@ -160,7 +160,7 @@ template<typename T> static T rfr0div(T x, T y) {
     static_assert(std::is_integral<T>(), "Integer types only");
     T r = x / y, m = x % y;
     y = (y >> 1) + (y & 1);
-    return r + (!(x < 0) & (m >= y)) - ((x < 0) & ((m + y) <= 0));
+    return r + ((!(x < 0)) & (m >= y)) - ((x < 0) & ((m + y) <= 0));
 }
 
 // Quantize source, in place
