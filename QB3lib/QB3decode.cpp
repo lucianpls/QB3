@@ -82,7 +82,7 @@ static void dequantize(T* d, const decsp p) {
             auto data = d[i];
             d[i] = (data <= mai) * (data * q)
                 + (!(data <= mai)) * std::numeric_limits<T>::max();
-            if (std::is_signed<T>() && q > 2 && (data < mii))
+            if (std::is_signed<T>() && (q > 2) && (data < mii))
                 d[i] = std::numeric_limits<T>::min();
         }
         return;
@@ -94,7 +94,7 @@ static void dequantize(T* d, const decsp p) {
             auto data = dst[i];
             dst[i] = (data <= mai) * (data * q)
                 + (!(data <= mai)) * std::numeric_limits<T>::max();
-            if (std::is_signed<T>() && q > 2 && (data < mii))
+            if (std::is_signed<T>() && (q > 2) && (data < mii))
                 dst[i] = std::numeric_limits<T>::min();
         }
     }
@@ -102,9 +102,7 @@ static void dequantize(T* d, const decsp p) {
 
 // Check a 2 byte signature
 static bool check_sig(uint64_t val, const char *sig) {
-    uint8_t c0 = static_cast<uint8_t>(sig[0]);
-    uint8_t c1 = static_cast<uint8_t>(sig[1]);
-    return (val & 0xff) == c0 && ((val >> 8) & 0xff) == c1;
+    return (val & 0xff) == uint8_t(sig[0]) && ((val >> 8) & 0xff) == uint8_t(sig[1]);
 }
 
 // Starts reading a formatted QB3 source
@@ -146,16 +144,8 @@ decsp qb3_read_start(void* source, size_t source_size, size_t *image_size) {
     image_size[0] = p->xsize;
     image_size[1] = p->ysize;
     image_size[2] = p->nbands;
-
-    switch (p->mode) {
-    case QB3M_BASE_Z:
-    case QB3M_CF:
-    case QB3M_CF_RLE:
-    case QB3M_RLE:
+    if (QB3M_BASE_Z == p->mode || QB3M_CF == p->mode || QB3M_CF_RLE == p->mode || QB3M_RLE == p->mode)
         p->order = ZCURVE;
-        break;
-    }
-
     p->error = QB3E_OK;
     p->stage = 1; // Read main header
     return p; // Looks reasonable
@@ -209,11 +199,13 @@ bool qb3_read_info(decsp p) {
             s.advance(16);
             // Update the position
             size_t used = s.position() / 8;
-            if (p->s_size > used) { // Should have some data
-                p->s_in += used;
-                p->s_size -= used;
-                p->stage = 2; // Seen data header
+            if (p->s_size <= used) {
+                p->error = QB3E_EINV;
+                break;
             }
+            p->s_in += used;
+            p->s_size -= used;
+            p->stage = 2; // Seen data header
         }
         else { // Unknown chunk
             p->error = QB3E_UNKN;
@@ -227,8 +219,6 @@ bool qb3_read_info(decsp p) {
 // Decode RLE0FFFF data
 // Returns 0 if decoding worked as expected
 int64_t deRLE0FFFF(const uint8_t* s, size_t slen, uint8_t* d, size_t dlen) {
-    // Just a sanity check, those sizes would be insane
-    assert(static_cast<int64_t>(slen) > 0 && static_cast<int64_t>(dlen) > 0 );
     while ((slen > 0) && (dlen > 0)) {
         slen--;
         dlen--;
@@ -246,9 +236,9 @@ int64_t deRLE0FFFF(const uint8_t* s, size_t slen, uint8_t* d, size_t dlen) {
             s += 2;
             slen -= 2;
             if (c != 0xff) { // zero run
-                dlen -= size_t(3) + c;
-                if (dlen < 0)
+                if (dlen < (size_t(3) + c))
                     break; // output error, will exit
+                dlen -= size_t(3) + c;
                 *d++ = 0;
                 *d++ = 0;
                 *d++ = 0;
@@ -257,8 +247,9 @@ int64_t deRLE0FFFF(const uint8_t* s, size_t slen, uint8_t* d, size_t dlen) {
                     *d++ = 0;
             }
             else { // emit two FFs
-                if (--dlen < 0)
+                if (!dlen)
                     break; // output error, will exit
+                dlen--;
                 *d++ = 0xff;
                 *d++ = 0xff;
             }
@@ -268,33 +259,19 @@ int64_t deRLE0FFFF(const uint8_t* s, size_t slen, uint8_t* d, size_t dlen) {
     return static_cast<int64_t>(dlen) - static_cast<int64_t>(slen); // So it can become negative
 }
 
-// The size of the decoded data, fairly expensive
+// The size of the decoded data
 size_t deRLE0FFFFSize(const uint8_t* s, size_t slen) {
     size_t count(0);
-    // Read and output at least one byte per loop
     while (slen-- > 0) {
         uint8_t c = *s++;
-        if ((0xFF != c) || (2 > slen)) { // Not marker or not enough input
+        if ((0xFF != c) || (2 > slen) || (0xff != s[0])) {
             count++;
+            continue;
         }
-        else { // check the second byte
-            if (0xff != s[0]) { // Not a marker
-                count++;
-            }
-            else {
-                // Consume the second FF and the next byte
-                c = s[1];
-                s += 2;
-                slen -= 2;
-                if (c != 0xff) { // zero run
-                    count += 4;
-                    count += c;
-                }
-                else { // two FF
-                    count += 2;
-                }
-            }
-        }
+        c = s[1];
+        s += 2;
+        slen -= 2;
+        count += size_t(2) + (size_t(2) + c) * (0xff != c);
     }
     return count;
 }
@@ -338,10 +315,7 @@ static size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination
         src_sz = sz;
     }
 
-#define DEC(T) QB3::decode(src, src_sz, reinterpret_cast<T*>(destination), \
-    *p)
-//    p->xsize, p->ysize, p->nbands, p->cband)
-
+#define DEC(T) QB3::decode(src, src_sz, reinterpret_cast<T*>(destination), *p)
     switch (p->type) {
     case qb3_dtype::QB3_U8:
     case qb3_dtype::QB3_I8:
@@ -364,26 +338,25 @@ static size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination
     // We have a quanta, decode in place
     if (!error_code && p->quanta > 1) {
         switch (p->type) {
-        case qb3_dtype::QB3_I8:
-            MUL(int8_t); break;
         case qb3_dtype::QB3_U8:
             MUL(uint8_t); break;
-        case qb3_dtype::QB3_I16:
-            MUL(int16_t); break;
+        case qb3_dtype::QB3_I8:
+            MUL(int8_t); break;
         case qb3_dtype::QB3_U16:
             MUL(uint16_t); break;
-        case qb3_dtype::QB3_I32:
-            MUL(int32_t); break;
+        case qb3_dtype::QB3_I16:
+            MUL(int16_t); break;
         case qb3_dtype::QB3_U32:
             MUL(uint32_t); break;
-        case qb3_dtype::QB3_I64:
-            MUL(int64_t); break;
+        case qb3_dtype::QB3_I32:
+            MUL(int32_t); break;
         case qb3_dtype::QB3_U64:
             MUL(uint64_t); break;
+        case qb3_dtype::QB3_I64:
+            MUL(int64_t); break;
         default:
             error_code = 3; // Invalid type
         } // data type
-
     }
 #undef MUL
     return error_code ? 0 : qb3_decoded_size(p);

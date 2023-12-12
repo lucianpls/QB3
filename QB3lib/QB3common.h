@@ -171,8 +171,7 @@ c d e f
 constexpr uint64_t ICURVE(0x0123456789abcdef);
 */
 
-/* The orginial z-curve order
-* values from the identity matrix read in this order
+/* The legacy z-curve order
  0 1 4 5
  2 3 6 7
  8 9 c d
@@ -181,7 +180,6 @@ constexpr uint64_t ICURVE(0x0123456789abcdef);
 constexpr uint64_t ZCURVE(0x0145236789cdabef);
 
 /* Hilbert space filling curve second degree, results in better compression than Z-curve
-* values from the identity matrix read in this order
  0 1 e f
  3 2 d c
  4 7 8 b

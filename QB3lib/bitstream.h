@@ -42,9 +42,7 @@ public:
     }
 
     // Advance read position by d bits
-    void advance(size_t d) {
-        bitp = (bitp + d < len) ? (bitp + d) : len;
-    }
+    void advance(size_t d) { bitp = (bitp + d < len) ? (bitp + d) : len; }
 
     // Get 64bits without changing the state
     uint64_t peek() const {
@@ -80,10 +78,12 @@ class oBits {
 public:
     oBits(uint8_t * data) : v(data), bitp(0) {}
 
+    // Number of bits written
+    size_t position() const { return bitp; }
+
     // Rewind to a bit position before the current one
     size_t rewind(size_t pos = 0) {
-        // Don't go past the current end
-        if (pos < position()) {
+        if (pos < position()) { // Don't go past the current end
             bitp = pos;
             if (bitp & 7) // clear partial bits in the last byte
                 v[bitp / 8] &= 0xff >> (8 - (bitp & 7));
@@ -107,6 +107,8 @@ public:
         bitp += nbits;
     }
 
+    template<typename T> void push(std::pair<size_t, T> p) { push(p.second, p.first); }
+
     // Append content from other output bitstream
     oBits& operator+=(const oBits&other) {
         auto len = other.bitp;
@@ -121,16 +123,6 @@ public:
             push(acc, len);
         }
         return *this;
-    }
-
-    template<typename T>
-    void push(std::pair<size_t, T> p) {
-        push(p.second, p.first);
-    }
-
-    // Number of bits written
-    size_t position() const {
-        return bitp;
     }
 
     // Round position to byte boundary

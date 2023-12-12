@@ -18,9 +18,9 @@ Contributors:  Lucian Plesea
 #pragma warning(disable:4127) // conditional expression is constant
 #include "QB3encode.h"
 #include <limits>
+#include <vector>
 // For memcpy
 #include <cstring>
-#include <vector>
 
 // constructor
 encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt) {
@@ -164,7 +164,7 @@ template<typename T> static T rfr0div(T x, T y) {
 }
 
 // Quantize source, in place
-template<typename T>
+template<typename T> static
 bool quantize(T* source, oBits& , encs& p) {
     size_t nV = p.xsize * p.ysize * p.nbands; // Number of values
     T q = static_cast<T>(p.quanta);
@@ -554,4 +554,3 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
     }
     return (p->error) ? 0 : s.tobyte();
 }
-
