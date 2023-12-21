@@ -163,12 +163,14 @@ template<typename T> static T rfr0div(T x, T y) {
     return r + ((!(x < 0)) & (m >= y)) - ((x < 0) & ((m + y) <= 0));
 }
 
-// Quantize source, in place
+// Quantize source, in place. T may be signed, q is positive
 template<typename T> static
 bool quantize(T* source, oBits& , encs& p) {
     size_t nV = p.xsize * p.ysize * p.nbands; // Number of values
     T q = static_cast<T>(p.quanta);
-    if (q == 2) { // Easy to optimize for 2, common
+
+    // Optimized versions have to preserve the sign of the input
+    if (2 == q) { // Easy to optimize for 2, common
         if (p.away)
             for (size_t i = 0; i < nV; i++)
                 source[i] = source[i] / T(2) + source[i] % T(2);
@@ -178,9 +180,19 @@ bool quantize(T* source, oBits& , encs& p) {
         return false;
     }
 
-    if (q == 3) { // Another optimized version, not rounding direction dependent
+    if (3 == q) {
         for (size_t i = 0; i < nV; i++)
             source[i] = source[i] / T(3) + (source[i] % T(3)) / 2;
+        return false;
+    }
+
+    if (4 == q) {
+        if (p.away)
+            for (size_t i = 0; i < nV; i++)
+                source[i] = source[i] / T(4) + (source[i] % T(4)) / 2;
+        else
+            for (size_t i = 0; i < nV; i++)
+                source[i] = source[i] / T(4) + (source[i] % T(4)) / 3;
         return false;
     }
 
