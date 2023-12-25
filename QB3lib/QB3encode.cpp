@@ -148,19 +148,19 @@ qb3_mode qb3_set_encoder_mode(encsp p, qb3_mode mode) {
 }
 
 // Round to Zero Division, no overflow
-template<typename T> static T rto0div(T x, T y) {
-    static_assert(std::is_integral<T>(), "Integer types only");
-    T r = x / y, m = x % y;
-    y = (y >> 1);
-    return r + ((!(x < 0)) & (m > y)) - ((x < 0) & ((m + y) < 0));
+template<typename T> static
+T rounddiv(T n, T d) {
+    T m = n % d;
+    T h = d / 2;
+    return n / d + (!(n < 0) & (m > h)) - ((n < 0) & ((m + h) < 0));
 }
 
 // Round from Zero Division, no overflow
-template<typename T> static T rfr0div(T x, T y) {
-    static_assert(std::is_integral<T>(), "Integer types only");
-    T r = x / y, m = x % y;
-    y = (y >> 1) + (y & 1);
-    return r + ((!(x < 0)) & (m >= y)) - ((x < 0) & ((m + y) <= 0));
+template<typename T> static
+T rounddiv_away(T n, T d) {
+    T m = n % d;
+    T h = d / 2 + d % 2;
+    return n / d + (!(n < 0) & (m >= h)) - ((n < 0) & ((m + h) <= 0));
 }
 
 // Quantize source, in place. T may be signed, q is positive
@@ -168,7 +168,6 @@ template<typename T> static
 bool quantize(T* source, oBits& , encs& p) {
     size_t nV = p.xsize * p.ysize * p.nbands; // Number of values
     T q = static_cast<T>(p.quanta);
-
     // Optimized versions have to preserve the sign of the input
     if (2 == q) { // Easy to optimize for 2, common
         if (p.away)
@@ -177,35 +176,28 @@ bool quantize(T* source, oBits& , encs& p) {
         else
             for (size_t i = 0; i < nV; i++)
                 source[i] /= T(2);
-        return false;
     }
-
-    if (3 == q) {
+    else if (3 == q) {
         for (size_t i = 0; i < nV; i++)
-            source[i] = source[i] / T(3) + (source[i] % T(3)) / 2;
-        return false;
+            source[i] = source[i] / T(3) + (source[i] % T(3)) / T(2);
     }
-
-    if (4 == q) {
+    else if (4 == q) {
         if (p.away)
             for (size_t i = 0; i < nV; i++)
-                source[i] = source[i] / T(4) + (source[i] % T(4)) / 2;
+                source[i] = source[i] / T(4) + (source[i] % T(4)) / T(2);
         else
             for (size_t i = 0; i < nV; i++)
-                source[i] = source[i] / T(4) + (source[i] % T(4)) / 3;
-        return false;
+                source[i] = source[i] / T(4) + (source[i] % T(4)) / T(3);
     }
-
-    // Odd quanta is not rounding direction dependent
-    if (!p.away || (0 != q % 2)) {
+    // General case
+    else if (p.away) {
         for (size_t i = 0; i < nV; i++)
-            source[i] = rto0div(source[i], q);
-        return false;
+            source[i] = rounddiv_away(source[i], q);
     }
-
-    // even quanta, round from zero
-    for (size_t i = 0; i < nV; i++)
-        source[i] = rfr0div(source[i], q);
+    else {
+        for (size_t i = 0; i < nV; i++)
+            source[i] = rounddiv(source[i], q);
+    }
     return false;
 }
 
