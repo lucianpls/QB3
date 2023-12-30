@@ -48,10 +48,16 @@ qb3_mode qb3_get_mode(const decsp p) {
     return p->mode;
 }
 
-uint64_t qb3_get_quanta(const decsp p) {
+size_t qb3_get_quanta(const decsp p) {
     if (p->stage != 2)
         return 0; // Error
     return p->quanta;
+}
+
+size_t qb3_get_order(const decsp p) {
+    if (p->stage != 2)
+        return 0; // Error
+    return p->order ? p->order : ZCURVE;
 }
 
 // Get a copy of the coreband mapping, as read from QB3 header
@@ -103,6 +109,31 @@ static void dequantize(T* d, const decsp p) {
 // Check a 2 byte signature
 static bool check_sig(uint64_t val, const char *sig) {
     return (val & 0xff) == uint8_t(sig[0]) && ((val >> 8) & 0xff) == uint8_t(sig[1]);
+}
+
+// Check that a 64bit value represents a valid curve
+// This means that every nibble has to be unique, from 0 to F
+static bool check_curve(uint64_t val) {
+    // Split value into a vector of nibbles
+    uint8_t nibbles[16];
+    for (int i = 0; i < 16; i++)
+        nibbles[i] = (val >> (i * 4)) & 0xf;
+
+    // Sort the nibbles with a bubble sort, not worth using std::sort
+    for (int i = 0; i < 15; i++)
+        for (int j = i + 1; j < 16; j++)
+            if (nibbles[i] > nibbles[j]) {
+                auto tmp = nibbles[i];
+                nibbles[i] = nibbles[j];
+                nibbles[j] = tmp;
+            }
+
+    // Pack them back into val
+    val = 0;
+    for (int i = 0; i < 16; i++)
+        val = (val << 4) | nibbles[i];
+    // Every nibble should be unique, in order
+    return val == 0x0123456789abcdefull;
 }
 
 // Starts reading a formatted QB3 source
@@ -207,8 +238,34 @@ bool qb3_read_info(decsp p) {
             p->s_size -= used;
             p->stage = 2; // Seen data header
         }
-        else { // Unknown chunk
-            p->error = QB3E_UNKN;
+        // For SC, read the curve in p->order
+        else if (check_sig(chunk, "SC")) {          
+            // len should be 8
+            if (len != 8) {
+                p->error = QB3E_EINV;
+                break;
+            }
+            // Misplaced curve chunk
+            if (p->mode < qb3_mode::QB3M_BASE_H || p->mode == qb3_mode::QB3M_STORED) {
+                p->error = QB3E_EINV;
+                break;
+            }
+            s.advance(32); // CHUNK + LEN
+            p->order = s.pull(64);
+            // Verify that the curve is valid
+            if (!check_curve(p->order)) {
+                p->error = QB3E_EINV;
+                break;
+            }
+        }
+        else {
+            // Unknown chunk
+            // Ignore it if the first letter is lower case
+            if (chunk & 0x20)
+                s.advance(size_t(len) * 8);
+            // Otherwise, it's an error
+            else
+                p->error = QB3E_UNKN;
         }
     } while (p->stage != 2 && QB3E_OK == p->error && !s.empty());
     if (QB3E_OK == p->error && 2 != p->stage) // Should be s.empty()

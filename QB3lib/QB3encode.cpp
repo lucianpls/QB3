@@ -228,6 +228,15 @@ bool static is_banddiff(encsp p) {
     return false;
 }
 
+//
+// TODO: Expose the known headers
+// 
+// They are somewhat similar to the PNG chunk names
+// Currently they are: "CB", "QV", "SC", "DT"
+// If the first letter is lower case, it can be ignored
+//
+
+
 // Header for cbands, does nothing if not needed
 void static write_cband_header(encsp p, oBits& s) {
     if (!is_banddiff(p)) // Is it needed
@@ -249,15 +258,31 @@ void static write_quanta_header(encsp p, oBits& s) {
     s.push(p->quanta, qbytes * 8);
 }
 
+// Write the encoding curve, if it's not the legacy Morton
+void static write_scanning_curve(encsp p, oBits& s) {
+    if (p->order == ZCURVE)
+        return;
+    push_sig("SC", s);
+    s.push(8u, 16); // Always 64 bits
+    if (p->order == 0)
+        s.push(HILBERT, 64);
+    else
+        s.push(p->order, 64);
+}
+
 // Data header has no known size
 void static write_data_header(encsp, oBits& s) {
     push_sig("DT", s);
 }
 
+// Writes the headers, in the right order
+// Implicitly it defines the order of the headers,
+// which should end with the data header
 void static write_headers(encsp p, oBits& s) {
     write_qb3_header(p, s);
     write_cband_header(p, s);
     write_quanta_header(p, s);
+    write_scanning_curve(p, s);
     write_data_header(p, s);
 }
 
@@ -529,7 +554,8 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
                     return 0;
                 }
 
-                // new stream, same buffer
+                // new stream, same buffer, we're just rewriting the headers, which have to
+                // be the same exact size
                 oBits srle(d);
                 write_headers(p, srle);
                 if (p->error)

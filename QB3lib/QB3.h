@@ -25,6 +25,8 @@ Contributors:  Lucian Plesea
 // Keep this close to plain C so it can have a C API
 #define QB3_MAXBANDS 16
 
+static_assert(sizeof(size_t) == 8, "size_t is not 64 bits");
+
 #if defined(__cplusplus)
 extern "C" {
 #endif
@@ -137,6 +139,9 @@ LIBQB3_EXPORT qb3_mode qb3_get_mode(const decsp p);
 
 // Returns the number of quantization bits used, returns 0 if failed
 LIBQB3_EXPORT size_t qb3_get_quanta(const decsp p);
+
+// Return the scanning curve used, returns 0 if failed
+LIBQB3_EXPORT size_t qb3_get_order(const decsp p);
 
 // Sets the cband array and returns true if successful
 LIBQB3_EXPORT bool qb3_get_coreband(const decsp p, size_t *cband);
