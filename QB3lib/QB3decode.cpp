@@ -111,29 +111,16 @@ static bool check_sig(uint64_t val, const char *sig) {
     return (val & 0xff) == uint8_t(sig[0]) && ((val >> 8) & 0xff) == uint8_t(sig[1]);
 }
 
-// Check that a 64bit value represents a valid curve
-// This means that every nibble has to be unique, from 0 to F
+// Returns true if the 64bit value represents a valid curve
+// This means that every nibble value has to be present, from 0 to F
 static bool check_curve(uint64_t val) {
-    // Split value into a vector of nibbles
-    uint8_t nibbles[16];
-    for (int i = 0; i < 16; i++)
-        nibbles[i] = (val >> (i * 4)) & 0xf;
-
-    // Sort the nibbles with a bubble sort, not worth using std::sort
-    for (int i = 0; i < 15; i++)
-        for (int j = i + 1; j < 16; j++)
-            if (nibbles[i] > nibbles[j]) {
-                auto tmp = nibbles[i];
-                nibbles[i] = nibbles[j];
-                nibbles[j] = tmp;
-            }
-
-    // Pack them back into val
-    val = 0;
-    for (int i = 0; i < 16; i++)
-        val = (val << 4) | nibbles[i];
-    // Every nibble should be unique, in order
-    return val == 0x0123456789abcdefull;
+    int mask(0);
+    // Each unique nibble sets one of the lower 16 bits
+    for (int i = 0; i < 16; i++) {
+        mask |= (1 << (val & 0xf));
+        val >>= 4;
+    }
+    return mask == 0xffff;
 }
 
 // Starts reading a formatted QB3 source
