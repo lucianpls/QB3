@@ -260,14 +260,11 @@ void static write_quanta_header(encsp p, oBits& s) {
 
 // Write the encoding curve, if it's not the legacy Morton
 void static write_scanning_curve(encsp p, oBits& s) {
-    if (p->order == ZCURVE)
+    if (p->order == ZCURVE || p->mode == QB3M_STORED)
         return;
     push_sig("SC", s);
     s.push(8u, 16); // Always 64 bits
-    if (p->order == 0)
-        s.push(HILBERT, 64);
-    else
-        s.push(p->order, 64);
+    s.push(p->order ? p->order : HILBERT, 64);
 }
 
 // Data header has no known size
@@ -554,8 +551,7 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
                     return 0;
                 }
 
-                // new stream, same buffer, we're just rewriting the headers, which have to
-                // be the same exact size
+                // new stream, same buffer
                 oBits srle(d);
                 write_headers(p, srle);
                 if (p->error)
