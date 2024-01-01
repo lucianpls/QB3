@@ -17,7 +17,7 @@ set(CMAKE_CSS_STANDARD_REQUIRED ON)
 
 add_subdirectory(QB3lib)
 
-option(BUILD_CQB3 "Build QB3 image conversion utility" ON)
+option(BUILD_CQB3 "Build QB3 image conversion utility" OFF)
 option(QB3_DEV "QB3 development utility, internal use only" OFF)
 
 # The executables need libicd to read and write other formats
