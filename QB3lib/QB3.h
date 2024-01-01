@@ -25,8 +25,6 @@ Contributors:  Lucian Plesea
 // Keep this close to plain C so it can have a C API
 #define QB3_MAXBANDS 16
 
-static_assert(sizeof(size_t) == 8, "size_t is not 64 bits");
-
 #if defined(__cplusplus)
 extern "C" {
 #endif
