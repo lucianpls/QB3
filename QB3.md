@@ -23,7 +23,10 @@ improvement is usually negligible.
 
 ### Block Encoding
 
-QB3 is based on encoding individual 4x4 blocks, scanned in bit interleaved order. 
+QB3 is based on encoding individual 4x4 micro blocks. The pixels within the microblock are scanned in a locality
+preserving order. For version 1.0, the order is the legacy [Morton](https://en.wikipedia.org/wiki/Z-order_curve) order,
+while version 1.1 introduces the [Hilbert curve](https://en.wikipedia.org/wiki/Hilbert_curve), which generates 
+more efficient encoding.  
 Within a band, blocks are aranged in row-major order. In case of multi-band images, band to band
 decorrelation per pixel can be used. A band can be either a core band, in which case is left unmodified,
 or a derived band, in which case pixel values from one of the core bands is subtracted from the raw values.
@@ -224,17 +227,22 @@ The header is followed by a sequence of QB3 chunks. A QB3 chunk has a two charac
 followed by the chunk data. The chunk signature is used to identify the chunk type and the interpretation of the chunk data. The size is the 
 size of the chunk data not including the signature and size fields. The following chunk types are currently defined, all other types are reserved.
 
-|Signature|Name|Description|Value|
+|Signature|Name|Version|Description|Value|
 |-|-|-|-|
-|"CB"|Band mapping|A vector of core band number, per band|Number of bands|
-|"QV"|Quanta Value|Multiplier for encoded values|A positive integer stored with the minimum number of bytes needed|
-|"DT"|Data| Pseudo chunk, QB3 encoded stream, size field is missing|NA|
+|"CB"|Band mapping|1.0|A vector of core band number, per band|Number of bands|
+|"QV"|Quanta Value|1.0|Multiplier for encoded values|A positive integer stored with the minimum number of bytes needed|
+|"SC"|Scanning Curve|1.1|Scanning order of the microblock|A 64bit value that contains all 16 hex digit values, determining the order of pixels within a microblock|
+|"DT"|Data|1.0|Pseudo chunk, QB3 encoded stream, size field is missing|NA|
 
-The "CB" is not present for a single band image or when the mapping is the identity.
-The "QV" chunk is not present when the quanta value is 1.
-The "DT" chunk signature is used to signify the end of the chunks, and it is followed by QB3 encoded stream. 
-Note that the "DT" chunk does not have a size field. All the data after the "DT" signature is part of the QB3 encoded stream. If the decoder 
-is not provided with sufficient data to fully decode the image, it will return an error.
+The "CB" is not present for a single band image or when the mapping is the identity.  
+The "QV" chunk is not present when the quanta value is 1.  
+The "SC" chunk is not written when the scanning curve is the legacy [Morton](https://en.wikipedia.org/wiki/Z-order_curve) order, 
+to preserve compatibility with the 1.0 version of the format.
+The "DT" chunk signature is used to signify the end of the chunks, and it is followed by QB3 encoded stream.  
+
+Note that the "DT" chunk is the only chunk that does not have a size field. All the data after the "DT" signature 
+is considered part of the QB3 encoded stream. If the decoder is not provided with sufficient data to fully decode the image, 
+it will return an error.
 
 ### Quantized image encoding
 
