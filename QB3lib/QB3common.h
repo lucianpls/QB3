@@ -1,7 +1,7 @@
 /*
 Content: QB3 parts used by both the encoder and the decoder
 
-Copyright 2020-2023 Esri
+Copyright 2020-2024 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -88,6 +88,8 @@ struct encs {
     size_t xsize;
     size_t ysize;
     size_t nbands;
+    // micro block scanning order
+    uint64_t order;
     size_t quanta;
 
     // Persistent state by band
@@ -107,6 +109,10 @@ struct decs {
     size_t xsize;
     size_t ysize;
     size_t nbands;
+    // Line to line stride
+    size_t stride;
+    // micro block scanning order
+    uint64_t order;
     size_t quanta;
     int error;
     int stage;
@@ -153,3 +159,30 @@ static size_t step(const T* const v, size_t rung) {
     bool s = ((acc & (acc + 1)) != 0);
     return B2 + s - !s * setbits16(acc);
 }
+
+// Two QB3 standard parsing order, encoded as a single 64bit value
+// each nibble holds the adress of a pixel, two bits for x and two bits for y
+// Use nibble values in the identity matrix, read in the desired order
+/* Identity matrix, used to read the address
+0 1 2 3
+4 5 6 7
+8 9 a b
+c d e f
+constexpr uint64_t ICURVE(0x0123456789abcdef);
+*/
+
+/* The legacy z-curve order
+ 0 1 4 5
+ 2 3 6 7
+ 8 9 c d
+ a b e f
+*/
+constexpr uint64_t ZCURVE(0x0145236789cdabef);
+
+/* Hilbert space filling curve second degree, results in better compression than Z-curve
+ 0 1 e f
+ 3 2 d c
+ 4 7 8 b
+ 5 6 9 a
+*/
+constexpr uint64_t HILBERT(0x01548cd9aefb7623);

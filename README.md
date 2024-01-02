@@ -35,3 +35,18 @@ The low level QB3 algorithm is implemented in the qb3decode.h and qb3encode.h, a
 C++ template functions. The C API located in qb3encode.cpp and qb3decode.cpp 
 uses a file format that in addition to the QB3 raw stream includes sufficient 
 metadata to allow decoding.
+
+# Change Log
+Version 1.0.0: Initial release
+
+Version 1.1.0:
+- New scan order, second order Hilbert curve is now the default
+    - Better compression at the same or better speed
+    - The old scan order is available
+- Small performance improvements
+- Bug fixes
+- Stride decoding, allowind decoding to non-contiguous line buffers
+- Build system improvements
+    - Removed MSVC project, CMake is now the only build system
+    - Default target is now the library, not the conversion program
+    - cqb3 and the test program are not built by default

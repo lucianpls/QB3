@@ -1,7 +1,7 @@
 /*
 Content: C API QB3 encoding
 
-Copyright 2021-2023 Esri
+Copyright 2021-2024 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -18,9 +18,9 @@ Contributors:  Lucian Plesea
 #pragma warning(disable:4127) // conditional expression is constant
 #include "QB3encode.h"
 #include <limits>
+#include <vector>
 // For memcpy
 #include <cstring>
-#include <vector>
 
 // constructor
 encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt) {
@@ -33,11 +33,12 @@ encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt
     p->xsize = width;
     p->ysize = height;
     p->nbands = bands;
+    p->order = 0; // will get changed to HILBERT
     p->type = static_cast<qb3_dtype>(dt);
     p->quanta = 1; // No quantization
     p->away = false; // Round to zero
     //p->raw = false;  // Write image header
-    p->mode = QB3M_DEFAULT; // Base
+    p->mode = QB3M_DEFAULT; // Fast
     // Start with no inter-band differential
     for (size_t c = 0; c < bands; c++) {
         p->band[c].runbits = 0;
@@ -99,19 +100,19 @@ bool qb3_set_encoder_quanta(encsp p, size_t q, bool away) {
     bool error = false;
     switch (p->type) {
 #define TOO_LARGE(Q, T) (Q > uint64_t(std::numeric_limits<T>::max()))
-    case qb3_dtype::QB3_I8:
+    case QB3_I8:
         error |= TOO_LARGE(p->quanta, int8_t);
-    case qb3_dtype::QB3_U8:
+    case QB3_U8:
         error |= TOO_LARGE(p->quanta, uint8_t);
-    case qb3_dtype::QB3_I16:
+    case QB3_I16:
         error |= TOO_LARGE(p->quanta, int16_t);
-    case qb3_dtype::QB3_U16:
+    case QB3_U16:
         error |= TOO_LARGE(p->quanta, uint16_t);
-    case qb3_dtype::QB3_I32:
+    case QB3_I32:
         error |= TOO_LARGE(p->quanta, int32_t);
-    case qb3_dtype::QB3_U32:
+    case QB3_U32:
         error |= TOO_LARGE(p->quanta, uint32_t);
-    case qb3_dtype::QB3_I64:
+    case QB3_I64:
         error |= TOO_LARGE(p->quanta, int64_t);
     } // data type
 #undef TOO_LARGE
@@ -134,47 +135,70 @@ size_t qb3_max_encoded_size(const encsp p) {
 qb3_mode qb3_set_encoder_mode(encsp p, qb3_mode mode) {
     if (mode <= qb3_mode::QB3M_BEST)
         p->mode = mode;
+    // Default curve is HILBERT, change it if needed
+    switch (p->mode) {
+    case QB3M_BASE_Z:
+    case QB3M_CF:
+    case QB3M_CF_RLE:
+    case QB3M_RLE:
+        p->order = ZCURVE;
+        break;
+    }
     return p->mode;
 }
 
 // Round to Zero Division, no overflow
-template<typename T> static T rto0div(T x, T y) {
-    static_assert(std::is_integral<T>(), "Integer types only");
-    T r = x / y, m = x % y;
-    y = (y >> 1);
-    return r + (!(x < 0) & (m > y)) - ((x < 0) & ((m + y) < 0));
+template<typename T> static
+T rounddiv(T n, T d) {
+    T m = n % d;
+    T h = d / 2;
+    return n / d + (!(n < 0) & (m > h)) - ((n < 0) & ((m + h) < 0));
 }
 
 // Round from Zero Division, no overflow
-template<typename T> static T rfr0div(T x, T y) {
-    static_assert(std::is_integral<T>(), "Integer types only");
-    T r = x / y, m = x % y;
-    y = (y >> 1) + (y & 1);
-    return r + (!(x < 0) & (m >= y)) - ((x < 0) & ((m + y) <= 0));
+template<typename T> static
+T rounddiv_away(T n, T d) {
+    T m = n % d;
+    T h = d / 2 + d % 2;
+    return n / d + (!(n < 0) & (m >= h)) - ((n < 0) & ((m + h) <= 0));
 }
 
-// Quantize source, in place
-template<typename T>
+// Quantize source, in place. T may be signed, q is positive
+template<typename T> static
 bool quantize(T* source, oBits& , encs& p) {
     size_t nV = p.xsize * p.ysize * p.nbands; // Number of values
     T q = static_cast<T>(p.quanta);
-    if (q == 2) { // Easy to optimize for 2, common
+    // Optimized versions have to preserve the sign of the input
+    if (2 == q) { // Easy to optimize for 2, common
         if (p.away)
             for (size_t i = 0; i < nV; i++)
-                source[i] = source[i] / 2 + source[i] % 2;
+                source[i] = source[i] / T(2) + source[i] % T(2);
         else
             for (size_t i = 0; i < nV; i++)
-                source[i] /= 2;
-        return 0;
+                source[i] /= T(2);
     }
-
-    if (p.away)
+    else if (3 == q) {
         for (size_t i = 0; i < nV; i++)
-            source[i] = rfr0div(source[i], q);
-    else
+            source[i] = source[i] / T(3) + (source[i] % T(3)) / T(2);
+    }
+    else if (4 == q) {
+        if (p.away)
+            for (size_t i = 0; i < nV; i++)
+                source[i] = source[i] / T(4) + (source[i] % T(4)) / T(2);
+        else
+            for (size_t i = 0; i < nV; i++)
+                source[i] = source[i] / T(4) + (source[i] % T(4)) / T(3);
+    }
+    // General case
+    else if (p.away) {
         for (size_t i = 0; i < nV; i++)
-            source[i] = rto0div(source[i], q);
-    return 0;
+            source[i] = rounddiv_away(source[i], q);
+    }
+    else {
+        for (size_t i = 0; i < nV; i++)
+            source[i] = rounddiv(source[i], q);
+    }
+    return false;
 }
 
 // A chunk signature is two characters
@@ -204,6 +228,15 @@ bool static is_banddiff(encsp p) {
     return false;
 }
 
+//
+// TODO: Expose the known headers
+// 
+// They are somewhat similar to the PNG chunk names
+// Currently they are: "CB", "QV", "SC", "DT"
+// If the first letter is lower case, it can be ignored
+//
+
+
 // Header for cbands, does nothing if not needed
 void static write_cband_header(encsp p, oBits& s) {
     if (!is_banddiff(p)) // Is it needed
@@ -225,15 +258,28 @@ void static write_quanta_header(encsp p, oBits& s) {
     s.push(p->quanta, qbytes * 8);
 }
 
+// Write the encoding curve, if it's not the legacy Morton
+void static write_scanning_curve(encsp p, oBits& s) {
+    if (p->order == ZCURVE || p->mode == QB3M_STORED)
+        return;
+    push_sig("SC", s);
+    s.push(8u, 16); // Always 64 bits
+    s.push(p->order ? p->order : HILBERT, 64);
+}
+
 // Data header has no known size
 void static write_data_header(encsp, oBits& s) {
     push_sig("DT", s);
 }
 
+// Writes the headers, in the right order
+// Implicitly it defines the order of the headers,
+// which should end with the data header
 void static write_headers(encsp p, oBits& s) {
     write_qb3_header(p, s);
     write_cband_header(p, s);
     write_quanta_header(p, s);
+    write_scanning_curve(p, s);
     write_data_header(p, s);
 }
 
@@ -371,16 +417,19 @@ static size_t raw_size(encsp const &p) {
 
 int qb3_get_encoder_state(encsp p) { return p->error; }
 
+static bool is_fast(qb3_mode mode) {
+    return (QB3M_BASE_H == mode) || (QB3M_BASE_Z == mode);
+}
+
 // ONLY QB3M_BASE and QB3M_CF are supported here
 template<typename T> static int enc(const T *source, oBits &s, encsp p)
 {
     int error(0);
     if (p->quanta < 2) {
-        if (p->mode == qb3_mode::QB3M_DEFAULT)
-            error = QB3::encode_fast(source, s, *p);
+        if (is_fast(p->mode))
+            return QB3::encode_fast(source, s, *p);
         else
-            error = QB3::encode_best(source, s, *p);
-        return error;
+            return QB3::encode_best(source, s, *p);
     }
 
     // Quantized encoding
@@ -392,17 +441,18 @@ template<typename T> static int enc(const T *source, oBits &s, encsp p)
     auto ysz(p->ysize);
     // In bytes
     auto linesize = p->xsize * p->nbands * typesizes[p->type];
-    // Temporary data buffer for a strip
-    std::vector<char> buffer(linesize * subimg.ysize);
-    auto src = reinterpret_cast<const char*>(source);
+    // Temporary data buffer for a single strip
+    std::vector<uint8_t> buffer(linesize * subimg.ysize);
+    auto src = reinterpret_cast<const uint8_t*>(source);
 
-#define QENC(T) quantize(reinterpret_cast<T *>(buffer.data()), s, subimg);\
-                if (subimg.mode == qb3_mode::QB3M_DEFAULT) \
-                    error = QB3::encode_fast(\
-                        reinterpret_cast<std::make_unsigned<T>::type *>(buffer.data()), s, subimg);\
-                else\
-                    error = QB3::encode_best(\
-                        reinterpret_cast<std::make_unsigned<T>::type *>(buffer.data()), s, subimg);
+#define QENC(T)\
+    quantize(reinterpret_cast<T *>(buffer.data()), s, subimg);\
+    if (is_fast(subimg.mode))\
+        error = QB3::encode_fast(\
+            reinterpret_cast<std::make_unsigned<T>::type *>(buffer.data()), s, subimg);\
+    else\
+        error = QB3::encode_best(\
+            reinterpret_cast<std::make_unsigned<T>::type *>(buffer.data()), s, subimg);
 
     for (size_t y = 0; y < ysz; y += subimg.ysize) {
         // Shift the last strip up to handle the edge
@@ -431,9 +481,27 @@ template<typename T> static int enc(const T *source, oBits &s, encsp p)
 size_t qb3_encode(encsp p, void* source, void* destination) {
     auto const mode = p->mode; // save the user chosen mode
     // Turn off the RLE for now
-    bool rle = (mode == qb3_mode::QB3M_RLE || mode == qb3_mode::QB3M_CF_RLE);
-    if (rle)
-        p->mode = (mode == qb3_mode::QB3M_RLE) ? QB3M_BASE : QB3M_CF;
+    bool rle = (QB3M_RLE == mode || QB3M_CF_RLE == mode || QB3M_CF_RLE_H == mode || QB3M_RLE_H == mode);
+    if (rle) {
+        switch (mode) {
+        case QB3M_RLE:
+            p->mode = QB3M_BASE_Z;
+            break;
+        case QB3M_CF_RLE:
+            p->mode = QB3M_CF;
+            break;
+        case QB3M_RLE_H:
+            p->mode = QB3M_BASE_H;
+            break;
+        case QB3M_CF_RLE_H:
+            p->mode = QB3M_CF_H;
+            break;
+        default: // Library internal error
+            p->error = 255;
+            return 0;
+        }
+        //p->mode = (QB3M_RLE == mode) ? QB3M_BASE : QB3M_CF;
+    }
 
     uint8_t* const d = reinterpret_cast<uint8_t*>(destination);
     oBits s(d);
@@ -464,7 +532,7 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
 
     auto len = (s.position() + 7) / 8; // current output position in bytes
     if (rle) {
-        p->mode = mode; // restore the user selected mode
+        p->mode = mode; // restore the user selected mode that includes RLE
         if (p->error) // Bail out if there was an error
             return 0;
 
@@ -478,7 +546,6 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
                 // Encode it at the end of the data
                 auto new_size = RLE0FFFF(d + data_position, data_size, d + len);
                 // Check that it worked
-                assert(new_size == rle_size);
                 if (new_size != rle_size) { // Paranoid check
                     p->error = QB3E_EINV; // Something went wrong, bail out
                     return 0;
@@ -489,7 +556,7 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
                 write_headers(p, srle);
                 if (p->error)
                     return 0;
-                // Copy the RLE0FFFF data at the current position, they are not overlapping
+                // Copy the RLE encoded data at the current position, they are not overlapping
                 memcpy(d + srle.tobyte(), d + len, rle_size);
                 // Return the new size
                 return srle.tobyte() + rle_size;
@@ -513,4 +580,3 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
     }
     return (p->error) ? 0 : s.tobyte();
 }
-

@@ -1,7 +1,7 @@
 /*
 Content: C API QB3 decoding
 
-Copyright 2021-2023 Esri
+Copyright 2021-2024 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -48,18 +48,30 @@ qb3_mode qb3_get_mode(const decsp p) {
     return p->mode;
 }
 
-uint64_t qb3_get_quanta(const decsp p) {
+size_t qb3_get_quanta(const decsp p) {
     if (p->stage != 2)
         return 0; // Error
     return p->quanta;
 }
 
+size_t qb3_get_order(const decsp p) {
+    if (p->stage != 2)
+        return 0; // Error
+    return p->order ? p->order : ZCURVE;
+}
+
+// Get a copy of the coreband mapping, as read from QB3 header
 bool qb3_get_coreband(const decsp p, size_t *coreband) {
     if (p->stage != 2)
         return false; // Error
     for (int c = 0; c < p->nbands; c++)
         coreband[c] = p->cband[c];
     return true;
+}
+
+// Change the line to line stride, defaults to line size
+void qb3_set_decoder_stride(decsp p, size_t stride) {
+    p->stride = stride;
 }
 
 // Integer multiply but don't overflow, at least on the positive side
@@ -69,20 +81,46 @@ static void dequantize(T* d, const decsp p) {
     const T q = static_cast<T>(p->quanta);
     const T mai = std::numeric_limits<T>::max() / q; // Top valid value
     const T mii = std::numeric_limits<T>::min() / q; // Bottom valid value
-    for (size_t i = 0; i < sz; i++) {
-        auto data = d[i];
-        d[i] = (data <= mai) * (data * q) 
-            + (!(data <= mai)) * std::numeric_limits<T>::max();
-        if (std::is_signed<T>() && q > 2 && (data < mii))
-            d[i] = std::numeric_limits<T>::min();
+    auto stride = p->stride ? p->stride : (p->xsize * p->nbands * sizeof(T));
+    // Slightly faster without a double loop
+    if (stride == p->xsize * p->nbands * sizeof(T)) {
+        for (size_t i = 0; i < sz; i++) {
+            auto data = d[i];
+            d[i] = (data <= mai) * (data * q)
+                + (!(data <= mai)) * std::numeric_limits<T>::max();
+            if (std::is_signed<T>() && (q > 2) && (data < mii))
+                d[i] = std::numeric_limits<T>::min();
+        }
+        return;
+    }
+    // With line stride
+    for (size_t y = 0; y < p->ysize; y++) {
+        auto dst = reinterpret_cast<T*>(reinterpret_cast<uint8_t*>(d) + y * stride);
+        for (size_t i = 0; i < p->nbands * p->xsize; i++) {
+            auto data = dst[i];
+            dst[i] = (data <= mai) * (data * q)
+                + (!(data <= mai)) * std::numeric_limits<T>::max();
+            if (std::is_signed<T>() && (q > 2) && (data < mii))
+                dst[i] = std::numeric_limits<T>::min();
+        }
     }
 }
 
 // Check a 2 byte signature
 static bool check_sig(uint64_t val, const char *sig) {
-    uint8_t c0 = static_cast<uint8_t>(sig[0]);
-    uint8_t c1 = static_cast<uint8_t>(sig[1]);
-    return (val & 0xff) == c0 && ((val >> 8) & 0xff) == c1;
+    return (val & 0xff) == uint8_t(sig[0]) && ((val >> 8) & 0xff) == uint8_t(sig[1]);
+}
+
+// Returns true if the 64bit value represents a valid curve
+// This means that every nibble value has to be present, from 0 to F
+static bool check_curve(uint64_t val) {
+    int mask(0);
+    // Each unique nibble sets one of the lower 16 bits
+    for (int i = 0; i < 16; i++) {
+        mask |= (1 << (val & 0xf));
+        val >>= 4;
+    }
+    return mask == 0xffff;
 }
 
 // Starts reading a formatted QB3 source
@@ -124,7 +162,8 @@ decsp qb3_read_start(void* source, size_t source_size, size_t *image_size) {
     image_size[0] = p->xsize;
     image_size[1] = p->ysize;
     image_size[2] = p->nbands;
-
+    if (QB3M_BASE_Z == p->mode || QB3M_CF == p->mode || QB3M_CF_RLE == p->mode || QB3M_RLE == p->mode)
+        p->order = ZCURVE;
     p->error = QB3E_OK;
     p->stage = 1; // Read main header
     return p; // Looks reasonable
@@ -154,8 +193,8 @@ bool qb3_read_info(decsp p) {
                 p->error = QB3E_EINV;
                 break;
             }
-            s.advance(16 + 16); // Skip the bytes we read
-            p->quanta = s.pull(len * 8);
+            s.advance(32); // Skip the bytes we read
+            p->quanta = s.pull(size_t(len) * 8);
             // Could check that the quanta is consistent with the data type
             if (p->quanta < 2)
                 p->error = QB3E_EINV;
@@ -166,7 +205,7 @@ bool qb3_read_info(decsp p) {
                 p->error = QB3E_EINV;
                 break;
             }
-            s.advance(16 + 16); // CHUNK + LEN
+            s.advance(32); // CHUNK + LEN
             for (size_t i = 0; i < p->nbands; i++) {
                 p->cband[i] = 0xff & s.pull(8);
                 if (p->cband[i] >= p->nbands)
@@ -178,14 +217,42 @@ bool qb3_read_info(decsp p) {
             s.advance(16);
             // Update the position
             size_t used = s.position() / 8;
-            if (p->s_size > used) { // Should have some data
-                p->s_in += used;
-                p->s_size -= used;
-                p->stage = 2; // Seen data header
+            if (p->s_size <= used) {
+                p->error = QB3E_EINV;
+                break;
+            }
+            p->s_in += used;
+            p->s_size -= used;
+            p->stage = 2; // Seen data header
+        }
+        // For SC, read the curve in p->order
+        else if (check_sig(chunk, "SC")) {          
+            // len should be 8
+            if (len != 8) {
+                p->error = QB3E_EINV;
+                break;
+            }
+            // Misplaced curve chunk
+            if (p->mode < qb3_mode::QB3M_BASE_H || p->mode == qb3_mode::QB3M_STORED) {
+                p->error = QB3E_EINV;
+                break;
+            }
+            s.advance(32); // CHUNK + LEN
+            p->order = s.pull(64);
+            // Verify that the curve is valid
+            if (!check_curve(p->order)) {
+                p->error = QB3E_EINV;
+                break;
             }
         }
-        else { // Unknown chunk
-            p->error = QB3E_UNKN;
+        else {
+            // Unknown chunk
+            // Ignore it if the first letter is lower case
+            if (chunk & 0x20)
+                s.advance(size_t(len) * 8);
+            // Otherwise, it's an error
+            else
+                p->error = QB3E_UNKN;
         }
     } while (p->stage != 2 && QB3E_OK == p->error && !s.empty());
     if (QB3E_OK == p->error && 2 != p->stage) // Should be s.empty()
@@ -196,8 +263,6 @@ bool qb3_read_info(decsp p) {
 // Decode RLE0FFFF data
 // Returns 0 if decoding worked as expected
 int64_t deRLE0FFFF(const uint8_t* s, size_t slen, uint8_t* d, size_t dlen) {
-    // Just a sanity check, those sizes would be insane
-    assert(static_cast<int64_t>(slen) > 0 && static_cast<int64_t>(dlen) > 0 );
     while ((slen > 0) && (dlen > 0)) {
         slen--;
         dlen--;
@@ -215,9 +280,9 @@ int64_t deRLE0FFFF(const uint8_t* s, size_t slen, uint8_t* d, size_t dlen) {
             s += 2;
             slen -= 2;
             if (c != 0xff) { // zero run
-                dlen -= 3 + c;
-                if (dlen < 0)
+                if (dlen < (size_t(3) + c))
                     break; // output error, will exit
+                dlen -= size_t(3) + c;
                 *d++ = 0;
                 *d++ = 0;
                 *d++ = 0;
@@ -226,8 +291,9 @@ int64_t deRLE0FFFF(const uint8_t* s, size_t slen, uint8_t* d, size_t dlen) {
                     *d++ = 0;
             }
             else { // emit two FFs
-                if (--dlen < 0)
+                if (!dlen)
                     break; // output error, will exit
+                dlen--;
                 *d++ = 0xff;
                 *d++ = 0xff;
             }
@@ -237,35 +303,25 @@ int64_t deRLE0FFFF(const uint8_t* s, size_t slen, uint8_t* d, size_t dlen) {
     return static_cast<int64_t>(dlen) - static_cast<int64_t>(slen); // So it can become negative
 }
 
-// The size of the decoded data, fairly expensive
+// The size of the decoded data
 size_t deRLE0FFFFSize(const uint8_t* s, size_t slen) {
     size_t count(0);
-    // Read and output at least one byte per loop
     while (slen-- > 0) {
         uint8_t c = *s++;
-        if ((0xFF != c) || (2 > slen)) { // Not marker or not enough input
+        if ((0xFF != c) || (2 > slen) || (0xff != s[0])) {
             count++;
+            continue;
         }
-        else { // check the second byte
-            if (0xff != s[0]) { // Not a marker
-                count++;
-            }
-            else {
-                // Consume the second FF and the next byte
-                c = s[1];
-                s += 2;
-                slen -= 2;
-                if (c != 0xff) { // zero run
-                    count += 4;
-                    count += c;
-                }
-                else { // two FF
-                    count += 2;
-                }
-            }
-        }
+        c = s[1];
+        s += 2;
+        slen -= 2;
+        count += size_t(2) + (size_t(2) + c) * (0xff != c);
     }
     return count;
+}
+
+static bool needs_rle(qb3_mode mode) {
+    return (QB3M_RLE == mode || QB3M_RLE_H == mode || QB3M_CF_RLE == mode || QB3M_CF_RLE_H == mode);
 }
 
 // returns 0 if an error is detected
@@ -289,7 +345,7 @@ static size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination
 
     std::vector<uint8_t> buffer;
     // If RLE is needed, it is expensive, allocates a whole new buffer
-    if (p->mode == QB3M_RLE || p->mode == QB3M_CF_RLE) {
+    if (needs_rle(p->mode)) {
         // RLE needs to be decoded into a temporary buffer
         auto sz = deRLE0FFFFSize(src, src_sz);
         buffer.resize(sz);
@@ -303,9 +359,7 @@ static size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination
         src_sz = sz;
     }
 
-#define DEC(T) QB3::decode(src, src_sz, reinterpret_cast<T*>(destination), \
-    p->xsize, p->ysize, p->nbands, p->cband)
-
+#define DEC(T) QB3::decode(src, src_sz, reinterpret_cast<T*>(destination), *p)
     switch (p->type) {
     case qb3_dtype::QB3_U8:
     case qb3_dtype::QB3_I8:
@@ -328,26 +382,25 @@ static size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination
     // We have a quanta, decode in place
     if (!error_code && p->quanta > 1) {
         switch (p->type) {
-        case qb3_dtype::QB3_I8:
-            MUL(int8_t); break;
         case qb3_dtype::QB3_U8:
             MUL(uint8_t); break;
-        case qb3_dtype::QB3_I16:
-            MUL(int16_t); break;
+        case qb3_dtype::QB3_I8:
+            MUL(int8_t); break;
         case qb3_dtype::QB3_U16:
             MUL(uint16_t); break;
-        case qb3_dtype::QB3_I32:
-            MUL(int32_t); break;
+        case qb3_dtype::QB3_I16:
+            MUL(int16_t); break;
         case qb3_dtype::QB3_U32:
             MUL(uint32_t); break;
-        case qb3_dtype::QB3_I64:
-            MUL(int64_t); break;
+        case qb3_dtype::QB3_I32:
+            MUL(int32_t); break;
         case qb3_dtype::QB3_U64:
             MUL(uint64_t); break;
+        case qb3_dtype::QB3_I64:
+            MUL(int64_t); break;
         default:
             error_code = 3; // Invalid type
         } // data type
-
     }
 #undef MUL
     return error_code ? 0 : qb3_decoded_size(p);

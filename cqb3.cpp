@@ -1,7 +1,7 @@
 /*
 Content: QB3 image encode and decode utility
 
-Copyright 2023 Esri
+Copyright 2023-2024 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -38,6 +38,7 @@ struct options {
         best(false),
         trim(false),
         rle(false), // non-default RLE (off for best, on for fast)
+        legacy(false), // legacy mode
         verbose(false), 
         decode(false),
         time(0),
@@ -53,6 +54,7 @@ struct options {
     bool best;
     bool trim; // Trim input to a multiple of 4x4 blocks
     bool rle; // Skip RLE
+    bool legacy; // Legacy mode
     bool verbose;
     bool decode;
 };
@@ -66,6 +68,7 @@ int Usage(const options &opt) {
         << "\n"
         << "Compression only options:\n"
         << "\t-b : best compression\n"
+        << "\t-l : legacy mode (deprecated)\n"
         << "\t-q <n> : quanta\n"
         << "\t-r : reverse RLE behavior, off for best, on for fast\n"
         << "\t     RLE is only used if applicable\n"
@@ -109,6 +112,9 @@ bool parse_args(int argc, char** argv, options& opt) {
                 break;
             case 't':
                 opt.trim = true;
+                break;
+            case 'l':
+                opt.legacy = true;
                 break;
             case 'q':
                 opt.quanta = 2; // Default
@@ -190,9 +196,13 @@ bool parse_args(int argc, char** argv, options& opt) {
 const char *mode_string(qb3_mode m) {
     switch (m) {
     case QB3M_BASE: return "Base";
-    case QB3M_CF: return "CF";
-    case QB3M_RLE: return "Base + RLE";
-    case QB3M_CF_RLE: return "CF + RLE";
+    case QB3M_BASE_Z: return "Legacy Base";
+    case QB3M_CF_H: return "CF";
+    case QB3M_RLE_H: return "Base + RLE";
+    case QB3M_BEST: return "Best";
+    case QB3M_CF: return "Legacy CF";
+    case QB3M_RLE: return "Legacy Base + RLE";
+    case QB3M_CF_RLE: return "Legacy CF + RLE";
     case QB3M_STORED: return "Stored";
     default:
         return "Unknown mode";
@@ -387,18 +397,34 @@ int encode(Raster &raster, std::vector<std::uint8_t> &image, std::vector<std::ui
 
     try {
         high_resolution_clock::time_point t1, t2;
+
         // Pick a mode
-        qb3_mode mode = opts.best ? qb3_mode::QB3M_BEST : qb3_mode::QB3M_BASE;
+        auto mode = opts.best ? QB3M_BEST : QB3M_BASE;
+        if (opts.legacy) {
+            if (QB3M_BEST == mode)
+                mode = QB3M_CF_RLE;
+            else
+                mode = QB3M_BASE_Z;
+        }
         // If the RLE is set, pick more careful
         if (opts.rle) {
             if (QB3M_BEST == mode) {
-                mode = QB3M_CF; // Disable RLE for best
+                mode = QB3M_CF_H; // No RLE
             }
             else if (QB3M_BASE == mode) {
-                mode = QB3M_RLE;
+                mode = QB3M_RLE_H; // RLE
+            }
+            else if (QB3M_BASE_Z == mode) {
+                mode = QB3M_RLE; // RLE
+            } else if (QB3M_CF_RLE == mode) {
+                mode = QB3M_CF; // No RLE
             }
         }
-        qb3_set_encoder_mode(qenc, mode);
+
+        if (mode != qb3_set_encoder_mode(qenc, mode)) {
+            cerr << "Invalid mode\n";
+            throw 1;
+        }
         if (opts.quanta > 1) {
             if (!qb3_set_encoder_quanta(qenc, opts.quanta, true)) {
                 cerr << "Invalid quanta\n";
