@@ -2,22 +2,22 @@
 
 ## Introduction
 
-QB3 is a raster specific lossless compression for integer values, signed and unsigned, up to 64bit per value. It usually achieves 
+QB3 is a raster specific lossless compression for integer values, signed and unsigned, up to 64bit per value. It achieves 
 better compression than PNG for 8bit natural images while being extremely fast, for both compression and decompression. 
 
 ## Performance and Implementation
 
-QB3 encodes and decodes 8 bit color imagery at a rate close to 300 MB per second using a single core of a recent CPU. For 16, 32 and 64bit integer 
-types it is much faster, up to 2GB/s compression and 3GB/sec decompression. This means that only about 15 CPU clock cycles are needed per 
+QB3 encodes and decodes 8 bit color imagery at a rate close to 300 MB per second using a single thread of a recent CPU. For 16, 32 and 64bit integer 
+types it is much faster, reaching 2GB/s compression and 3GB/sec decompression. This means that only about 15 CPU clock cycles are needed per 
 raw data value, measured on real cases, despite the relatively long dependency chains. At the same time, being a data type aware raster specific 
-compression, QB3 achieves better compression than byte oriented compressors such as DEFLATE or ZSTD. The high rate is achieved by using an algorithm
-that avoids conditional code execution as much as possible. In addition, only bit arithmetic operations are used, with no multiplication or division. 
+compression, QB3 achieves better compression than byte oriented compressors such as DEFLATE or ZSTD. The high rate is achieved by an implementation
+that avoids code branches as much as possible. In addition, only basic arithmetic operations are used, with no multiplication or divisions. 
 The performance does improve by about 10% using compiler auto-vectorization. Even higher performance could be achieved using manually tuned 
-vectorization at the expense of portability. Parallel execution is also possible.
-Alternatively, better compression could be achieved using a more complex algorithm. One such implementation is included,
-applicable when values within a block have a common factor. The main use case is for normalized or for qunatized data. When this 
-algorithm is used, encoding speed drops to roughly half while decoding speed is roughly the same. For real 8 bit images the compression 
-improvement is usually negligible.
+vectorization at the expense of portability. Parallel execution is also possible.  
+Alternatively, better compression could be achieved using a more complex algorithm. A few extension algorithms are included, where
+encoding speed drops by roughly half while decoding speed stays about the same. For 8 bit images the compression 
+improvement is usually negligible. A better option is to use a generic lossless compression library such as ZSTD at a low effort level 
+as a second encoding pass, the results are very good in both compression ratio and speed.
 
 ## QB3 Algorithm Overview
 
@@ -25,9 +25,9 @@ improvement is usually negligible.
 
 QB3 is based on encoding individual 4x4 micro blocks. The pixels within the microblock are scanned in a locality
 preserving order. For version 1.0, the order is the legacy [Morton](https://en.wikipedia.org/wiki/Z-order_curve) order,
-while version 1.1 introduces the [Hilbert curve](https://en.wikipedia.org/wiki/Hilbert_curve), which generates 
+while version 1.1 introduced the [Hilbert curve](https://en.wikipedia.org/wiki/Hilbert_curve), which generates a 
 more efficient encoding.  
-Within a band, blocks are aranged in row-major order. In case of multi-band images, band to band
+Within each band, blocks are aranged in row-major order. In case of multi-band images, band to band
 decorrelation per pixel can be used. A band can be either a core band, in which case is left unmodified,
 or a derived band, in which case pixel values from one of the core bands is subtracted from the raw values.
 The values encoded are the differences between the current and the previous value, per band. The previous 
@@ -42,26 +42,26 @@ of the QB3 compression.
 
 ### Magnitude-Sign encoding of integer values
 
-For rasters, the locality preserving ordering is mostly valuable if we follow it up 
-with delta encoding, it would generate relatively small absolute values. The problem is that negative values
-require many bits in the normal 2s complement encoding. This is solved by reordering the values with alternate 
-signs 0, -1, 1, -2 ..., up to the min_val. For encoding the values, the formula used is: `m = 2 * abs(v) - sign(v)`, 
-where m has the same number of bits as the initial value v. This encoding stores the sign in bit 0, and the 
-absolute value in the next higher bits, thus the top bits are zero. For negative values, the absolute value 
-is biased by -1 because -0 is not a valid value, allowing the original range of values to be preserved, making
-the encoding reversible. This is the magnitude-sign (mags) encoding, because the absolute magnitude is followed
-by the sign bit. In this encoding the top zero bits are not needed to determine the actual value.  
-In contrast, the 2s complement encoding is sign-magnitude (smag), although the magnitude of negative 
+For rasters, the locality preserving ordering is valuable when followed by delta encoding, which generate 
+relatively small absolute values. The problem is that negative values require many bits in the normal 2s complement 
+encoding. This is solved by reordering the values with alternate signs 0, -1, 1, -2 ..., up to the min_val. 
+For encoding the values, this formula is: `m = 2 * abs(v) - sign(v)`, where m has the same number of bits as the 
+initial value v. This encoding stores the sign in bit 0, and the absolute value in the next higher bits, thus 
+the top bits are zero. For negative values, the absolute value is biased by -1 because -0 is not a valid value, 
+allowing the original range of values to be preserved, making the encoding reversible. This is the magnitude-sign 
+(mags) encoding, because the absolute magnitude is followed by the sign bit. In this encoding the top zero bits 
+are not needed to determine the actual value.  
+In contrast, the usual 2s complement encoding is sign-magnitude (smag), and the magnitude of negative 
 numbers is encoded with flipped bit values.
 
 ### MAGS QB3 suffix encoding
 
-For this step, the values are considered as unsigned. For the 16 values in a block, the highest bit set of 
-any value is the rung of the block. Let's assume that for encoding values within a block N bits per value 
-are required, which means that the block rung is n - 1. Within a block smaller values are more likely than 
-larger ones, and re-encoding using a variable length code results in a smaller output size. 
-The block value range is split in three ranges, and values in each range is encoded with a different 
-number of bits.
+For this step, the input values resulting from the mag-sign encoding are considered as unsigned. For the 16 
+values in a block, the highest bit set of any value is the rung of the block. Let's assume that for encoding 
+values within a block N bits per value are required, which means that the block rung is n - 1. Within a block
+ smaller values are more likely than larger ones, and re-encoding using a variable length code results in a 
+ smaller output size. The block value range is split in three ranges, and values in each range is encoded 
+ with a different number of bits.
 
  - First range, short, is the first quarter of possible values within a rung. These 
 are the values between 0 and 2^(n-2), which start with 00 in the two most 
@@ -86,9 +86,9 @@ Considering that the normal mags encoding for values in the n-1 rung requires n 
  - Long:    2 + (n-1) = n+1 bits
  
 Values in the long range need one more bit than the nominal size, while values in the short range take one bit less.
-If the number of values in the short range in a group is larger than the number of long values, the overall size for the 
-whole group will be smaller than the same group in mags encoding. Since this condition is very frequently true, the mags 
-suffix encoding results in compression.
+If the number of values in the short range in a group is larger than the number of long values, the total number of bits 
+for encoding the whole group will be smaller than the same group in mags encoding. Since this condition is very frequently 
+true, the mags suffix encoding generally results in compression.
 
 ### Edge handling
 
@@ -115,25 +115,26 @@ before. The rung change switch will be:
  - 0, If the rung is the same as the one before
  - 1 + CodeSwitch, If the rung is different
 
-The CodeSwitch encodes the delta between the current rung value and the previous one. This delta uses wrapparound at the 
-number of bits required to hold all the possible bit values for a data type. Furthermore, since zero delta is encoded explicitly, 
+The CodeSwitch field encodes the delta between the current rung value and the previous one. This delta uses wrapparound at the 
+number of bits required to hold all the possible bit values for a data type. Furthermore, since zero delta is encoded separately, 
 the equivalent positive deltas are biased down by 1 (thus 0 means that delta is 1). This leaves one maximum positive value unused 
-(for example for byte data, rung difference of +4 would result in the same value as -4). This special codeswitch is used as a SIGNAL
-and is not used in the normal QB3 encoding.
+(for example for byte data, rung difference encoded as +4 would result in the same value as -4). This unused codeswitch is used 
+as a SIGNAL for extended encoding.
 The codeswitch itself is suffix encoded, using a variable number of bits. For example, for byte data, the codeswitch will use 2 bits for
-+-1, 3 bits for +-2 and 4 bits for +-3, -4 and the SIGNAL.
-
-The codeswitch is then followed by the 16 group values, encoded in QB3 format. Special encoding are required at rung 0 and 
-rung 1, where the normal QB3 doesn't apply (output codes can be shorter than the two prefix bits).
++-1, 3 bits for +-2 and 4 bits for +-3, -4 and the SIGNAL.  
+The codeswitch is followed by the 16 group values encoded in QB3 format described above. Special encoding are required at rung 0 and 
+rung 1, where the normal QB3 encoding doesn't apply (output codes can be shorter than the two suffix bits).
 
 ### Rung 0 Encoding
 
 At rung zero, each value requires a single bit, the QB3 ranges can't be used. There is however the special case when all the values 
-within a block are zero. This happens when the input block is constant, which is common so it deserves a special, shorter encoding.
+within a block are zero. This happens when the input block is constant, which is common enogh to it deserves a special, shorter encoding.
 For this case, the rung encoding is directly followed by a single zero bit. Using this encoding, blocks in large areas of constant 
 value will use only two bits, both zero, the first one signifying that the block rung is the same as the one for the previous block 
-(zero), while the next zero means that all the values within the block are zero. Otherwise, for a normal zero rung block where some 
-of the values are ones, a 1 bit is stored (non-zero block), followed by the 16 bits for the 16 values.
+(zero), while the next zero means that all the values within the block are zero. Otherwise, for a normal zero rung block where some of 
+the values are ones, a 1 bit is stored (non-zero block), followed by the 16 bits for the 16 values. The special constant block encoding
+determines the maximum achievable QB3 compression ratio of 64:1 for byte data (2 bits for a 16x8 micro-block). Without the explicit 
+encoding of the constant block, the maximum compression ratio would have been much lower, under 8:1.
 
 ### Rung 1 Encoding
 At rung 1, the low range is encoded using a single bit, following the QB3 encoding pattern.  
@@ -147,23 +148,24 @@ Decoding this rung has to be done slightly different from the higher rungs, test
 ### Group Step Encoding
 
 The rung of a group is the highest bit set for any value within the group. This means that at least one of the values in 
-the group is in the long range of the respective group. The encoder will not generate an encoded group where
-all the values are in the nominal or short range. This kind of block would be a relatively small encoded group, an opportunity 
-wasted.
-Knowing this, it is possible to reduce one of the values in an unambiguous way, so it can be restored when decoding. In the case
-where the first value within the group is the only one in the long range, the top bit can be flipped to zero, which changes
-the range of that value to the nominal or low. On decoding, if no value in the decoded group are in the long range, it can be
-reasoned that the first value was the one reduced, and the original value can be restored by setting the rung bit. This eliminates 
-group encoding where the first value is the only one in the long range. This encoding can then be used to reduce the second value in 
+the group is in the long range of the respective group. The encoder will not generate any encoded group where
+all the values are in the nominal or short range. This kind of block would be a relatively small encoded group, but will always be
+encoded at the next lowest rung.
+Knowing this, it is possible to reduce the bit length of one of the values in an unambiguous way, so it can be restored when decoding. 
+In the case where the first value within the group is the only one in the long range, the top bit can be flipped to zero, 
+which changes the range of that value to the nominal or low. On decoding, if no value in the decoded group is in the long range, it can be
+reasoned that the first value was the one reduced, and the original value can be restored by setting its rung bit. This eliminates 
+group encodings where only the first value is in the long range. This encoding gap can then be used to reduce the second value in 
 the group, if only the first two values are in the long range. This logic progresses all the way to reducing the last value in the group 
-if all the values within the group are in the long range. This situation is the worst case, where the group would require 16 more bits 
-than the nominal. Using this reduction method, the worst case scenario requires at most 15 extra bits, since the last value will be reduced.  
-Another way to describe this is by looking at the squence of the rung bits across the group. If the first n values have the
+if all the values within the group are in the long range. This situation is also the worst encoding case, where the group would require 
+16 more bits than the nominal. Using this reduction method, the worst case scenario requires at most 15 extra bits, since the last value
+will be reduced.  
+Another way to describe this is by looking at the sequence of the rung bits across the group. If the first n values have the
 rung bit set while then rest of the values have it cleared, the last value with the bit set can be reduced on encoding and
 restored on decoding. We know that at least one rung bit is set, so it is not possible to have all the rung bits clear 
 initially. The sequnce of the rung bits is a step down function, going from 1 to 0, so this optimization is called 
-*step encoding*. This optimization reduces the number of bits required to store a group by 1 or 2 bits, if the sequence of the rung bit
-across the group is a step function. This encoding applies to all rungs except for rung 0.
+*step encoding*. This optimization reduces the number of bits required to store a group by 1 or 2 bits when the sequence of the 
+rung bit across the group is a step function. This step encoding applies to all rungs except at rung 0.
 
 ### Common Factor Group Encoding
 
@@ -240,16 +242,16 @@ The "SC" chunk is not written when the scanning curve is the legacy [Morton](htt
 to preserve compatibility with the 1.0 version of the format.
 The "DT" chunk signature is used to signify the end of the chunks, and it is followed by QB3 encoded stream.  
 
-Note that the "DT" chunk is the only chunk that does not have a size field. All the data after the "DT" signature 
-is considered part of the QB3 encoded stream. If the decoder is not provided with sufficient data to fully decode the image, 
+Note that the "DT" chunk is the only chunk that does not have a size field. All the data immediately after the "DT" signature 
+is part of the QB3 encoded bitstream. If the decoder is not provided with sufficient data to fully decode the image, 
 it will return an error.
 
 ### Quantized image encoding
 
-This encoding is used to improve compression by storing the values in a pre-quantized form. The quantization is done by
-dividing the input values by a quantization factor, then rounding the result to the nearest integer. The quantization factor
-is itself an integer. The quantization factor is stored in a QB3 image chunk. The quantized values are then encoded using 
-QB3 encoding. On decoding, the values decoded from the QB3 stream are multiplied by the quantization factor to restore the range
-of the original values. Note that the range of the output values may be different from the input values due to rounding.
-While the QB3 stream encoding is lossless, the quantization is lossy.
-
+This lossy encoding step is used to improve compression further by storing the values in a pre-quantized form. The quantization is done by
+dividing the input values by a constant, small integer quantization factor, rounding the results to the nearest integer value. 
+The quantization factor is stored in a QB3 image header chunk. The quantized values are then encoded using the normal 
+QB3 encoding. On decoding, the values decoded are multiplied by the quantization factor to restore the range
+of the original values. Note that the range of the output values may be slightly different from the input values due to rounding.
+While the QB3 stream encoding iteself is lossless, the quantization step is lossy. For some input images, the loss of some of the 
+input information is not visually significant.  
