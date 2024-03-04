@@ -38,7 +38,7 @@ option is to combine the raster specific QB3 output with a second pass generic
 lossless compressions such as ZSTD or DEFLATE, even at a very low setting.
 
 # Code Organization
-The low level QB3 algorithm is implemented in the qb3decode.h and qb3encode.h as
+The QB3 compression algorithm is implemented in the QB3algo.h and bitstream.h as
 C++ templates. The C API located in qb3encode.cpp and qb3decode.cpp 
 adds a file format that in addition to the QB3 raw stream includes sufficient 
 metadata to allow decoding.  
