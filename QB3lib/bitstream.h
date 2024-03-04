@@ -21,6 +21,7 @@ Contributors:  Lucian Plesea
 #include <type_traits>
 #include <limits>
 #include <utility>
+#include <cstddef>
 
 // Input bitstream, doesn't go past size
 class iBits {

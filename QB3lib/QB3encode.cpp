@@ -16,12 +16,15 @@ Contributors:  Lucian Plesea
 */
 
 #pragma warning(disable:4127) // conditional expression is constant
-#include "QB3encode.h"
+#include "QB3.h"
+#define QB3_CAPI
+#include "QB3algo.h"
 #include <limits>
 #include <vector>
 // For memcpy
 #include <cstring>
 
+using namespace QB3;
 // constructor
 encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt) {
     if (width < 4 || width > 0x10000ul 
@@ -120,9 +123,6 @@ bool qb3_set_encoder_quanta(encsp p, size_t q, bool away) {
         p->quanta = 1;
     return !error;
 }
-
-// bytes per value by qb3_dtype, keep them in sync
-const int typesizes[8] = { 1, 1, 2, 2, 4, 4, 8, 8 };
 
 size_t qb3_max_encoded_size(const encsp p) {
     // Pad to 4 x 4

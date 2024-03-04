@@ -16,7 +16,9 @@ Contributors:  Lucian Plesea
 */
 
 #pragma warning(disable:4127) // conditional expression is constant
-#include "QB3decode.h"
+#include "QB3.h"
+#define QB3_CAPI
+#include "QB3algo.h"
 // For memset, memcpy
 #include <cstring>
 #include <vector>
@@ -29,6 +31,8 @@ Contributors:  Lucian Plesea
 // 1 data type
 // 1 mode
 constexpr size_t QB3_HDRSZ = 4 + 2 + 2 + 1 + 1 + 1;
+
+using namespace QB3;
 
 void qb3_destroy_decoder(decsp p) {
     delete p;

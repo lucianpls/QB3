@@ -18,7 +18,6 @@ Contributors:  Lucian Plesea
 #pragma once
 // For size_t
 #include <stddef.h>
-
 // CMake will generate LIBQB3_EXPORT linkage as needed
 #include <libqb3_export.h>
 
