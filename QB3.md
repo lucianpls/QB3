@@ -93,15 +93,14 @@ true, the mags suffix encoding generally results in compression.
 
 ### Edge handling
 
-QB3 is a block based encoding, yet the last block in a row or column may not be a full 4x4 block. The algorithm avoids this limitation 
-by shifting the begining of the last block in a row or column to the left or up so that the last block is always a full 4x4 block. 
-This means that the last block duplicates some values from the previous block when the full size is not a multiple of 4.
-While this method is simple and fast, it results in sub-optimal compression. The worst case is when both the width and the height
-of the image is of the form 4*N+1, where N is an integer. In this case, the amount of redundant pixels expressed in percentage is
-`300 * (W + H) / (W*H)` or `600 / W` for a square image. While significant for small images, this is a reasonable tradeoff for the 
-simplicity of the algorithm. For optimal results, the input should be a multiple of 4 in both dimensions. If the image is padded, 
-repeating the values of the nearest column and/or row is a good choice, it should affect the compression ratio less than padding 
-with zero.
+QB3 is a block based encoding, yet the last block in a row or column may not be a full 4x4 block. The implementation avoids this 
+limitation by shifting the begining of the last block in a row or column to the left or up so that the last block is always a 
+full 4x4 block. This means that the last block duplicates values from the previous block when the full size is not a multiple 
+of 4. While this results in sub-optimal compression, it is simple to implement and fast. The worst case is when both the width 
+and the height of the image is of the form 4*N+1, where N is an integer. The maximum amount of redundant pixels expressed in 
+percentage is thus `300 * (W + H) / (W*H)` or `600 / W` for a square image. While it may be significant for small images, 
+this is a reasonable tradeoff for the simplicity of the implementation. For optimal results, the input should be a multiple of 
+4 in both dimensions. If the image is padded, repeating the values of the nearest column and/or row is a good choice.
 
 ### QB3 Bitstream
 
