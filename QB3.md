@@ -73,7 +73,8 @@ These values start with 01 in the two most significant bits.
 always in this range, which means that at least one value per block is in this range.
 
 The encoding type needs to be self-identifying, for every value. To do this, 
-the encoded values end with one or two signal bits which determine the size of the symbol:
+the encoded values end with one or two signal bits which determine the size of the symbol. Since the values
+are stored in little endian format, these lower bits are stored and read first.
  - x0 Short
  - 01 Nominal
  - 11 Long
