@@ -25,7 +25,7 @@ as a second encoding pass, the results are very good in both compression ratio a
 
 QB3 is based on encoding individual 4x4 micro blocks. The pixels within the microblock are scanned in a locality
 preserving order. For version 1.0, the order is the legacy [Morton](https://en.wikipedia.org/wiki/Z-order_curve) order,
-while version 1.1 introduced the [Hilbert curve](https://en.wikipedia.org/wiki/Hilbert_curve), which generates a 
+while version 1.1 uses the [Hilbert curve](https://en.wikipedia.org/wiki/Hilbert_curve), which generates a 
 more efficient encoding.  
 Within each band, blocks are aranged in row-major order. In case of multi-band images, band to band
 decorrelation per pixel can be used. A band can be either a core band, in which case is left unmodified,
