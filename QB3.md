@@ -234,7 +234,7 @@ size of the chunk data not including the signature and size fields. The followin
 |"CB"|Band mapping|1.0|A vector of core band number, per band|Number of bands|
 |"QV"|Quanta Value|1.0|Multiplier for encoded values|A positive integer stored with the minimum number of bytes needed|
 |"SC"|Scanning Curve|1.1|Scanning order of the microblock|A 64bit value that contains all 16 hex digit values, determining the order of pixels within a microblock|
-|"DT"|Data|1.0|Pseudo chunk, QB3 encoded stream, size field is missing|NA|
+|"DT"|Data|1.0|Pseudo chunk, directly followed by QB3 encoded stream|NA|
 
 The "CB" is not present for a single band image or when the mapping is the identity.  
 The "QV" chunk is not present when the quanta value is 1.  
