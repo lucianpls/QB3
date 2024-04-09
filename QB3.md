@@ -45,7 +45,7 @@ of the QB3 compression.
 For rasters, the locality preserving ordering is valuable when followed by delta encoding, which generate 
 relatively small absolute values. The problem is that negative values require many bits in the normal 2s complement 
 encoding. This is solved by reordering the values with alternate signs 0, -1, 1, -2 ..., up to the min_val. 
-For encoding the values, this formula is: `m = 2 * abs(v) - sign(v)`, where m has the same number of bits as the 
+For encoding the values, this formula is: `m = abs(2 * v) - sign(v)`, where m has the same number of bits as the 
 initial value v. This encoding stores the sign in bit 0, and the absolute value in the next higher bits, thus 
 the top bits are zero. For negative values, the absolute value is biased by -1 because -0 is not a valid value, 
 allowing the original range of values to be preserved, making the encoding reversible. This is the magnitude-sign 
