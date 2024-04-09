@@ -230,7 +230,7 @@ followed by the chunk data. The chunk signature is used to identify the chunk ty
 size of the chunk data not including the signature and size fields. The following chunk types are currently defined, all other types are reserved.
 
 |Signature|Name|Version|Description|Value|
-|-|-|-|-|
+|-|-|-|-|-|
 |"CB"|Band mapping|1.0|A vector of core band number, per band|Number of bands|
 |"QV"|Quanta Value|1.0|Multiplier for encoded values|A positive integer stored with the minimum number of bytes needed|
 |"SC"|Scanning Curve|1.1|Scanning order of the microblock|A 64bit value that contains all 16 hex digit values, determining the order of pixels within a microblock|
