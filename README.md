@@ -1,11 +1,10 @@
 # QB3: Fast and Efficient Image/Raster Compression
 
-QB3 is an extremely fast raster specific lossless compression that compresses natural images
- considerably better then PNG. QB3 works on 2D rasters of integer values, signed and unsigned,
- from 8 to 64bit per value. Multiple color bands are supported. Compression and decompression 
- speed is 300MB/sec for byte data, much faster for higher byte count data types. QB3lib 
- has no external dependencies, has no significant memory footprint during operation, is single
- thread and very low complexity.
+QB3 compresses most images better than PNG while being extremely fast. QB3 works on 2D 
+rasters of signed and unsigne integer values from 8 to 64bit per value. Both compression 
+and decompression speed is around 300MB/sec for color byte images, while being much 
+faster higher bit depth types. The QB3 libray has no external dependencies, no significant 
+memory footprint during operation, and is very low complexity.
 
 # Library
 The library, located in [QB3lib](QB3lib) provides the core QB3 
@@ -16,13 +15,14 @@ and 64 bit integers, which includes the common AMD64 and ARM64 platforms.
 Only 64bit builds should be used since the implementation uses 64 bit integers heavily.
 
 # Using QB3
-[cqb3](cqb3.md) is a utility conversion program that can convert PNG and JPEG images to and
-from QB3, for 8 and 16 bit images. This utility does use an external library to read
-and write JPEG and PNG images. The source code serves as an example of how to 
-use the library.
+The included [cqb3](cqb3.md) utility conversion program converts PNG or JPEG images to QB3, 
+for 8 and 16 bit images. It can also decode QB3 to PNG. The source code also serves as an 
+example of how to use the library.
+This utility does have an external library dependency to read and write JPEG and PNG images. 
 
 Another option is to build [GDAL](https://github.com/OSGeo/GDAL) and
-enable QB3 in MRF, which allows conversions to and from many other types of rasters.
+enable QB3 in MRF, and using gdal_translate conversions to and from many other types of 
+rasters are available.
 
 # C API
 [QB3.h](QB3lib/QB3.h) contains the public C API interface.
@@ -39,11 +39,11 @@ lossless compressions such as ZSTD or DEFLATE, even at a very low setting.
 
 # Code Organization
 The low level QB3 algorithm is implemented in the qb3decode.h and qb3encode.h as
-C++ templates. The C API located in qb3encode.cpp and qb3decode.cpp 
+C++ templates. While the core implementation is C++, it does not make use of 
+any advanced features other than templates, conversion to C is very easy.
+The higher level C API located in qb3encode.cpp and qb3decode.cpp, it
 adds a file format that in addition to the QB3 raw stream includes sufficient 
-metadata to allow decoding.  
-While the implementation is C++, it does not make use of any advanced features 
-other than templates, conversion to C is very easy.
+metadata to allow decoding.
 
 # Change Log
 Version 1.0.0: Initial release
