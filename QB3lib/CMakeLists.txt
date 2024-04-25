@@ -20,9 +20,22 @@ option(BUILD_SHARED_LIBS "Library style" ON)
 set(namespace "QB3")
 add_library(${PROJECT_NAME})
 
-# On AMD64 uncomment to use avx2 -> faster code
-# target_compile_options(${PROJECT_NAME} PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/arch:AVX2>)
-# target_compile_options(${PROJECT_NAME} PRIVATE $<$<CXX_COMPILER_ID:GNU>:-mavx2>)
+if("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "x86_64" AND ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" OR "${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU"))
+    option(ENABLE_SSE4 "Enable SSE4 optimizations" ON)
+    if (ENABLE_SSE4)
+        target_compile_options(${PROJECT_NAME} PRIVATE "-msse4")
+    endif()
+
+    option(ENABLE_AVX2 "Enable AVX2 optimizations" OFF)
+    if (ENABLE_AVX2)
+        target_compile_options(${PROJECT_NAME} PRIVATE "-mavx2")
+    endif()
+elseif("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "AMD64" AND MSVC)
+    option(ENABLE_AVX2 "Enable AVX2 optimizations" OFF)
+    if (ENABLE_AVX2)
+        target_compile_options(${PROJECT_NAME} PRIVATE "/arch:AVX2")
+    endif()
+endif()
 
 target_sources(${PROJECT_NAME} 
     PRIVATE QB3encode.cpp QB3encode.h QB3decode.cpp QB3decode.h QB3common.h bitstream.h QB3.h
