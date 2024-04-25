@@ -16,6 +16,7 @@ Contributors:  Lucian Plesea
 */
 
 #pragma once
+
 #include "QB3.h"
 #include "bitstream.h"
 #include <cinttypes>
@@ -32,11 +33,6 @@ constexpr auto TBLMASK(0xfffull);
 // Block is 4x4 pixels
 constexpr size_t B(4);
 constexpr size_t B2(B * B);
-
-#if defined(__GNUC__) && defined(__x86_64__)
-// Comment out if binary is to run on processors without sse4
-#pragma GCC target("sse4")
-#endif
 
 #if defined(_WIN32)
 // blog2 of val, result is undefined for val == 0
