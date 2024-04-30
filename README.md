@@ -1,10 +1,12 @@
 # QB3: Fast and Efficient Image/Raster Compression
 
-QB3 compresses images better than PNG while being extremely fast. It works on 2D 
-rasters of signed or unsigned integer values from 8 to 64bit per value. Compression 
-and decompression speed is around 300MB/sec for RGB byte images, being much 
-faster higher bit depth types. The QB3 libray has no external dependencies, no significant 
-memory footprint during operation, and very low complexity.
+- Better compression than PNG in most cases
+- Compression and decompression speed is around 300MB/sec for RGB byte images, much 
+faster for higher bit depth integer types
+- Signed or unsigned integer values from 8 to 64bit per value
+- No significant memory footprint
+- Very low complexity
+- The QB3 libray has no external dependencies
 
 # Library
 The library, located in [QB3lib](QB3lib) provides the core QB3 
