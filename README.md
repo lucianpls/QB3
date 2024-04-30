@@ -49,11 +49,8 @@ adds a file format that in addition to the QB3 raw stream includes sufficient
 metadata to allow decoding.
 
 # Change Log
-Version 1.0.0: Initial release
-- C API
-- All integer types
 
-Version 1.1.0:
+## Version 1.1.0:
 - Better scan ordering, second order Hilbert curve is the default
     - 5% better compression with no speed penalty
     - Legacy scan order (Morton) is optional
@@ -65,3 +62,8 @@ Version 1.1.0:
     - CMake is the only build system
     - Default build target is the library, eliminating external dependencies
     - Conversion utility is optional
+
+## Version 1.0.0: Initial release
+- C API
+- All integer types
+
