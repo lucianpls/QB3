@@ -1,41 +1,42 @@
 # QB3: Fast and Efficient Image/Raster Compression
 
-QB3 compresses most images better than PNG while being extremely fast. QB3 works on 2D 
-rasters of signed and unsigne integer values from 8 to 64bit per value. Both compression 
-and decompression speed is around 300MB/sec for color byte images, while being much 
+QB3 compresses images better than PNG while being extremely fast. It works on 2D 
+rasters of signed or unsigned integer values from 8 to 64bit per value. Compression 
+and decompression speed is around 300MB/sec for RGB byte images, being much 
 faster higher bit depth types. The QB3 libray has no external dependencies, no significant 
-memory footprint during operation, and is very low complexity.
+memory footprint during operation, and very low complexity.
 
 # Library
 The library, located in [QB3lib](QB3lib) provides the core QB3 
-algorithm implementation and a C language API.
-It is implemented in C++11 and can be built for most platforms using 
-cmake. It requires a little endian, two's complement architecture with 8, 16, 32 
+algorithm implementation with a C API.
+It is implemented in C++11 and can be built on most platforms using cmake.
+It requires a little endian, two's complement architecture with 8, 16, 32 
 and 64 bit integers, which includes the common AMD64 and ARM64 platforms.
-Only 64bit builds should be used since the implementation uses 64 bit integers heavily.
+Only 64bit builds should be used since this implementation uses 64 bit integers heavily.
 
 # Using QB3
 The included [cqb3](cqb3.md) utility conversion program converts PNG or JPEG images to QB3, 
-for 8 and 16 bit images. It can also decode QB3 to PNG. The source code also serves as an 
-example of how to use the library.
-This utility does have an external library dependency to read and write JPEG and PNG images. 
+for 8 and 16 bit images. It can also decode QB3 to PNG. The source code serves as an 
+example of using the library.
+This optional utility does have an external library dependency to read and write 
+JPEG and PNG images.
 
-Another option is to build [GDAL](https://github.com/OSGeo/GDAL) and
-enable QB3 in MRF, and using gdal_translate conversions to and from many other types of 
-rasters are available.
+Another option is to build [GDAL](https://github.com/OSGeo/GDAL) with
+QB3 in MRF enabled, and then using gdal_translate to and from many other types of 
+rasters.
 
 # C API
 [QB3.h](QB3lib/QB3.h) contains the public C API interface.
 The workflow is to create opaque encoder or decoder control structures, 
-then options and values can be set or querried and then the encode or 
-decode are called. Finally, the control structures have to be destroyed.  
+set or query options and encode or decode the raster data. Finally, the control structures have to be destroyed.  
 There are a couple of QB3 encoder modes. The default one is the fastest. The other 
-modes extend the encoding methods, which usually results in slighlty better compression 
+modes extend the encoding method, which results in slighlty better compression 
 at the expense of encoding speed. For 8bit natural images the compression ratio 
-gain from using the extended methods are usually very small. There is only one decoder.
-If the compression ratio warrants the extra complexity and dependecies, a better 
-option is to combine the raster specific QB3 output with a second pass generic 
-lossless compressions such as ZSTD or DEFLATE, even at a very low setting.
+gain from using the extended methods are usually very small.
+If the compression ratio gain warrants the extra complexity and dependecies, a better 
+option is to combine the raster specific QB3 default output with a second pass generic 
+lossless compressions such as ZSTD or DEFLATE, even at a very low setting. This is 
+especially useful for synthetic images that include repeated identical sequences.
 
 # Code Organization
 The low level QB3 algorithm is implemented in the qb3decode.h and qb3encode.h as
@@ -52,7 +53,7 @@ Version 1.0.0: Initial release
 
 Version 1.1.0:
 - Better scan ordering, second order Hilbert curve is the default
-    - 5% better compression at the same speed
+    - 5% better compression with no speed penalty
     - The legacy (Morton) scan order is available
 - Small performance improvements and bug fixes
 - Simplified code, removal of lookup tables for non-byte data
