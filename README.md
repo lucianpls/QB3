@@ -35,10 +35,10 @@ There are a couple of QB3 encoder modes. The default one is the fastest. The oth
 modes extend the encoding method, which results in slighlty better compression 
 at the expense of encoding speed. For 8bit natural images the compression ratio 
 gain from using the extended methods are usually very small.
-If the compression ratio gain warrants the extra complexity and dependecies, a better 
-option is to combine the raster specific QB3 default output with a second pass generic 
-lossless compressions such as ZSTD or DEFLATE, even at a very low setting. This is 
-especially useful for synthetic images that include repeated identical sequences.
+If a better compression ratio is needed, a good option is to combine the raster 
+specific QB3 default output with a second pass generic lossless compressions such 
+as ZSTD or DEFLATE at a very low effort setting. This second pass is especially 
+useful for synthetic images that include repeated identical sequences.
 
 # Code Organization
 The low level QB3 algorithm is implemented in the qb3decode.h and qb3encode.h as
