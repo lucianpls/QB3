@@ -30,7 +30,7 @@ rasters.
 # C API
 [QB3.h](QB3lib/QB3.h) contains the public C API interface.
 The workflow is to create opaque encoder or decoder control structures, 
-set or query options and encode or decode the raster data. Finally, the control structures have to be destroyed.  
+set or query options and encode or decode the raster data.
 There are a couple of QB3 encoder modes. The default one is the fastest. The other 
 modes extend the encoding method, which results in slighlty better compression 
 at the expense of encoding speed. For 8bit natural images the compression ratio 
@@ -56,11 +56,12 @@ Version 1.0.0: Initial release
 Version 1.1.0:
 - Better scan ordering, second order Hilbert curve is the default
     - 5% better compression with no speed penalty
-    - The legacy (Morton) scan order is available
-- Small performance improvements and bug fixes
+    - Legacy scan order (Morton) is optional
+- Minor performance improvements and bug fixes
 - Simplified code, removal of lookup tables for non-byte data
-- Stride decoding, allowind decoding to non-contiguous line buffers
+- Stride decoding to non-contiguous line buffers
 - Build system changes
-    - Removed MSVC project, CMake is the only build system
-    - Default build target is the library only, not the conversion program, 
-    eliminating external dependencies
+    - Removed MSVC project
+    - CMake is the only build system
+    - Default build target is the library, eliminating external dependencies
+    - Conversion utility is optional
