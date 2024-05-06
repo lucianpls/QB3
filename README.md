@@ -1,17 +1,16 @@
 # QB3: Fast and Efficient Image/Raster Compression
 
 - Better compression than PNG in most cases
-- Compression and decompression speed is around 300MB/sec for RGB byte images, much 
-faster for higher bit depth integer types
-- Signed or unsigned integer values from 8 to 64bit per value
+- Compression and decompression speed is 300MB/sec for byte data, up to 2.5GB/sec for 64bit int
+- Integer values from 8 to 64bit per value, signed and unsigned
 - No significant memory footprint
 - Very low complexity
-- The QB3 libray has no external dependencies
+- No external dependencies
 
 # Library
 The library, located in [QB3lib](QB3lib) provides the core QB3 
 algorithm implementation with a C API.
-It is implemented in C++11 and can be built on most platforms using cmake.
+It is implemented in C++, can be built on most platforms using cmake.
 It requires a little endian, two's complement architecture with 8, 16, 32 
 and 64 bit integers, which includes the common AMD64 and ARM64 platforms.
 Only 64bit builds should be used since this implementation uses 64 bit integers heavily.
