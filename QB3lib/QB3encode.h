@@ -144,16 +144,16 @@ static std::pair<size_t, uint64_t> qb3csztbl(uint64_t val, size_t rung) {
 }
 
 // only encode the group entries, not the rung switch
-// maxval is used to choose the rung for encoding
+// bitsused is used to choose the rung for encoding
 // If abits > 0, the accumulator is also pushed into the stream
 template <typename T>
-static void groupencode(T group[B2], T maxval, oBits& s, uint64_t acc, size_t abits)
+static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t abits)
 {
     assert(abits <= 64);
-    const size_t rung = topbit(maxval | 1);
-    if (0 == rung) { // only 1s and 0s, rung is -1 or 0
-        acc |= static_cast<uint64_t>(maxval) << abits++;
-        if (0 != maxval)
+    const size_t rung = topbit(bitsused | 1);
+    if (1 >= bitsused) { // only 1s and 0s, rung is -1 or 0
+        acc |= static_cast<uint64_t>(bitsused) << abits++;
+        if (0 != bitsused)
             for (int i = 0; i < B2; i++)
                 acc |= static_cast<uint64_t>(group[i]) << abits++;
         s.push(acc, abits);
@@ -240,10 +240,10 @@ static void groupencode(T group[B2], T maxval, oBits& s, uint64_t acc, size_t ab
 
 // Base QB3 group encode with code switch, returns encoded size
 template <typename T>
-static void groupencode(T group[B2], T maxval, size_t oldrung, oBits& s) {
+static void groupencode(T group[B2], T bitsused, size_t oldrung, oBits& s) {
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-    uint64_t acc = CSW[UBITS][(topbit(maxval | 1) - oldrung) & ((1ull << UBITS) - 1)];
-    groupencode(group, maxval, s, acc & TBLMASK, static_cast<size_t>(acc >> 12));
+    uint64_t acc = CSW[UBITS][(topbit(bitsused | 1) - oldrung) & ((1ull << UBITS) - 1)];
+    groupencode(group, bitsused, s, acc & TBLMASK, static_cast<size_t>(acc >> 12));
 }
 
 // Group encode with cf
@@ -257,13 +257,12 @@ static void cfgenc(const T igrp[B2], T cf, T pcf, size_t oldrung, oBits& bits) {
     uint64_t acc = SIGNAL[UBITS] & TBLMASK;
     size_t abits = UBITS + 2; // SIGNAL >> 12
     // divide raw absolute group values by CF and find the new maxvalue
-    T maxval = 0;
+    T bitsused = 0;
     T group[B2] = {};
-    for (size_t i = 0; i < B2; i++) if (igrp[i])
-        maxval = std::max(maxval, group[i] = magsdiv(igrp[i], cf));
-            //T(((magsabs(igrp[i]) / cf) << 1) - (igrp[i] & 1)));
+    for (size_t i = 0; i < B2; i++)
+        bitsused |= group[i] = magsdiv(igrp[i], cf);
     cf -= 2; // Bias down, 0 and 1 are not used
-    auto trung = topbit(maxval | 1); // rung for the group values
+    auto trung = topbit(bitsused | 1); // rung for the group values
     auto cfrung = topbit(cf | 1);    // rung for cf-2 value
     auto cs = csw[(trung - oldrung) & ((1ull << UBITS) - 1)];
     if ((cs >> 12) == 1) // no-switch, use signal instead, it decodes to delta of zero
@@ -325,7 +324,7 @@ static void cfgenc(const T igrp[B2], T cf, T pcf, size_t oldrung, oBits& bits) {
         }
     }
     // Encode the group only, divided by CF
-    groupencode(group, maxval, bits, acc, abits);
+    groupencode(group, bitsused, bits, acc, abits);
 }
 
 // Check that the parameters are valid
@@ -379,7 +378,7 @@ static int encode_fast(const T* image, oBits& s, encs &info)
                 x = xsize - B;                
             const size_t loc = (y * xsize + x) * bands; // Top-left pixel address
             for (size_t c = 0; c < bands; c++) { // blocks are band interleaved
-                T maxval(0); // Maximum mag-sign value within this group
+                T bitsused(0); // Bits used within this group
                 // Collect the block for this band, convert to running delta mag-sign
                 auto prv = prev[c];
                 // Use separate loop for basebands to avoid a test inside the hot loop
@@ -388,21 +387,19 @@ static int encode_fast(const T* image, oBits& s, encs &info)
                     for (size_t i = 0; i < B2; i++) {
                         T g = image[loc + c + offset[i]] - image[loc + cb + offset[i]];
                         prv += g -= prv;
-                        group[i] = g = mags(g);
-                        if (maxval < g) maxval = g;
+                        bitsused |= group[i] = mags(g);
                     }
                 }
                 else { // baseband
                     for (size_t i = 0; i < B2; i++) {
                         T g = image[loc + c + offset[i]];
                         prv += g -= prv;
-                        group[i] = g = mags(g);
-                        if (maxval < g) maxval = g;
+                        bitsused |= group[i] = mags(g);
                     }
                 }
                 prev[c] = prv;
-                groupencode(group, maxval, runbits[c], s);
-                runbits[c] = topbit(maxval | 1);
+                groupencode(group, bitsused, runbits[c], s);
+                runbits[c] = topbit(bitsused | 1);
             }
         }
     }
@@ -517,7 +514,7 @@ static int encode_best(const T *image, oBits& s, encs &info)
                 x = xsize - B;
             size_t loc = (y * xsize + x) * bands; // Top-left pixel address
             for (size_t c = 0; c < bands; c++) { // blocks are always band interleaved
-                T maxval(0); // Maximum mag-sign value within this group
+                T bitsused(0); // Bits used within this group
                 // Collect the block for this band, convert to running delta mag-sign
                 auto prv = prev[c];
                 if (c != cband[c]) {
@@ -525,28 +522,26 @@ static int encode_best(const T *image, oBits& s, encs &info)
                     for (size_t i = 0; i < B2; i++) {
                         T g = image[loc + c + offset[i]] - image[loc + cb + offset[i]];
                         prv += g -= prv;
-                        group[i] = g = mags(g);
-                        if (maxval < g) maxval = g;
+                        bitsused |= group[i] = mags(g);
                     }
                 }
                 else {
                     for (size_t i = 0; i < B2; i++) {
                         T g = image[loc + c + offset[i]];
                         prv += g -= prv;
-                        group[i] = g = mags(g);
-                        if (maxval < g) maxval = g;
+                        bitsused |= group[i] = mags(g);
                     }
                 }
                 prev[c] = prv;
                 auto oldrung = runbits[c];
-                const size_t rung = topbit(maxval | 1);
+                const size_t rung = topbit(bitsused | 1);
                 runbits[c] = rung;
-                if (0 == rung) { // only 1s and 0s, rung is -1 or 0, no cf
+                if (1 >= bitsused) { // only 1s and 0s, rung is -1 or 0, no cf
                     uint64_t acc = csw[(rung - oldrung) & ((1ull << UBITS) - 1)];
                     size_t abits = acc >> 12;
                     acc &= TBLMASK;
-                    acc |= static_cast<uint64_t>(maxval) << abits++; // Add the all-zero flag
-                    if (0 != maxval)
+                    acc |= static_cast<uint64_t>(bitsused) << abits++; // Add the all-zero flag
+                    if (0 != bitsused)
                         for (size_t i = 0; i < B2; i++)
                             acc |= static_cast<uint64_t>(group[i]) << abits++;
                     s.push(acc, abits);
@@ -556,7 +551,7 @@ static int encode_best(const T *image, oBits& s, encs &info)
                 auto cf = gcf(group);
                 auto start = s.position();
                 if (cf < 2)
-                    groupencode(group, maxval, oldrung, s);
+                    groupencode(group, bitsused, oldrung, s);
                 else
                     cfgenc(group, cf, pcf[c], oldrung, s);
 
