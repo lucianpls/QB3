@@ -64,9 +64,9 @@ static size_t topbit(uint64_t v) {
     return r + ((0xffffaa50ull >> (v << 1)) & 0x3);
 }
 
-// My own portable byte bitcount
+// portable byte bitcount
 static inline size_t nbits(uint8_t v) {
-    return ((((v - ((v >> 1) & 0x55u)) * 0x1010101u) & 0x30c00c03u) * 0x10040041u) >> 0x1cu;
+    return ((((v * 0x8040201u) >> 3u) & 0x11111111u) * 0x11111111u) >> 28u;
 }
 
 static size_t setbits16(uint64_t val) {
