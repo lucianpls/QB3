@@ -34,15 +34,15 @@ using namespace chrono;
 using namespace ICD;
 
 struct options {
-    options() : 
+    options() :
+        quanta(0),
+        time(0),
         best(false),
         trim(false),
         rle(false), // non-default RLE (off for best, on for fast)
         legacy(false), // legacy mode
         verbose(false), 
-        decode(false),
-        time(0),
-        quanta(0)
+        decode(false)
     {};
 
     uint64_t quanta;

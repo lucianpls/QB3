@@ -114,6 +114,8 @@ bool qb3_set_encoder_quanta(encsp p, size_t q, bool away) {
         error |= TOO_LARGE(p->quanta, uint32_t);
     case QB3_I64:
         error |= TOO_LARGE(p->quanta, int64_t);
+    default: // Makes clang -Wswitch happy
+        break;
     } // data type
 #undef TOO_LARGE
     if (error)
@@ -142,6 +144,7 @@ qb3_mode qb3_set_encoder_mode(encsp p, qb3_mode mode) {
     case QB3M_CF_RLE:
     case QB3M_RLE:
         p->order = ZCURVE;
+    default: // Makes clang -Wswitch happy
         break;
     }
     return p->mode;
