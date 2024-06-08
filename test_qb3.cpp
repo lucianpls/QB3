@@ -23,6 +23,7 @@ Contributors:  Lucian Plesea
 #include <vector>
 #include <cassert>
 #include <type_traits>
+#include <iomanip>
 
 // From https://github.com/lucianpls/libicd
 #include <icd_codecs.h>
@@ -101,7 +102,7 @@ void check(vector<uint8_t> &image, const Raster &raster,
     qb3_destroy_encoder(qenc);
     qenc = nullptr;
 
-    cout << outsize << '\t' << outsize * 100.0 / image.size() / sizeof(T) 
+    cout << std::setprecision(5) << outsize << '\t' << outsize * 100.0 / image.size() / sizeof(T) 
         << '\t' << image.size() * sizeof(T) / time_span / 1024 / 1024 
         << '\t' << time_span << '\t';
     if (err)

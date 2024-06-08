@@ -357,7 +357,7 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
                     auto rung = (runbits[c] + cs) & NORM_MASK;
                     acc >>= (cs >> 12) - 1; // No flag
                     abits += (cs >> 12) - 1;
-                    if (rung != NORM_MASK) { // CF encoding
+                    if (rung != NORM_MASK) { // CF decoding
                         auto cfrung(rung);
                         T cf = pcf[c];
                         auto read_cfr = acc & 1;
@@ -389,14 +389,11 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
                             s.advance(abits);
                             failed |= !gdecode(s, rung, group, s.peek(), 0);
                             // Multiply group by CF and get the max for the actual rung
-                            T maxval(group[0] = magsmul(group[0], cf));
-                            for (int i = 1; i < B2; i++) {
-                                auto val = magsmul(group[i], cf);
-                                if (maxval < val) maxval = val;
-                                group[i] = val;
-                            }
-                            failed |= cf > maxval; // Can't be all zero
-                            runbits[c] = topbit(maxval | 1);
+                            T usedbits = 0;
+                            for (int i = 0; i < B2; i++)
+                                usedbits |= group[i] = magsmul(group[i], cf);
+                            runbits[c] = topbit(usedbits | 1);
+                            failed |= cf > usedbits;
                         }
                         else { // Single bit for data, decode here
                             if (abits + B2 > 64) {
@@ -404,11 +401,11 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
                                 acc = s.peek();
                                 abits = 0;
                             }
-                            T v[2] = { 0, magsmul(T(1), cf) };
-                            for (int i = 0; i < B2; i++)
-                                group[i] = v[(acc >> i) & 1];
                             s.advance(B2 + abits);
-                            runbits[c] = topbit(v[1]);
+                            T v = mags(T(-cf));
+                            for (int i = 0; i < B2; i++)
+                                group[i] = ((acc >> i) & 1) ? v : 0;
+                            runbits[c] = topbit(v);
                         }
                     }
                     else { // IDX decoding
