@@ -172,7 +172,7 @@ bool quantize(T* source, oBits& , encs& p) {
     size_t nV = p.xsize * p.ysize * p.nbands; // Number of values
     T q = static_cast<T>(p.quanta);
     // Optimized versions have to preserve the sign of the input
-    if (2 == q) { // Easy to optimize for 2, common
+    if (2 == q) {
         if (p.away)
             for (size_t i = 0; i < nV; i++)
                 source[i] = source[i] / T(2) + source[i] % T(2);
@@ -304,7 +304,7 @@ static uint8_t run_count(const uint8_t* s, uint8_t c, uint8_t len = 0xff) {
 static size_t RLE0FFFF(const uint8_t* src, size_t len, uint8_t* dst) {
     uint8_t* d(dst);
     while (len--) {
-        const uint8_t c = *src++; // non-special or last two bytes are alway copied
+        const uint8_t c = *src++; // non-special or last two bytes are always copied
         if (((c + 1) & 0xfe) || (2 > len)) {
             *d++ = c;
         }
@@ -361,7 +361,7 @@ static size_t RLE0FFFFSize(const uint8_t* src, size_t len) {
     uint8_t last(0); // Last byte emitted, to avoid encoding runs of FFs
     size_t count(0);
     while (len--) {
-        const uint8_t c = *src++; // non-special or last two bytes are alway copied
+        const uint8_t c = *src++; // non-special or last two bytes are always copied
         if (((c + 1) & 0xfe) || (2 > len)) {
             count++;
             last = c;

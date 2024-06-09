@@ -48,7 +48,7 @@ enum qb3_mode {
     QB3M_CF_RLE = 3, // BASE + CF + RLE
 
     // better, with Hilbert curve
-    QB3M_BASE_H = 4, // Base QB33
+    QB3M_BASE_H = 4, // Base QB3
     QB3M_CF_H = 5, // QB3 Hilbert + CF
     QB3M_RLE_H = 6, // QB3 Hilbert + RLE
     QB3M_CF_RLE_H = 7, // QB3 Hilbert + CF + RLE
@@ -63,7 +63,7 @@ enum qb3_error {
     QB3E_EINV, // Invalid parameter
     QB3E_UNKN, // Unknown
     QB3E_ERR,   // unspecified error
-    QB3E_LIBERR = 255 // internal QB33 error, should not happen
+    QB3E_LIBERR = 255 // internal QB3 error, should not happen
 };
 
 // In QB3encode.cpp
