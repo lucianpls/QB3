@@ -378,9 +378,11 @@ int main(int argc, char **argv)
     if (thread == NULL)
         cerr << "Failed to get thread handle\n";
     else {
-        DWORD_PTR mask = 3; // First core, either CPU
-        // best core on my box, up to 10% faster than first
-        mask = 0x30000000;
+        DWORD_PTR mask = 3; // First core, either CPU, likely the worst choice
+        // best core on my machine, up to 10% faster than first
+        mask = 0x30000;
+        // worst core on my machine
+        //mask = 0x30;
         if (!SetThreadAffinityMask(thread, mask))
             cerr << "Failed to set thread affinity\n";
         CloseHandle(thread);
