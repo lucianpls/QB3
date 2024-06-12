@@ -1,7 +1,7 @@
 # QB3: Fast and Efficient Image/Raster Compression
 
 - Better compression than PNG in most cases
-- Compression and decompression speed is 300MB/sec for byte data, up to 2.5GB/sec for 64bit int
+- Compression and decompression speed is 400MB/sec for byte data and above 3GB/sec for 64bit int
 - Integer values from 8 to 64bit per value, signed and unsigned
 - No significant memory footprint
 - Very low complexity
