@@ -399,7 +399,7 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
                                 abits = 0;
                             }
                             s.advance(B2 + abits);
-                            T v = mags(T(-cf));
+                            T v = T(((cf - 1) << 1) | 1); // mags(-cf)
                             for (int i = 0; i < B2; i++)
                                 group[i] = ((acc >> i) & 1) ? v : 0;
                             runbits[c] = topbit(v);
