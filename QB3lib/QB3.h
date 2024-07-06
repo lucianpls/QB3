@@ -18,6 +18,7 @@ Contributors:  Lucian Plesea
 #pragma once
 // For size_t
 #include <stddef.h>
+#include <cstdint>
 
 // CMake will generate LIBQB3_EXPORT linkage as needed
 #include <libqb3_export.h>
@@ -87,7 +88,7 @@ LIBQB3_EXPORT bool qb3_set_encoder_coreband(encsp p, size_t bands, size_t *cband
 
 // Sets quantization parameters, returns true on success
 // away = true -> round away from zero
-LIBQB3_EXPORT bool qb3_set_encoder_quanta(encsp p, size_t q, bool away);
+LIBQB3_EXPORT bool qb3_set_encoder_quanta(encsp p, uint64_t q, bool away);
 
 // Upper bound of encoded size, without taking the header into consideration
 LIBQB3_EXPORT size_t qb3_max_encoded_size(const encsp p);
@@ -136,10 +137,10 @@ LIBQB3_EXPORT void qb3_set_decoder_stride(decsp p, size_t stride);
 LIBQB3_EXPORT qb3_mode qb3_get_mode(const decsp p);
 
 // Returns the number of quantization bits used, returns 0 if failed
-LIBQB3_EXPORT size_t qb3_get_quanta(const decsp p);
+LIBQB3_EXPORT uint64_t qb3_get_quanta(const decsp p);
 
 // Return the scanning curve used, returns 0 if failed
-LIBQB3_EXPORT size_t qb3_get_order(const decsp p);
+LIBQB3_EXPORT uint64_t qb3_get_order(const decsp p);
 
 // Sets the cband array and returns true if successful
 LIBQB3_EXPORT bool qb3_get_coreband(const decsp p, size_t *cband);

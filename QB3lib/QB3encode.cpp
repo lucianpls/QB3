@@ -87,7 +87,7 @@ bool qb3_set_encoder_coreband(encsp p, size_t bands, size_t *cband) {
 // Valid values are 2 and above
 // sign = true when the input data is signed
 // away = true to round away from zero
-bool qb3_set_encoder_quanta(encsp p, size_t q, bool away) {
+bool qb3_set_encoder_quanta(encsp p, uint64_t q, bool away) {
     p->quanta = 1;
     p->away = false;
     if (q < 1)
@@ -225,7 +225,7 @@ void static write_qb3_header(encsp p, oBits& s) {
 
 // Are there any band mappings
 bool static is_banddiff(encsp p) {
-    for (int c = 0; c < p->nbands; c++)
+    for (size_t c = 0; c < p->nbands; c++)
         if (p->cband[c] != c)
             return true;
     return false;
@@ -247,7 +247,7 @@ void static write_cband_header(encsp p, oBits& s) {
     push_sig("CB", s);
     s.push(p->nbands, 16); // size of payload
     // One byte per band, dump core band list
-    for (int i = 0; i < p->nbands; i++)
+    for (size_t i = 0; i < p->nbands; i++)
         s.push(p->cband[i], 8); // 8 bits each
 }
 
