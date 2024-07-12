@@ -148,7 +148,7 @@ static std::pair<size_t, uint64_t> qb3dsz(uint64_t val, size_t rung) {
         return std::make_pair(rung, (val & (rbit - 1)) >> 1);
     uint64_t n = (val >> 1) & 1; // Next bit, long if set
     val = (val >> 2) & (rbit - 1);
-    return std::make_pair(rung + 1 + n,
+    return std::make_pair(size_t(rung + 1 + n),
         (((1 & ~n) * ~0ull)  & (val | (rbit >> 1))) // Nominal
         + (((1 & n) * ~0ull) & (val | rbit)));    // Long
 }
@@ -322,7 +322,7 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
     order = order ? order : HILBERT;
     size_t offset[B2] = {};
     for (size_t i = 0; i < B2; i++) {
-        size_t n = (order >> ((B2 - 1 - i) << 2));
+        size_t n = size_t(order >> ((B2 - 1 - i) << 2));
         offset[i] = ((n >> 2) & 0b11) * stride + (n & 0b11) * bands;
     }
     iBits s(src, len);
@@ -335,29 +335,30 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
             // If the last column is partial, move it left
             if (x + B > xsize)
                 x = xsize - B;
-            for (int c = 0; c < bands; c++) {
+            for (size_t c = 0; c < bands; c++) {
                 failed |= s.empty();
-                uint64_t cs(0), abits(1), acc(s.peek());
+                uint64_t cs(0), acc(s.peek());
+                size_t abits(1);
                 if (acc & 1) { // Rung change
                     cs = dsw[(acc >> 1) & LONG_MASK];
-                    abits = cs >> 12;
+                    abits = size_t(cs >> 12);
                 }
                 acc >>= abits;
                 if (0 == cs || 0 != (cs & TBLMASK)) { // Normal decoding, not a signal
                     // abits is never > 8, so it's safe to call gdecode
-                    auto rung = (runbits[c] + cs) & NORM_MASK;
+                    size_t rung = (runbits[c] + cs) & NORM_MASK;
                     failed |= !gdecode(s, rung, group, acc, abits);
                     runbits[c] = rung;
                 }
                 else { // extra encoding
                     cs = dsw[acc & LONG_MASK]; // rung, no flag
-                    auto rung = (runbits[c] + cs) & NORM_MASK;
+                    size_t rung = (runbits[c] + cs) & NORM_MASK;
                     acc >>= (cs >> 12) - 1; // No flag
-                    abits += (cs >> 12) - 1;
+                    abits += size_t((cs >> 12) - 1);
                     if (rung != NORM_MASK) { // CF decoding
                         auto cfrung(rung);
                         T cf = pcf[c];
-                        auto read_cfr = acc & 1;
+                        size_t read_cfr = size_t(acc & 1);
                         abits++;
                         acc >>= 1;
                         if (read_cfr) { // different cf, need to read it
@@ -369,7 +370,7 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
                                 cfrung = (rung + cs) & NORM_MASK;
                                 failed |= (cfrung == rung);
                                 acc >>= (cs >> 12) - 1;
-                                abits += (cs >> 12) - 1;
+                                abits += size_t((cs >> 12) - 1);
                             }
                             if (sizeof(T) == 8 && (cfrung + abits) > 62) { // Rare
                                 s.advance(abits);
@@ -377,7 +378,7 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
                                 abits = 0;
                             }
                             auto p = qb3dsztbl(acc, cfrung - read_cfr);
-                            pcf[c] = cf = static_cast<T>(p.second + (read_cfr << cfrung));
+                            pcf[c] = cf = static_cast<T>(p.second + (uint64_t(read_cfr) << cfrung));
                             abits += p.first;
                             acc >>= p.first;
                         }
@@ -410,7 +411,7 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
                         rung = (runbits[c] + cs) & NORM_MASK;
                         runbits[c] = rung;
                         acc >>= (cs >> 12) - 1; // No flag
-                        abits += (cs >> 12) - 1;
+                        abits += size_t((cs >> 12) - 1);
                         failed |= rung == 63; // TODO: Deal with 64bit overflow
                         // 16 index values in group, max is 7
                         T maxval(0);
@@ -447,10 +448,10 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
         if (failed) break;
         // For performance apply band delta per block strip, in linear order
         for (size_t j = 0; j < B; j++) {
-            for (int c = 0; c < bands; c++) if (c != cband[c]) {
+            for (size_t c = 0; c < bands; c++) if (c != cband[c]) {
                 auto dimg = image + stride * (y + j) + c;
                 auto simg = image + stride * (y + j) + cband[c];
-                for (int i = 0; i < xsize; i++, dimg += bands, simg += bands)
+                for (size_t i = 0; i < xsize; i++, dimg += bands, simg += bands)
                     *dimg += *simg;
             }
         }

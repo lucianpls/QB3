@@ -34,14 +34,14 @@ constexpr auto TBLMASK(0xfffull);
 constexpr size_t B(4);
 constexpr size_t B2(B * B);
 
-#if defined(_WIN32)
+#if defined(_WIN32) && defined(_WIN64)
 // blog2 of val, result is undefined for val == 0
 static size_t topbit(uint64_t val) {
     return 63 - __lzcnt64(val);
 }
 
 static size_t setbits16(uint64_t val) {
-    return __popcnt64(val);
+    return __popcnt16(uint16_t(val));
 }
 
 #elif defined(__GNUC__)
@@ -86,7 +86,7 @@ struct encs {
     size_t nbands;
     // micro block scanning order
     uint64_t order;
-    size_t quanta;
+    uint64_t quanta;
 
     // Persistent state by band
     band_state band[QB3_MAXBANDS];
@@ -109,7 +109,7 @@ struct decs {
     size_t stride;
     // micro block scanning order
     uint64_t order;
-    size_t quanta;
+    uint64_t quanta;
     int error;
     int stage;
 

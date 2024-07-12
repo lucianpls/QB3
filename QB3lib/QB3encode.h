@@ -128,7 +128,7 @@ static std::pair<size_t, uint64_t> qb3csz(uint64_t val, size_t rung) {
     uint64_t nxt = (val >> (rung - 1)) & 1;
     uint64_t top = val >> rung;
     uint64_t tb = 1ull << rung;
-    return std::make_pair<size_t, uint64_t>(rung + top + (top | nxt),
+    return std::make_pair<size_t, uint64_t>(size_t(rung + top + (top | nxt)),
           ((~0ull * (1 & ~(top | nxt))) & (val << 1))                     // 0 0 SHORT    -> _x0
         + ((~0ull * (1 & (~top & nxt))) & ((((val << 1) ^ tb) << 1) | 1)) // 0 1 NOMINAL  -> _01
         + ((~0ull * (1 & top))          & (((val ^ tb) << 2) | 0b11)));   // 1 x LONG     -> _11
@@ -364,7 +364,7 @@ static int encode_fast(const T* image, oBits& s, encs &info)
     size_t offset[B2] = {};
     for (size_t i = 0; i < B2; i++) {
         // Pick up one nibbles, in top to bottom order
-        size_t n = (order >> ((B2 - 1 - i) << 2));
+        size_t n = size_t(order >> ((B2 - 1 - i) << 2));
         offset[i] = (xsize * ((n >> 2) & 0b11) + (n & 0b11)) * bands;
     }
     T group[B2] = {};
@@ -413,8 +413,8 @@ static int encode_fast(const T* image, oBits& s, encs &info)
 
 // Index based encoding
 template<typename T>
-static int ienc(const T grp[B2], size_t rung, size_t oldrung, oBits &s) {
-    constexpr int TOO_LARGE(800); // Larger than any possible size
+static size_t ienc(const T grp[B2], size_t rung, size_t oldrung, oBits &s) {
+    constexpr size_t TOO_LARGE(800); // Larger than any possible size
     if (rung < 4 || rung == 63) // TODO: encode rung 63
         return TOO_LARGE;
     struct KVP { T key, count; };
@@ -468,9 +468,9 @@ static int ienc(const T grp[B2], size_t rung, size_t oldrung, oBits &s) {
     }
     s.push(acc, abits);
     // Encode unique values in order of frequency
-    for (int i = 0; i < len; i++)
+    for (size_t i = 0; i < len; i++)
         s.push(qb3csztbl(v[i].key, rung));
-    return static_cast<int>(s.position());
+    return s.position();
 }
 
 // Returns error code or 0 if success
@@ -500,7 +500,7 @@ static int encode_best(const T *image, oBits& s, encs &info)
     size_t offset[B2] = {};
     for (size_t i = 0; i < B2; i++) {
         // Pick up one nibble, in top to bottom order
-        size_t n = (order >> ((B2 - 1 - i) << 2));
+        size_t n = size_t(order >> ((B2 - 1 - i) << 2));
         offset[i] = (xsize * ((n >> 2) & 0b11) + (n & 0b11)) * bands;
     }
     T group[B2] = {}; // 2D group to encode
@@ -538,7 +538,7 @@ static int encode_best(const T *image, oBits& s, encs &info)
                 runbits[c] = rung;
                 if (1 >= bitsused) { // only 1s and 0s, rung is -1 or 0, no cf
                     uint64_t acc = csw[(rung - oldrung) & ((1ull << UBITS) - 1)];
-                    size_t abits = acc >> 12;
+                    size_t abits = size_t(acc >> 12);
                     acc &= TBLMASK;
                     acc |= static_cast<uint64_t>(bitsused) << abits++; // Add the all-zero flag
                     if (0 != bitsused)
@@ -558,7 +558,7 @@ static int encode_best(const T *image, oBits& s, encs &info)
                 if ((s.position() - start) >= (36 + 3 * UBITS + 2 * rung)) {
                     uint8_t buffer[128] = {};
                     oBits idxs(buffer);
-                    int idx = ienc(group, rung, oldrung, idxs);
+                    size_t idx = ienc(group, rung, oldrung, idxs);
                     if (idx < s.position() - start) {
                         s.rewind(start);
                         s += idxs;

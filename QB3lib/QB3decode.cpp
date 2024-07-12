@@ -48,13 +48,13 @@ qb3_mode qb3_get_mode(const decsp p) {
     return p->mode;
 }
 
-size_t qb3_get_quanta(const decsp p) {
+uint64_t qb3_get_quanta(const decsp p) {
     if (p->stage != 2)
         return 0; // Error
     return p->quanta;
 }
 
-size_t qb3_get_order(const decsp p) {
+uint64_t qb3_get_order(const decsp p) {
     if (p->stage != 2)
         return 0; // Error
     return p->order ? p->order : ZCURVE;
@@ -64,7 +64,7 @@ size_t qb3_get_order(const decsp p) {
 bool qb3_get_coreband(const decsp p, size_t *coreband) {
     if (p->stage != 2)
         return false; // Error
-    for (int c = 0; c < p->nbands; c++)
+    for (size_t c = 0; c < p->nbands; c++)
         coreband[c] = p->cband[c];
     return true;
 }
@@ -189,7 +189,7 @@ bool qb3_read_info(decsp p) {
         // size of chunk, if available
         uint16_t len = uint16_t(val & 0xffffu);
         if (check_sig(chunk, "QV")) { // Quanta
-            if (len > 4 || len < 1) {
+            if (len > 8 || len < 1) {
                 p->error = QB3E_EINV;
                 break;
             }
