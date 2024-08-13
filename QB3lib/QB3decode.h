@@ -485,15 +485,15 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
                         acc >>= (cs >> 12) - 1; // No flag
                         abits += (cs >> 12) - 1;
                         failed |= rung == 63; // TODO: Deal with 64bit overflow
-                        // 16 index values in group, max is 7, use rung 2
+                        // 16 index values in group, max group size is 7, use rung 2, accumulator is sufficient
                         T maxval(0);
                         for (int i = 0; i < B2; i++) {
-                            auto v = DRG[2][acc & 0xf];
-                            group[i] = static_cast<uint8_t>(v);
+                            unsigned int size = (0x4232423242324232ull >> ((acc & 0xf) << 2)) & 0xf;
+                            group[i] = T((0x7130612051304120ull >> ((acc & 0xf) << 2)) & 0xf);
+                            acc >>= size;
+                            abits += size;
                             if (maxval < group[i])
                                 maxval = group[i];
-                            acc >>= v >> 12;
-                            abits += v >> 12;
                         }
                         s.advance(abits);
                         T idxarray[B2 / 2] = {};
