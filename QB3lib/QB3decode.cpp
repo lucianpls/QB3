@@ -149,7 +149,7 @@ decsp qb3_read_start(void* source, size_t source_size, size_t *image_size) {
     val >>= 8; // 40 bits left
     // Also check that the next 2 bytes are a signature
     if (p->nbands > QB3_MAXBANDS 
-        || (p->mode > qb3_mode::QB3M_BEST && p->mode != qb3_mode::QB3M_STORED)
+        || (p->mode >= qb3_mode::QB3M_END && p->mode != qb3_mode::QB3M_STORED)
         || 0 != (val & 0x8080) 
         || p->type > qb3_dtype::QB3_I64) {
         delete p;

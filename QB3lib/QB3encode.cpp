@@ -135,7 +135,7 @@ size_t qb3_max_encoded_size(const encsp p) {
 }
 
 qb3_mode qb3_set_encoder_mode(encsp p, qb3_mode mode) {
-    if (mode <= qb3_mode::QB3M_BEST)
+    if (mode < qb3_mode::QB3M_END)
         p->mode = mode;
     // Default curve is HILBERT, change it if needed
     switch (p->mode) {
@@ -421,7 +421,7 @@ static size_t raw_size(encsp const &p) {
 int qb3_get_encoder_state(encsp p) { return p->error; }
 
 static bool is_fast(qb3_mode mode) {
-    return (QB3M_BASE_H == mode) || (QB3M_BASE_Z == mode);
+    return (QB3M_BASE_H == mode) || (QB3M_BASE_Z == mode) || (QB3M_FTL == mode);
 }
 
 // ONLY QB3M_BASE and QB3M_CF are supported here

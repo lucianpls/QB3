@@ -53,7 +53,12 @@ enum qb3_mode {
     QB3M_RLE_H = 6, // QB3 Hilbert + RLE
     QB3M_CF_RLE_H = 7, // QB3 Hilbert + CF + RLE
 
-    QB3M_STORED = 255, // Raw bypass
+    // Faster and only slightly worse than base in many cases
+    // Hilbert curve but no bit-step, no CF, no RLE
+    QB3M_FTL = 8,
+    QB3M_END, // Marks the end of the settable modes
+
+    QB3M_STORED = 255, // Raw bypass, can't be requested
     QB3M_INVALID = -1 // Invalid mode
 }; // Best compression, one of the above
 
