@@ -22,7 +22,7 @@ Contributors:  Lucian Plesea
 #include <stdint.h>
 
 // CMake will generate LIBQB3_EXPORT linkage as needed
-#include <libqb3_export.h>
+#include "libqb3_export.h"
 
 // Keep this close to plain C so it can have a C API
 #define QB3_MAXBANDS 16
