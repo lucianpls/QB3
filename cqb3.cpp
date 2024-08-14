@@ -41,7 +41,8 @@ struct options {
         trim(false),
         rle(false), // non-default RLE (off for best, on for fast)
         legacy(false), // legacy mode
-        verbose(false), 
+        verbose(false),
+        ftl(false),
         decode(false)
     {};
 
@@ -56,6 +57,7 @@ struct options {
     bool rle; // Skip RLE
     bool legacy; // Legacy mode
     bool verbose;
+    bool ftl; // Fastest compression
     bool decode;
 };
 
@@ -68,6 +70,7 @@ int Usage(const options &opt) {
         << "\n"
         << "Compression only options:\n"
         << "\t-b : best compression\n"
+        << "\t-f : fastest compression\n"
         << "\t-l : legacy mode (deprecated)\n"
         << "\t-q <n> : quanta\n"
         << "\t-r : reverse RLE behavior, off for best, on for fast\n"
@@ -109,6 +112,9 @@ bool parse_args(int argc, char** argv, options& opt) {
                 break;
             case 'd':
                 opt.decode = true;
+                break;
+            case 'f':
+                opt.ftl = true;
                 break;
             case 't':
                 opt.trim = true;
@@ -161,6 +167,14 @@ bool parse_args(int argc, char** argv, options& opt) {
         return false;
     }
 
+    // best, rle with ftl , turn them off
+    // In theory, legacy mode would work with ftl, but not supported
+    if (opt.ftl) {
+        opt.best = false;
+        opt.rle = false;
+        opt.legacy = false;
+    }
+
     // If output file name is not provided, extract from input file name
     if (opt.out_fname.empty()) {
         string fname(opt.in_fname);
@@ -203,6 +217,7 @@ const char *mode_string(qb3_mode m) {
     case QB3M_CF: return "Legacy CF";
     case QB3M_RLE: return "Legacy Base + RLE";
     case QB3M_CF_RLE: return "Legacy CF + RLE";
+    case QB3M_FTL: return "Fast";
     case QB3M_STORED: return "Stored";
     default:
         return "Unknown mode";
@@ -420,6 +435,9 @@ int encode(Raster &raster, std::vector<std::uint8_t> &image, std::vector<std::ui
                 mode = QB3M_CF; // No RLE
             }
         }
+
+        if (opts.ftl)
+            mode = QB3M_FTL;
 
         if (mode != qb3_set_encoder_mode(qenc, mode)) {
             cerr << "Invalid mode\n";
