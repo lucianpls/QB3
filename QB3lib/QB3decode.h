@@ -174,6 +174,10 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
         }
         else if (2 == rung) { // max symbol len is 4, there are at least 14 in the accumulator
             // Use inline constants as nibble tables
+            // Faster than a double value table decode, but only in this specific code organization
+            // Cleaning it up, for example doing a peek at the start then looping 16 times, makes it slower
+            // The masks and inline constants could be smaller for size, but that eliminates the
+            // common expression, making it slower
             unsigned int size;
             for (size_t i = 0; i < 14; i++) {
                 size = (0x4232423242324232ull >> ((acc & 0xf) << 2)) & 0xf;
