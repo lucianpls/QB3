@@ -58,6 +58,7 @@ struct options {
     bool legacy; // Legacy mode
     bool verbose;
     bool ftl; // Fastest compression
+    bool away; // quantize away from zero
     bool decode;
 };
 
@@ -124,8 +125,20 @@ bool parse_args(int argc, char** argv, options& opt) {
                 break;
             case 'q':
                 opt.quanta = 2; // Default
-                if ((i < argc) && isdigit(argv[i + 1][0]))
-                    opt.quanta = strtoull(argv[++i], nullptr, 10);
+                if (i < argc) { // Will fail anyhow, missing file name
+                    // If the first char is +, we quantize away from zero
+                    auto c = argv[i + 1][0];// First char
+                    if (isdigit(c)) {
+                        opt.away = false;
+                        opt.quanta = strtoull(argv[i + 1], nullptr, 10);
+                        i++;
+                    }
+                    if (c == '+') {
+                        opt.away = true;
+                        opt.quanta = strtoull(argv[i + 1] + 1, nullptr, 10);
+                        i++;
+                    }
+                }
                 break;
             case 'm':
                 // The next parameter is a comma separated band list if it starts with a digit
@@ -444,12 +457,12 @@ int encode(Raster &raster, std::vector<std::uint8_t> &image, std::vector<std::ui
             throw 1;
         }
         if (opts.quanta > 1) {
-            if (!qb3_set_encoder_quanta(qenc, opts.quanta, true)) {
+            if (!qb3_set_encoder_quanta(qenc, opts.quanta, opts.away)) {
                 cerr << "Invalid quanta\n";
                 throw 1;
             }
             else if (opts.verbose) {
-                cout << "Lossy compression, quantized by " << opts.quanta << endl;
+                cout << "Lossy compression, quantized by " << (opts.away ? "+" : "") << opts.quanta << endl;
             }
         }
         t1 = high_resolution_clock::now();
