@@ -36,6 +36,9 @@ typedef struct decs * decsp; // decoder
 // Types
 enum qb3_dtype { QB3_U8 = 0, QB3_I8, QB3_U16, QB3_I16, QB3_U32, QB3_I32, QB3_U64, QB3_I64 };
 
+// To check if the library has QB3M_FTL
+#define QB3_HAS_FTL 1
+
 // Encode mode, default is fastest, best is best compression
 enum qb3_mode {
     // Aliases, values might change

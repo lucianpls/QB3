@@ -182,7 +182,7 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             // common expression, making it slower
             // pre-shift accumulator, top 2 bits are not needed
             acc <<= 2;
-            unsigned int size;
+            uint32_t size;
             for (size_t i = 0; i < 14; i++) {
                 size = (0x4232423242324232ull >> (acc & 0b111100)) & 0xf;
                 group[i] = T((0x7130612051304120ull >> (acc & 0b111100)) & 0xf);
@@ -502,11 +502,11 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
                         acc >>= (cs >> 12) - 1; // No flag
                         abits += (cs >> 12) - 1;
                         failed |= rung == 63; // TODO: Deal with 64bit overflow
-                        // 16 index values in group, max group size is 7, use rung 2, accumulator is sufficient
+                        // 16 index values in group, max group size is 7, use rung 2
                         T maxidx(0);
                         acc <<= 2; // preshift accumulator
                         for (int i = 0; i < B2; i++) {
-                            unsigned int size = (0x4232423242324232ull >> (acc & 0b111100)) & 0xf;
+                            unint32_t size = (0x4232423242324232ull >> (acc & 0b111100)) & 0xf;
                             group[i] = T((0x7130612051304120ull >> (acc & 0b111100)) & 0xf);
                             acc >>= size;
                             abits += size;
