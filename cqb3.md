@@ -28,6 +28,10 @@ Decompress. Reads a QB3 formatted file and writes a PNG.
 -b
 Best. Turns on the **best** QB3 compression mode, which is slower but can produce better compression, especially for larger integer types.
 
+-f
+Fast. Turns on the **fast** QB3 mode, which is faster than the default by about 10% while loosing less than .5 % of the compression. It is not
+compatible with the rle mode
+
 -m <a,b,c,...>
 band Mapping control. For images with more than one channel, QB3 can apply a band decorrelation filter which improves the compression. It does this
 by subtracting one band from another. On decompression the effect of the filter is removed and the output image is identical to the input.
@@ -43,6 +47,17 @@ while band 1 (green) is to be subtracted from the 0 (red) and 2 (blue) bands. If
 input, the unspecified band mappings are left unmodified (core). Following the same logic, the -m option with no parameters is equivalent to the
 identity mapping, -m 0,1,2,... For RGBI (infrared) imagery, the 1,1,1,1 might be better than the default, which leaves the last band as is.
 The QB3 compressor will adjust the band input mapping if the values are not valid, a warning will be printed by cqb3 when this happens.
+A special case is "-m x", which tries all possible band mappings and selects the one that gives the best compression. This is only valid for 3 or 4
+band images. Note that if this option is provided, it will take about 9 times longer to finish the compression.
+
+-r
+RLE. A run length encoding is applied after the QB3 compression. This can improve the compression ratio, especially for images with large areas of
+constant values. The RLE encoding is lossless, the original image is restored on decompression. The RLE encoding is not compatible with the fast mode.
+
+-l
+Legacy microblock scan order. Uses the Morton (Z) scan order for the 4x4 pixel blocks in the QB3 compression. This is the original scan order used
+in the QB3 compressor. The default scan order is the Hilbert scan order, which results in better compression for most images. Use of this option is
+not recommended.
 
 -t
 Trim. QB3 compression operates on 4x4 pixel blocks. When the input image size is not a multiple of 4x4, libQB3 will internally encode a few lines
@@ -50,3 +65,11 @@ and columns more than once. This may result in an output size that is slightly l
 the input image will be trimmed to a multiple of 4x4 pixels before compression to QB3. The output QB3 raster size will reflect this trimmed size.
 1, 2 or three lines and/or columns will be trimmed, in the last, then first, then last again order, as necessary to make the respective dimension 
 a multiple of 4.
+
+-q <val>
+Lossy encoding, by quantizing (divide) input values by a small integer, before doing the actual QB3 decoding. On decoding, the decoded values are
+multiplied by the same value, restoring the normal range. The division is done with rounding, toward zero by default, it can be changed to rounding 
+away from zero by adding a + sign before the value. If this option is not followed by a value, the default value of 2 is used. The value must be
+within the range valid for the input data type.
+
+

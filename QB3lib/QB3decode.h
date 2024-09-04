@@ -140,7 +140,7 @@ static std::pair<size_t, uint64_t> qb3dsztbl(uint64_t val, size_t rung) {
 // For rung 0, it works with 17bits or more
 // For rung 1, it works with 47bits or more
 // returns false on failure
-template<typename T>
+template<bool applystep = true, typename T>
 static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits) {
     assert(((rung > 1) && (abits <= 8))
         || ((rung == 1) && (abits <= 17)) // B2 + 1
@@ -164,9 +164,11 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
         if (1 == rung) {
             // Use inline constants as nibble tables
             // The lower two bits of the accumulator determine the size
+            // Preshift accumulator
+            acc <<= 2;
             for (size_t i=0; i < B2; i++) {
-                auto size = (0x31213121u >> ((acc & 7) << 2)) & 0xf;
-                group[i] = T((0x30102010u >> ((acc & 7) << 2)) & 0xf);
+                auto size = (0x31213121u >> (acc & 0b11100)) & 0xf;
+                group[i] = T((0x30102010u >> (acc & 0b11100)) & 0xf);
                 abits += size;
                 acc >>= size;
             }
@@ -174,24 +176,30 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
         }
         else if (2 == rung) { // max symbol len is 4, there are at least 14 in the accumulator
             // Use inline constants as nibble tables
-            unsigned int size;
+            // Faster than a double value table decode, but only in this specific code organization
+            // Cleaning it up, for example doing a peek at the start then looping 16 times, makes it slower
+            // The masks and inline constants could be smaller for size, but that eliminates the
+            // common expression, making it slower
+            // pre-shift accumulator, top 2 bits are not needed
+            acc <<= 2;
+            uint32_t size;
             for (size_t i = 0; i < 14; i++) {
-                size = (0x4232423242324232ull >> ((acc & 0xf) << 2)) & 0xf;
-                group[i] = T((0x7130612051304120ull >> ((acc & 0xf) << 2)) & 0xf);
+                size = (0x4232423242324232ull >> (acc & 0b111100)) & 0xf;
+                group[i] = T((0x7130612051304120ull >> (acc & 0b111100)) & 0xf);
                 abits += size;
                 acc >>= size;
             }
-            if (abits > 56) { // Rare
-                s.advance(abits);
+            if (abits > 56) { // Rare, max is 60, there are still 2 safe bits
+                s.advance(abits - 2);
                 acc = s.peek();
-                abits = 0;
+                abits = 2;
             }
-            size = (0x4232423242324232ull >> ((acc & 0xf) << 2)) & 0xf;
-            group[14] = T((0x7130612051304120ull >> ((acc & 0xf) << 2)) & 0xf);
+            size = (0x4232423242324232ull >> (acc & 0b111100)) & 0xf;
+            group[14] = T((0x7130612051304120ull >> (acc & 0b111100)) & 0xf);
             acc >>= size;
             abits += size;
-            size = (0x4232423242324232ull >> ((acc & 0xf) << 2)) & 0xf;
-            group[15] = T((0x7130612051304120ull >> ((acc & 0xf) << 2)) & 0xf);
+            size = (0x4232423242324232ull >> (acc & 0b111100)) & 0xf;
+            group[15] = T((0x7130612051304120ull >> (acc & 0b111100)) & 0xf);
             s.advance(abits + size);
         }
         else if (6 > rung) { // Table decode at 3,4 and 5, half of the values per accumulator
@@ -266,7 +274,8 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             }
         }
     }
-    if (0 == (group[B2 - 1] >> rung)) {
+    // template parameter to avoid a test when not needed
+    if (applystep && (0 == (group[B2 - 1] >> rung))) {
         auto stepp = step(group, rung);
         if (stepp < B2)
             group[stepp] ^= static_cast<T>(1ull << rung);
@@ -280,10 +289,115 @@ template<typename T> static T magsabs(T v) { return (v >> 1) + (v & 1); }
 // Multiply v(in magsign) by m(normal, positive)
 template<typename T> static T magsmul(T v, T m) { return magsabs(v) * (m << 1) - (v & 1); }
 
+// Streamlined decoding for FTL mode
+template<typename T>
+static bool decodeFTL(uint8_t* src, size_t len, T* image, const decs& info)
+{
+    auto xsize(info.xsize), ysize(info.ysize), bands(info.nbands), stride(info.stride);
+    auto cband = info.cband;
+    static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
+    constexpr size_t UBITS(sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6);
+    constexpr auto NORM_MASK((1ull << UBITS) - 1); // UBITS set
+    constexpr auto LONG_MASK(NORM_MASK * 2 + 1); // UBITS + 1 set
+    T prev[QB3_MAXBANDS] = {}, group[B2] = {};
+    size_t runbits[QB3_MAXBANDS] = {};
+    const uint16_t* dsw = sizeof(T) == 1 ? dsw3 : sizeof(T) == 2 ? dsw4 : sizeof(T) == 4 ? dsw5 : dsw6;
+    stride = stride ? stride : xsize * bands;
+    // Set up block offsets based on traversal order, defaults to HILBERT
+    uint64_t order(info.order);
+    order = order ? order : HILBERT;
+    size_t offset[B2] = {};
+    for (size_t i = 0; i < B2; i++) {
+        size_t n = (order >> ((B2 - 1 - i) << 2));
+        offset[i] = ((n >> 2) & 0b11) * stride + (n & 0b11) * bands;
+    }
+    iBits s(src, len);
+    bool failed(false);
+    for (size_t y = 0; y < ysize; y += B) {
+        // If the last row is partial, roll it up
+        if (y + B > ysize)
+            y = ysize - B;
+        for (size_t x = 0; x < xsize; x += B) {
+            // If the last column is partial, move it left
+            if (x + B > xsize)
+                x = xsize - B;
+            for (int c = 0; c < bands; c++) {
+                auto prv = prev[c];
+                T* const blockp = image + y * stride + x * bands + c;
+                failed = s.empty();
+                uint64_t cs(0), abits(1), acc(s.peek());
+                if (acc & 1) { // Rung change
+                    cs = dsw[(acc >> 1) & LONG_MASK];
+                    abits = cs >> 12;
+                    failed |= (0 == (cs & TBLMASK)); // no signals
+                }
+                acc >>= abits;
+                // abits is never > 8, so it's safe to call gdecode
+                auto rung = (runbits[c] + cs) & NORM_MASK;
+                runbits[c] = rung;
+                if (rung < 2) { // decode inlined
+                    if (rung == 0) { // single bits or all zeros
+                        abits++;
+                        if (0 != (acc & 1)) {
+                            abits += B2;
+                            for (int i = 0; i < B2; i++) {
+                                acc >>= 1;
+                                blockp[offset[i]] = prv -= (1 & acc);
+                            }
+                            prev[c] = prv;
+                        }
+                        else {
+                            for (int i = 0; i < B2; i++)
+                                blockp[offset[i]] = prv;
+                        }
+                    }
+                    else { // rung == 1
+                        // Use inline constants as nibble tables
+                        // The lower two bits of the accumulator determine the size
+                        // Shift the accumulator to the left to place the selector in the right place
+                        acc <<= 2;
+                        for (size_t i = 0; i < B2; i++) {
+                            auto size = (0x31213121u >> (acc & 0b11100)) & 0xf;
+                            blockp[offset[i]] = prv += smag(T((0x30102010u >> (acc & 0b11100)) & 0xf));
+                            abits += size;
+                            acc >>= size;
+                        }
+                        prev[c] = prv;
+                    }
+                    s.advance(abits);
+                    continue;
+                }
+                // longer codes
+                failed |= !gdecode<false>(s, rung, group, acc, abits);
+                // Undo delta encoding for this block
+                for (int i = 0; i < B2; i++)
+                    blockp[offset[i]] = prv += smag(group[i]);
+                prev[c] = prv;
+                if (failed) break;
+            } // Per band per block
+            if (failed) break;
+        } // per block
+        if (failed) break;
+        // For performance apply band delta per block strip, in linear order
+        for (size_t j = 0; j < B; j++) {
+            for (int c = 0; c < bands; c++) if (c != cband[c]) {
+                auto dimg = image + stride * (y + j) + c;
+                auto simg = image + stride * (y + j) + cband[c];
+                for (int i = 0; i < xsize; i++, dimg += bands, simg += bands)
+                    *dimg += *simg;
+            }
+        }
+    } // per strip
+    // It might not catch all errors
+    return failed || s.avail() > 7;
+}
+
 // reports most but not all errors, for example if the input stream is too short for the last block
 template<typename T>
 static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
 {
+    if (info.mode == QB3M_FTL)
+        return decodeFTL(src, len, image, info);
     auto xsize(info.xsize), ysize(info.ysize), bands(info.nbands), stride(info.stride);
     auto cband = info.cband;
     static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
@@ -322,9 +436,8 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
                 acc >>= abits;
                 if (0 == cs || 0 != (cs & TBLMASK)) { // Normal decoding, not a signal
                     // abits is never > 8, so it's safe to call gdecode
-                    auto rung = (runbits[c] + cs) & NORM_MASK;
+                    auto rung = runbits[c] = (runbits[c] + cs) & NORM_MASK;
                     failed |= !gdecode(s, rung, group, acc, abits);
-                    runbits[c] = rung;
                 }
                 else { // extra encoding
                     cs = dsw[acc & LONG_MASK]; // rung, no flag
@@ -389,24 +502,26 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
                         acc >>= (cs >> 12) - 1; // No flag
                         abits += (cs >> 12) - 1;
                         failed |= rung == 63; // TODO: Deal with 64bit overflow
-                        // 16 index values in group, max is 7, use rung 2
-                        T maxval(0);
+                        // 16 index values in group, max group size is 7, use rung 2
+                        T maxidx(0);
+                        acc <<= 2; // preshift accumulator
                         for (int i = 0; i < B2; i++) {
-                            auto v = DRG[2][acc & 0xf];
-                            group[i] = static_cast<uint8_t>(v);
-                            if (maxval < group[i])
-                                maxval = group[i];
-                            acc >>= v >> 12;
-                            abits += v >> 12;
+                            uint32_t size = (0x4232423242324232ull >> (acc & 0b111100)) & 0xf;
+                            group[i] = T((0x7130612051304120ull >> (acc & 0b111100)) & 0xf);
+                            acc >>= size;
+                            abits += size;
+                            if (maxidx < group[i])
+                                maxidx = group[i];
                         }
                         s.advance(abits);
                         T idxarray[B2 / 2] = {};
-                        for (size_t i = 0; i <= maxval; i++) {
+                        for (size_t i = 0; i <= maxidx; i++) {
                             acc = s.peek();
                             auto v = qb3dsztbl(acc, rung);
                             s.advance(v.first);
                             idxarray[i] = T(v.second);
                         }
+                        // Apply idxarray to group
                         for (int i = 0; i < B2; i++)
                             group[i] = idxarray[group[i]];
                     }

@@ -61,7 +61,7 @@ vector<outT> toplus(vector<inT>& v, outT m) {
 template<typename T>
 void check(vector<uint8_t> &image, const Raster &raster,
     uint64_t m, int main_band = 0,
-    bool fast = 0, uint64_t q = 1, bool away = false)
+    bool fast = 0, uint64_t q = 1, bool away = false, bool ftl = false)
 {
     size_t xsize = raster.size.x;
     size_t ysize = raster.size.y;
@@ -93,7 +93,7 @@ void check(vector<uint8_t> &image, const Raster &raster,
     // This is sufficient to trigger the quanta encoding
     if (q > 1)
         qb3_set_encoder_quanta(qenc, q, away);
-    qb3_set_encoder_mode(qenc, fast ? qb3_mode::QB3M_BASE : qb3_mode::QB3M_BEST);
+    qb3_set_encoder_mode(qenc, ftl? qb3_mode::QB3M_FTL : fast ? qb3_mode::QB3M_BASE : qb3_mode::QB3M_BEST);
 
     t1 = high_resolution_clock::now();
     auto outsize = qb3_encode(qenc, static_cast<void *>(img.data()), outvec.data());
@@ -137,9 +137,7 @@ void check(vector<uint8_t> &image, const Raster &raster,
 
     time_span = duration_cast<duration<double>>(t2 - t1).count();
     cout << sizeof(T) * image.size() /time_span / 1024 / 1024 << '\t'
-        << time_span << '\t' << sizeof(T) << '\t' << m << '\t';
-    if (fast)
-        cout << "Fast";
+        << time_span << '\t' << sizeof(T) << '\t' << m << '\t' << (ftl ? "FTL" : fast ? "Fast" : "");
 
     if (q > 1) {
         auto hq = T(q / 2); // precision
@@ -530,20 +528,28 @@ int main(int argc, char **argv)
             cout << endl;
             check<uint64_t>(image, raster, 1, 1, true);
             cout << endl;
+            check<uint64_t>(image, raster, 1, 1, true, 1, 0, true);
+            cout << endl;
 
             check<uint32_t>(image, raster, 1, 1);
             cout << endl;
             check<uint32_t>(image, raster, 1, 1, true);
+            cout << endl;
+            check<uint32_t>(image, raster, 1, 1, true, 1, 0, true);
             cout << endl;
 
             check<uint16_t>(image, raster, 1, 1);
             cout << endl;
             check<uint16_t>(image, raster, 1, 1, true);
             cout << endl;
+            check<uint16_t>(image, raster, 1, 1, true, 1, 0, true);
+            cout << endl;
 
             check<uint8_t>(image, raster, 1, 1);
             cout << endl;
             check<uint8_t>(image, raster, 1, 1, true);
+            cout << endl;
+            check<uint8_t>(image, raster, 1, 1, true, 1, 0, true);
             cout << endl;
         }
         else if (raster.dt == ICDT_Int16 || raster.dt == ICDT_UInt16) {

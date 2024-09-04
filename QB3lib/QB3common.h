@@ -86,7 +86,7 @@ struct encs {
     size_t nbands;
     // micro block scanning order
     uint64_t order;
-    size_t quanta;
+    uint64_t quanta;
 
     // Persistent state by band
     band_state band[QB3_MAXBANDS];
@@ -109,7 +109,7 @@ struct decs {
     size_t stride;
     // micro block scanning order
     uint64_t order;
-    size_t quanta;
+    uint64_t quanta;
     int error;
     int stage;
 

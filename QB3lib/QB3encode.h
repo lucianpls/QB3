@@ -147,7 +147,7 @@ static std::pair<size_t, uint64_t> qb3csztbl(uint64_t val, size_t rung) {
 // bitsused is used to choose the rung for encoding
 // If abits > 0, the accumulator is also pushed into the stream
 template <typename T>
-static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t abits)
+static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t abits, bool skipstep = false)
 {
     assert(abits <= 64);
     const size_t rung = topbit(bitsused | 1);
@@ -159,12 +159,15 @@ static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t 
         s.push(acc, abits);
         return;
     }
-    // Flip the last set rung bit if the rung bit sequence is a step down
-    // At least one rung bit has to be set, so it can't return 0
-    auto stepp = step(group, rung);
-    assert(stepp > 0); // At least one rung bit should be set
-    if (stepp <= B2)
-        group[stepp - 1] ^= static_cast<T>(1ull << rung);
+    size_t stepp(B2 + 1);
+    if (!skipstep) {
+        // Flip the last set rung bit if the rung bit sequence is a step down
+        // At least one rung bit has to be set, so it can't return 0
+        stepp = step(group, rung);
+        assert(stepp > 0); // At least one rung bit should be set
+        if (stepp <= B2)
+            group[stepp - 1] ^= static_cast<T>(1ull << rung);
+    }
     if (abits > 8) { // Just in case, a rung switch is 8 bits at most
         s.push(acc, abits);
         acc = abits = 0;
@@ -240,10 +243,10 @@ static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t 
 
 // Base QB3 group encode with code switch, returns encoded size
 template <typename T>
-static void groupencode(T group[B2], T bitsused, size_t oldrung, oBits& s) {
+static void groupencode(T group[B2], T bitsused, size_t oldrung, oBits& s, bool skipstep = false) {
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     uint64_t acc = CSW[UBITS][(topbit(bitsused | 1) - oldrung) & ((1ull << UBITS) - 1)];
-    groupencode(group, bitsused, s, acc & TBLMASK, static_cast<size_t>(acc >> 12));
+    groupencode(group, bitsused, s, acc & TBLMASK, static_cast<size_t>(acc >> 12), skipstep);
 }
 
 // Group encode with cf
@@ -398,7 +401,7 @@ static int encode_fast(const T* image, oBits& s, encs &info)
                     }
                 }
                 prev[c] = prv;
-                groupencode(group, bitsused, runbits[c], s);
+                groupencode(group, bitsused, runbits[c], s, info.mode == QB3M_FTL);
                 runbits[c] = topbit(bitsused | 1);
             }
         }

@@ -1,16 +1,16 @@
 # QB3: Fast and Efficient Image/Raster Compression
 
+- Compression and decompression speed is 500MB/sec for byte data and close to 4GB/sec for 64 bit data
 - Better compression than PNG in most cases
-- Compression and decompression speed is 400MB/sec for byte data and above 3GB/sec for 64bit int
-- Integer values from 8 to 64bit per value, signed and unsigned
-- No significant memory footprint
-- Very low complexity
 - No external dependencies
+- Any integer type, from 8 to 64bit per value, signed and unsigned
+- No significant memory footprint during encoding or decoding
+- Very low complexity
 
 # Library
 The library, located in [QB3lib](QB3lib) provides the core QB3 
 algorithm implementation with a C API.
-It is implemented in C++, can be built on most platforms using cmake.
+Implemented in C++, can be built on most platforms using cmake.
 It requires a little endian, two's complement architecture with 8, 16, 32 
 and 64 bit integers, which includes the common AMD64 and ARM64 platforms.
 Only 64bit builds should be used since this implementation uses 64 bit integers heavily.
@@ -49,7 +49,14 @@ metadata to allow decoding.
 
 # Change Log
 
-## Version 1.1.0:
+## Version 1.2.0
+- Speed optimizations, both compression and decompression
+    - More than 400MB/sec for byte data using the default mode
+- New QB3M_FTL mode, 25% faster than QB3M_DEFAULT with a tiny compression loss
+	- 500MB/sec for byte data
+    - Test availability by testing that QB3_HAS_FTL is defined
+
+## Version 1.1.0
 - Better scan ordering, second order Hilbert curve is the default
     - 5% better compression with no speed penalty
     - Legacy scan order (Morton) is optional
@@ -62,7 +69,8 @@ metadata to allow decoding.
     - Default build target is the library, eliminating external dependencies
     - Conversion utility is optional
 
-## Version 1.0.0: Initial release
+## Version 1.0.0
+- Initial release
 - C API
 - All integer types
 

@@ -41,7 +41,8 @@ struct options {
         trim(false),
         rle(false), // non-default RLE (off for best, on for fast)
         legacy(false), // legacy mode
-        verbose(false), 
+        verbose(false),
+        ftl(false),
         decode(false)
     {};
 
@@ -56,6 +57,8 @@ struct options {
     bool rle; // Skip RLE
     bool legacy; // Legacy mode
     bool verbose;
+    bool ftl; // Fastest compression
+    bool away; // quantize away from zero
     bool decode;
 };
 
@@ -68,6 +71,7 @@ int Usage(const options &opt) {
         << "\n"
         << "Compression only options:\n"
         << "\t-b : best compression\n"
+        << "\t-f : fastest compression\n"
         << "\t-l : legacy mode (deprecated)\n"
         << "\t-q <n> : quanta\n"
         << "\t-r : reverse RLE behavior, off for best, on for fast\n"
@@ -110,6 +114,9 @@ bool parse_args(int argc, char** argv, options& opt) {
             case 'd':
                 opt.decode = true;
                 break;
+            case 'f':
+                opt.ftl = true;
+                break;
             case 't':
                 opt.trim = true;
                 break;
@@ -118,8 +125,20 @@ bool parse_args(int argc, char** argv, options& opt) {
                 break;
             case 'q':
                 opt.quanta = 2; // Default
-                if ((i < argc) && isdigit(argv[i + 1][0]))
-                    opt.quanta = strtoull(argv[++i], nullptr, 10);
+                if (i < argc) { // Will fail anyhow, missing file name
+                    // If the first char is +, we quantize away from zero
+                    auto c = argv[i + 1][0];// First char
+                    if (isdigit(c)) {
+                        opt.away = false;
+                        opt.quanta = strtoull(argv[i + 1], nullptr, 10);
+                        i++;
+                    }
+                    if (c == '+') {
+                        opt.away = true;
+                        opt.quanta = strtoull(argv[i + 1] + 1, nullptr, 10);
+                        i++;
+                    }
+                }
                 break;
             case 'm':
                 // The next parameter is a comma separated band list if it starts with a digit
@@ -159,6 +178,14 @@ bool parse_args(int argc, char** argv, options& opt) {
     if (opt.in_fname.empty()) {
         opt.error = "Need at least the input file name";
         return false;
+    }
+
+    // best, rle with ftl , turn them off
+    // In theory, legacy mode would work with ftl, but not supported
+    if (opt.ftl) {
+        opt.best = false;
+        opt.rle = false;
+        opt.legacy = false;
     }
 
     // If output file name is not provided, extract from input file name
@@ -203,6 +230,7 @@ const char *mode_string(qb3_mode m) {
     case QB3M_CF: return "Legacy CF";
     case QB3M_RLE: return "Legacy Base + RLE";
     case QB3M_CF_RLE: return "Legacy CF + RLE";
+    case QB3M_FTL: return "Fast";
     case QB3M_STORED: return "Stored";
     default:
         return "Unknown mode";
@@ -421,17 +449,20 @@ int encode(Raster &raster, std::vector<std::uint8_t> &image, std::vector<std::ui
             }
         }
 
+        if (opts.ftl)
+            mode = QB3M_FTL;
+
         if (mode != qb3_set_encoder_mode(qenc, mode)) {
             cerr << "Invalid mode\n";
             throw 1;
         }
         if (opts.quanta > 1) {
-            if (!qb3_set_encoder_quanta(qenc, opts.quanta, true)) {
+            if (!qb3_set_encoder_quanta(qenc, opts.quanta, opts.away)) {
                 cerr << "Invalid quanta\n";
                 throw 1;
             }
             else if (opts.verbose) {
-                cout << "Lossy compression, quantized by " << opts.quanta << endl;
+                cout << "Lossy compression, quantized by " << (opts.away ? "+" : "") << opts.quanta << endl;
             }
         }
         t1 = high_resolution_clock::now();
