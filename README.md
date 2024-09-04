@@ -50,8 +50,10 @@ metadata to allow decoding.
 # Change Log
 
 ## Version 1.2.0
-- Speed improvements
-- Add QB3M_FTL mode, fastest mode by about 20% with a tiny compression loss
+- Speed optimizations, both compression and decompression
+    - More than 400MB/sec for byte data using the default mode
+- New QB3M_FTL mode, 25% faster than QB3M_DEFAULT with a tiny compression loss
+	- 500MB/sec for byte data
     - Test availability by testing that QB3_HAS_FTL is defined
 
 ## Version 1.1.0
