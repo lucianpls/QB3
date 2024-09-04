@@ -506,7 +506,7 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
                         T maxidx(0);
                         acc <<= 2; // preshift accumulator
                         for (int i = 0; i < B2; i++) {
-                            unint32_t size = (0x4232423242324232ull >> (acc & 0b111100)) & 0xf;
+                            uint32_t size = (0x4232423242324232ull >> (acc & 0b111100)) & 0xf;
                             group[i] = T((0x7130612051304120ull >> (acc & 0b111100)) & 0xf);
                             acc >>= size;
                             abits += size;
