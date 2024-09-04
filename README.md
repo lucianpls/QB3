@@ -55,6 +55,8 @@ metadata to allow decoding.
 - New QB3M_FTL mode, 25% faster than QB3M_DEFAULT with a tiny compression loss
 	- 500MB/sec for byte data
     - Test availability by testing that QB3_HAS_FTL is defined
+- WASM test
+    - [prototype code](attic/world.cpp)
 
 ## Version 1.1.0
 - Better scan ordering, second order Hilbert curve is the default
