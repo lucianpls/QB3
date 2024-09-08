@@ -54,7 +54,7 @@ metadata to allow decoding.
     - More than 400MB/sec for byte data using the default mode
 - New QB3M_FTL mode, 25% faster than QB3M_DEFAULT with a tiny compression loss
 	- 500MB/sec for byte data
-    - Test availability by testing that QB3_HAS_FTL is defined
+    - Test availability by checking that QB3_HAS_FTL is defined
 - WASM test
     - [prototype code](attic/world.cpp)
 
