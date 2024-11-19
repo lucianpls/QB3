@@ -25,12 +25,12 @@ Contributors:  Lucian Plesea
 #include "libqb3_export.h"
 
 // Keep this close to plain C so it can have a C API
-#define QB3_MAXBANDS 16
-
 #if defined(__cplusplus)
 extern "C" {
 #endif
-typedef struct encs * encsp; // encoder
+#define QB3_MAXBANDS 16
+
+    typedef struct encs * encsp; // encoder
 typedef struct decs * decsp; // decoder
 
 // Types

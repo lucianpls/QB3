@@ -15,7 +15,6 @@ limitations under the License.
 Contributors:  Lucian Plesea
 */
 
-#pragma once
 #include "QB3common.h"
 #include <algorithm>
 

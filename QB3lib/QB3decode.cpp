@@ -170,7 +170,7 @@ decsp qb3_read_start(void* source, size_t source_size, size_t *image_size) {
 }
 
 // read the rest of the qb3 stream metadata
-// Returns true if no failure is detected and (first) IDAT is found
+// Returns true if no failure is detected and DT is found
 bool qb3_read_info(decsp p) {
     // Check that the input structure is in the correct stage
     if (p->stage != 1 || p->error || !p->s_in || p->s_size < 4) {
@@ -262,7 +262,7 @@ bool qb3_read_info(decsp p) {
 
 // Decode RLE0FFFF data
 // Returns 0 if decoding worked as expected
-int64_t deRLE0FFFF(const uint8_t* s, size_t slen, uint8_t* d, size_t dlen) {
+static int64_t deRLE0FFFF(const uint8_t* s, size_t slen, uint8_t* d, size_t dlen) {
     while ((slen > 0) && (dlen > 0)) {
         slen--;
         dlen--;
@@ -304,7 +304,7 @@ int64_t deRLE0FFFF(const uint8_t* s, size_t slen, uint8_t* d, size_t dlen) {
 }
 
 // The size of the decoded data
-size_t deRLE0FFFFSize(const uint8_t* s, size_t slen) {
+static size_t deRLE0FFFFSize(const uint8_t* s, size_t slen) {
     size_t count(0);
     while (slen-- > 0) {
         uint8_t c = *s++;

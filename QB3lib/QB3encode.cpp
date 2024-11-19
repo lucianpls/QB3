@@ -37,7 +37,6 @@ encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt
     p->type = static_cast<qb3_dtype>(dt);
     p->quanta = 1; // No quantization
     p->away = false; // Round to zero
-    //p->raw = false;  // Write image header
     p->mode = QB3M_DEFAULT; // Fast
     // Start with no inter-band differential
     for (size_t c = 0; c < bands; c++) {
@@ -503,12 +502,11 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
             p->error = 255;
             return 0;
         }
-        //p->mode = (QB3M_RLE == mode) ? QB3M_BASE : QB3M_CF;
     }
 
     uint8_t* const d = reinterpret_cast<uint8_t*>(destination);
     oBits s(d);
-    // size of headers or zero if raw
+    // size of headers
     size_t data_position(0);
     write_headers(p, s);
     data_position = (s.position() + 7) / 8; // It is byte aligned already
@@ -540,10 +538,10 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
             return 0;
 
         // Skip RLE if the compression is poor, this is a vague limit
+        // RLE is only efficient if data is const, which generates a 8:1 compression ratio
         if (len <= qb3_max_encoded_size(p) / 2) {
             auto data_size = len - data_position; // Exclude the headers, they will be rewritten
             auto available = qb3_max_encoded_size(p) - len;
-            // Get the size of the RLE0FFFF
             auto rle_size = RLE0FFFFSize(d + data_position, data_size);
             if (rle_size <= available && rle_size < data_size) { // Only if it fits and is small enough
                 // Encode it at the end of the data
