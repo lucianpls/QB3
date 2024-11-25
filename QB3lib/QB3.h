@@ -30,7 +30,7 @@ extern "C" {
 #endif
 #define QB3_MAXBANDS 16
 
-    typedef struct encs * encsp; // encoder
+typedef struct encs * encsp; // encoder
 typedef struct decs * decsp; // decoder
 
 // Types

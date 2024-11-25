@@ -134,7 +134,7 @@ size_t qb3_max_encoded_size(const encsp p) {
 }
 
 qb3_mode qb3_set_encoder_mode(encsp p, qb3_mode mode) {
-    if (mode < qb3_mode::QB3M_END)
+    if (mode >= qb3_mode(0) && mode < qb3_mode::QB3M_END)
         p->mode = mode;
     // Default curve is HILBERT, change it if needed
     switch (p->mode) {
