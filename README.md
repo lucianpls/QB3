@@ -49,6 +49,14 @@ metadata to allow decoding.
 
 # Change Log
 
+## Version 1.2.1
+- Bug fix, decoding of best mode could fail for 32 and 64 bit integers, due to
+overflow of an internal accumulator used to decode index groups.
+- Removed encoding dependency on STL::sort by including an implementation
+of bubble sort. Since the sorted vector had at most 8 values, the use of STL sort
+was overkill and increased size of the library code without a noticeable
+performance benefit. A side benefit is that porting to C is now easier.
+
 ## Version 1.2.0
 - Speed optimizations, both compression and decompression
     - More than 400MB/sec for byte data using the default mode
