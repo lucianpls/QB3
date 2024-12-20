@@ -16,7 +16,6 @@ Contributors:  Lucian Plesea
 */
 
 #include "QB3common.h"
-#include <algorithm>
 
 namespace QB3 {
 // Encoding tables for rungs up to 8, for speedup. Rung 0 and 1 are special
@@ -79,7 +78,6 @@ static const uint16_t csw6[] = { 0x1000, 0x6001, 0x6009, 0x6011, 0x6019, 0x6021,
 0x80b7, 0x80c7, 0x80d7, 0x80e7, 0x80ff, 0x80ef, 0x80df, 0x80cf, 0x80bf, 0x80af, 0x809f, 0x808f, 0x807f, 0x806f, 0x805f, 0x804f,
 0x803f, 0x802f, 0x801f, 0x800f, 0x707b, 0x706b, 0x705b, 0x704b, 0x703b, 0x702b, 0x701b, 0x700b, 0x603d, 0x6035, 0x602d, 0x6025,
 0x601d, 0x6015, 0x600d, 0x6005 };
-static const uint16_t* CSW[] = { nullptr, nullptr, nullptr, csw3, csw4, csw5, csw6 };
 
 // Absolute from mag-sign
 template<typename T> static T magsabs(T v) { return (v >> 1) + (v & 1); }
@@ -244,7 +242,8 @@ static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t 
 template <typename T>
 static void groupencode(T group[B2], T bitsused, size_t oldrung, oBits& s, bool skipstep = false) {
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-    uint64_t acc = CSW[UBITS][(topbit(bitsused | 1) - oldrung) & ((1ull << UBITS) - 1)];
+    constexpr auto csw = sizeof(T) == 1 ? csw3 : sizeof(T) == 2 ? csw4 : sizeof(T) == 4 ? csw5 : csw6;
+    uint64_t acc = csw[(topbit(bitsused | 1) - oldrung) & ((1ull << UBITS) - 1)];
     groupencode(group, bitsused, s, acc & TBLMASK, static_cast<size_t>(acc >> 12), skipstep);
 }
 
@@ -254,7 +253,7 @@ static void cfgenc(const T igrp[B2], T cf, T pcf, size_t oldrung, oBits& bits) {
     // Signal as switch to same rung, max-positive value, by UBITS
     const uint16_t SIGNAL[] = { 0x0, 0x0, 0x0, 0x5017, 0x6037, 0x7077, 0x80f7 };
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-    auto csw = CSW[UBITS];
+    constexpr auto csw = sizeof(T) == 1 ? csw3 : sizeof(T) == 2 ? csw4 : sizeof(T) == 4 ? csw5 : csw6;
     // Start with the CF encoding signal
     uint64_t acc = SIGNAL[UBITS] & TBLMASK;
     size_t abits = UBITS + 2; // SIGNAL >> 12
@@ -413,30 +412,39 @@ static int encode_fast(const T* image, oBits& s, encs &info)
     return 0;
 }
 
+template<typename T> struct KVP { T count, value; };
+
+// bubble sort by descending frequency, in place
+// fast enough since len <= 8
+template<typename T> static void sortbyfreq(struct KVP<T>* v, int len) {
+    for (int i = 0; i < len; i++) {
+        for (int j = i; j > 0 && v[j].count > v[j - 1].count; j--) {
+            auto t = v[j];
+            v[j] = v[j - 1];
+            v[j - 1] = t;
+        }
+    }
+}
+
 // Index based encoding
 template<typename T>
-static int ienc(const T grp[B2], size_t rung, size_t oldrung, oBits &s) {
-    constexpr int TOO_LARGE(800); // Larger than any possible size
-    if (rung < 4 || rung == 63) // TODO: encode rung 63
-        return TOO_LARGE;
-    struct KVP { T key, count; };
-    KVP v[B2 / 2] = {};
-    size_t len = 0;
+static size_t ienc(const T grp[B2], size_t rung, size_t oldrung, oBits &s) {
+    KVP<T> v[B2 / 2] = {};
+    int len = 0;
     for (int i = 0; i < B2; i++) {
         size_t j = 0;
-        while (j < len && v[j].key != grp[i])
-            if (++j >= B2 /2)
-                return TOO_LARGE; // Too many unique values
+        while (j < len && v[j].value != grp[i])
+            if (++j >= B2 / 2) return 800; // Large, non-repeating group
         if (j == len)
-            v[len++] = { grp[i], 1 };
+            v[len++] = { 1, grp[i] };
         else
             v[j].count++;
     }
 
-    const uint16_t SIGNAL[] = { 0x0, 0x0, 0x0, 0x5017, 0x6037, 0x7077, 0x80f7 };
+    constexpr uint16_t SIGNAL[] = { 0x0, 0x0, 0x0, 0x5017, 0x6037, 0x7077, 0x80f7 };
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     constexpr auto NORM_MASK((1ull << UBITS) - 1); // UBITS set
-    auto csw = CSW[UBITS];
+    constexpr auto csw = sizeof(T) == 1 ? csw3 : sizeof(T) == 2 ? csw4 : sizeof(T) == 4 ? csw5 : csw6;
 
     // Start with the encoding signal
     uint64_t acc = SIGNAL[UBITS] & TBLMASK;
@@ -457,12 +465,12 @@ static int ienc(const T grp[B2], size_t rung, size_t oldrung, oBits &s) {
     abits += static_cast<size_t>((cs >> 12) - 1);
     s.push(acc, abits);
     acc = abits = 0;
-    std::sort(v, v + len, [](const KVP& a, const KVP& b) { return a.count > b.count; });
+    sortbyfreq(v, len);
 
     // Encode indices
     for (int i = 0; i < B2; i++) {
         int j = 0;
-        while (v[j].key != grp[i])
+        while (v[j].value != grp[i])
             j++;
         auto c = crg2[j];
         acc |= (c & TBLMASK) << abits;
@@ -471,34 +479,33 @@ static int ienc(const T grp[B2], size_t rung, size_t oldrung, oBits &s) {
     s.push(acc, abits);
     // Encode unique values in order of frequency
     for (int i = 0; i < len; i++)
-        s.push(qb3csztbl(v[i].key, rung));
-    return static_cast<int>(s.position());
+        s.push(qb3csztbl(v[i].value, rung));
+    return s.position();
 }
 
 // Returns error code or 0 if success
 // TODO: Error code mapping
 template <typename T = uint8_t>
-static int encode_best(const T *image, oBits& s, encs &info)
-{
+static int encode_best(const T *image, oBits& s, encs &info) {
     static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
+    constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+    constexpr auto csw = sizeof(T) == 1 ? csw3 : sizeof(T) == 2 ? csw4 : sizeof(T) == 4 ? csw5 : csw6;
     if (check_info(info))
         return check_info(info);
     const size_t xsize(info.xsize), ysize(info.ysize), bands(info.nbands), *cband(info.cband);
-    constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-    auto csw = CSW[UBITS];
     // Running code length, start with nominal value
     size_t runbits[QB3_MAXBANDS] = {};
     // Previous values, per band
     T prev[QB3_MAXBANDS] = {}, pcf[QB3_MAXBANDS] = {};
+    uint8_t buffer[128] = {};
+    oBits idxs(buffer);
     for (size_t c = 0; c < bands; c++) {
         runbits[c] = info.band[c].runbits;
         prev[c] = static_cast<T>(info.band[c].prev);
         pcf[c] = static_cast<T>(info.band[c].cf);
     }
     // Set up block offsets based on traversal order, defaults to HILBERT
-    uint64_t order(info.order);
-    if (0 == order)
-        order = HILBERT;
+    const uint64_t order(info.order ? info.order : HILBERT);
     size_t offset[B2] = {};
     for (size_t i = 0; i < B2; i++) {
         // Pick up one nibble, in top to bottom order
@@ -556,15 +563,16 @@ static int encode_best(const T *image, oBits& s, encs &info)
                     groupencode(group, bitsused, oldrung, s);
                 else
                     cfgenc(group, cf, pcf[c], oldrung, s);
-
-                if ((s.position() - start) >= (36 + 3 * UBITS + 2 * rung)) {
-                    uint8_t buffer[128] = {};
-                    oBits idxs(buffer);
-                    int idx = ienc(group, rung, oldrung, idxs);
-                    if (idx < s.position() - start) {
+                // Try index encoding
+                size_t size(s.position() - start);
+                if (rung > 3 && rung < 63 && size >= (36 + 3 * UBITS + 2 * rung)) {
+                    idxs.rewind();
+                    auto idx = ienc(group, rung, oldrung, idxs);
+                    if (idx < size) {
                         s.rewind(start);
                         s += idxs;
-                    } else if (cf > 1 && pcf[c] != cf - 2)
+                    }
+                    else if (cf > 1 && pcf[c] != cf - 2)
                         pcf[c] = cf - 2;
                 }
                 else if (cf > 1 && pcf[c] != cf - 2)
