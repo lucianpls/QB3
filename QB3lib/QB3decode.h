@@ -293,15 +293,15 @@ template<typename T> static T magsmul(T v, T m) { return magsabs(v) * (m << 1) -
 template<typename T>
 static bool decodeFTL(uint8_t* src, size_t len, T* image, const decs& info)
 {
-    auto xsize(info.xsize), ysize(info.ysize), bands(info.nbands), stride(info.stride);
-    auto cband = info.cband;
     static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
     constexpr size_t UBITS(sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6);
     constexpr auto NORM_MASK((1ull << UBITS) - 1); // UBITS set
     constexpr auto LONG_MASK(NORM_MASK * 2 + 1); // UBITS + 1 set
+    constexpr auto dsw = sizeof(T) == 1 ? dsw3 : sizeof(T) == 2 ? dsw4 : sizeof(T) == 4 ? dsw5 : dsw6;
+    auto xsize(info.xsize), ysize(info.ysize), bands(info.nbands), stride(info.stride);
+    auto cband = info.cband;
     T prev[QB3_MAXBANDS] = {}, group[B2] = {};
     size_t runbits[QB3_MAXBANDS] = {};
-    const uint16_t* dsw = sizeof(T) == 1 ? dsw3 : sizeof(T) == 2 ? dsw4 : sizeof(T) == 4 ? dsw5 : dsw6;
     stride = stride ? stride : xsize * bands;
     // Set up block offsets based on traversal order, defaults to HILBERT
     uint64_t order(info.order);
@@ -324,7 +324,6 @@ static bool decodeFTL(uint8_t* src, size_t len, T* image, const decs& info)
             for (int c = 0; c < bands; c++) {
                 auto prv = prev[c];
                 T* const blockp = image + y * stride + x * bands + c;
-                failed = s.empty();
                 uint64_t cs(0), abits(1), acc(s.peek());
                 if (acc & 1) { // Rung change
                     cs = dsw[(acc >> 1) & LONG_MASK];
@@ -373,7 +372,6 @@ static bool decodeFTL(uint8_t* src, size_t len, T* image, const decs& info)
                 for (int i = 0; i < B2; i++)
                     blockp[offset[i]] = prv += smag(group[i]);
                 prev[c] = prv;
-                if (failed) break;
             } // Per band per block
             if (failed) break;
         } // per block
@@ -406,7 +404,7 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
     constexpr auto LONG_MASK(NORM_MASK * 2 + 1); // UBITS + 1 set
     T prev[QB3_MAXBANDS] = {}, pcf[QB3_MAXBANDS] = {}, group[B2] = {};
     size_t runbits[QB3_MAXBANDS] = {};
-    const uint16_t* dsw = sizeof(T) == 1 ? dsw3 : sizeof(T) == 2 ? dsw4 : sizeof(T) == 4 ? dsw5 : dsw6;
+    constexpr auto dsw = sizeof(T) == 1 ? dsw3 : sizeof(T) == 2 ? dsw4 : sizeof(T) == 4 ? dsw5 : dsw6;
     stride = stride ? stride : xsize * bands;
     // Set up block offsets based on traversal order, defaults to HILBERT
     uint64_t order(info.order);
@@ -427,14 +425,13 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
             if (x + B > xsize)
                 x = xsize - B;
             for (int c = 0; c < bands; c++) {
-                failed |= s.empty();
                 uint64_t cs(0), abits(1), acc(s.peek());
                 if (acc & 1) { // Rung change
                     cs = dsw[(acc >> 1) & LONG_MASK];
                     abits = cs >> 12;
                 }
                 acc >>= abits;
-                if (0 == cs || 0 != (cs & TBLMASK)) { // Normal decoding, not a signal
+                if (0 != (cs & TBLMASK) || 0 == cs) { // Normal decoding, not a signal
                     // abits is never > 8, so it's safe to call gdecode
                     auto rung = runbits[c] = (runbits[c] + cs) & NORM_MASK;
                     failed |= !gdecode(s, rung, group, acc, abits);
@@ -497,14 +494,18 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
                     }
                     else { // IDX decoding
                         cs = dsw[acc & LONG_MASK]; // rung, no flag
-                        rung = (runbits[c] + cs) & NORM_MASK;
-                        runbits[c] = rung;
-                        acc >>= (cs >> 12) - 1; // No flag
-                        abits += (cs >> 12) - 1;
+                        runbits[c] = rung = (runbits[c] + cs) & NORM_MASK;
                         failed |= rung == 63; // TODO: Deal with 64bit overflow
-                        // 16 index values in group, max group size is 7, use rung 2
+                        // Max valid group size is 52 bits, when every index between 0 and 7 occurs twice
+                        // We might overflow the accumulator, even for byte data
+                        // abits at this point is between 9-13, 12-16, 15-19 and 18-22 depending on data type
+                        // Anything above 12 could generate an overflow, so it's safer to read a new accumulator
+                        // A maximum of 52 bits are needed, so we can read 62 bits preshifted to the right by 2
+                        s.advance(abits + (cs >> 12) - 3); // Preshift the next accumulator
+                        acc = s.peek();
+                        abits = 2;
+                        // 16 index values in group, max group value is 7, always rung 2
                         T maxidx(0);
-                        acc <<= 2; // preshift accumulator
                         for (int i = 0; i < B2; i++) {
                             uint32_t size = (0x4232423242324232ull >> (acc & 0b111100)) & 0xf;
                             group[i] = T((0x7130612051304120ull >> (acc & 0b111100)) & 0xf);
@@ -513,6 +514,7 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
                             if (maxidx < group[i])
                                 maxidx = group[i];
                         }
+                        failed |= abits > 54; // Corrupt input, max should be 52+2
                         s.advance(abits);
                         T idxarray[B2 / 2] = {};
                         for (size_t i = 0; i <= maxidx; i++) {
@@ -533,9 +535,11 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
                     blockp[offset[i]] = prv += smag(group[i]);
                 prev[c] = prv;
             } // Per band per block
-            if (failed) break;
+            if (failed)
+                break;
         } // per block
-        if (failed) break;
+        if (failed)
+            break;
         // For performance apply band delta per block strip, in linear order
         for (size_t j = 0; j < B; j++) {
             for (int c = 0; c < bands; c++) if (c != cband[c]) {
