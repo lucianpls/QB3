@@ -248,7 +248,11 @@ int decode_main(options& opts) {
     auto fsize = ftell(f);
     rewind(f);
     std::vector<uint8_t> src(fsize);
-    fread(src.data(), fsize, 1, f);
+    if (!fread(src.data(), fsize, 1, f)) {
+        cerr << "Can't read input file\n";
+        fclose(f);
+        exit(errno);
+    }
     fclose(f);
 
     // Decode the qb3
@@ -496,7 +500,11 @@ int encode_main(options& opts) {
     rewind(f);
     std::vector<uint8_t> src(fsize);
     storage_manager source = { src.data(), src.size() };
-    fread(source.buffer, fsize, 1, f);
+    if (!fread(source.buffer, fsize, 1, f)) {
+        cerr << "Can't read input file\n";
+        fclose(f);
+        return errno;
+    }
     fclose(f);
     Raster raster;
     auto error_message = image_peek(source, raster);

@@ -345,7 +345,11 @@ int test(string fname) {
     fseek(f, 0, SEEK_SET);
     std::vector<uint8_t> src(fsize);
     storage_manager source = { src.data(), src.size() };
-    fread(source.buffer, fsize, 1, f);
+    if (!fread(source.buffer, fsize, 1, f)) {
+        cerr << "Can't read input file\n";
+        fclose(f);
+        exit(errno);
+    }
     fclose(f);
     Raster raster;
     auto error_message = image_peek(source, raster);
@@ -413,7 +417,11 @@ int main(int argc, char **argv)
         fseek(f, 0, SEEK_SET);
         std::vector<uint8_t> src(fsize);
         storage_manager source = { src.data(), src.size() };
-        fread(source.buffer, fsize, 1, f);
+        if (!fread(source.buffer, fsize, 1, f)) {
+            cerr << "Can't read input file\n";
+            fclose(f);
+            exit(errno);
+        }
         fclose(f);
         Raster raster;
         auto error_message = image_peek(source, raster);
