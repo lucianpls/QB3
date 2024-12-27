@@ -64,7 +64,7 @@ performance benefit.
 - New QB3M_FTL mode
 	- 500MB/sec for byte data, 25% faster than QB3M_DEFAULT
  	- Tiny compression penalty, under 1% in most cases
-    	- Test availability by checking that QB3_HAS_FTL is defined
+  	- Test availability by checking that QB3_HAS_FTL is defined
 - WASM test
     - [prototype code](attic/world.cpp)
 
