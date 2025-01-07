@@ -169,8 +169,8 @@ static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t 
         s.push(acc, abits);
         acc = abits = 0;
     }
+    auto t = CRG[rung];
     if (6 > rung) { // Half of the group fits in 64 bits
-        auto t = CRG[rung];
         for (size_t i = 0; i < B2 / 2; i++) {
             acc |= (TBLMASK & t[group[i]]) << abits;
             abits += t[group[i]] >> 12;
@@ -187,21 +187,17 @@ static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t 
         }
         s.push(acc, abits);
     }
-    // Last part of table encoding, rung 6-7
-    // Encoded data fits in 256 bits, 4 way interleaved
-    else if ((sizeof(CRG) / sizeof(*CRG)) > rung) {
-        auto t = CRG[rung];
-        uint64_t a[4] = { acc, 0, 0, 0 };
-        size_t asz[4] = { abits, 0, 0, 0 };
+    // Last part of table encoding, rung 6-7, 4 writes
+    else if (8 > rung) {
         for (size_t i = 0; i < B; i++) {
             for (size_t j = 0; j < B; j++) {
-                auto v = t[group[j * B + i]];
-                a[j] |= (TBLMASK & v) << asz[j];
-                asz[j] += v >> 12;
+                auto v = t[group[i * B + j]];
+                acc |= (TBLMASK & v) << abits;
+                abits += v >> 12;
             }
+            s.push(acc, abits);
+            acc = abits = 0;
         }
-        for (size_t i = 0; i < B; i++)
-            s.push(a[i], asz[i]);
     }
     // Computed encoding, slower, works for rung > 1
     else if (1 < sizeof(T)) { // This vanishes in 8 bit mode

@@ -382,7 +382,7 @@ int main(int argc, char **argv)
     else {
         DWORD_PTR mask = 3; // First core, either CPU, likely the worst choice
         // best core on my machine, up to 10% faster than first
-        mask = 0x30000;
+        mask = 0x10000;
         // worst core on my machine
         //mask = 0x30;
         if (!SetThreadAffinityMask(thread, mask))
