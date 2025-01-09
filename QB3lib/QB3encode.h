@@ -180,24 +180,32 @@ static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t 
             s.push(acc, abits);
             acc = abits = 0;
         }
-
         for (size_t i = B2 / 2; i < B2; i++) {
             acc |= (TBLMASK & t[group[i]]) << abits;
             abits += t[group[i]] >> 12;
         }
         s.push(acc, abits);
     }
-    // Last part of table encoding, rung 6-7, 4 writes
+    // Last part of table encoding, 3 writes 6,6,4
     else if (8 > rung) {
-        for (size_t i = 0; i < B; i++) {
-            for (size_t j = 0; j < B; j++) {
-                auto v = t[group[i * B + j]];
-                acc |= (TBLMASK & v) << abits;
-                abits += v >> 12;
-            }
-            s.push(acc, abits);
-            acc = abits = 0;
-        }
+        size_t i = 0;
+        do { // max 8 + 9 * 6 bits
+            acc |= (TBLMASK & t[group[i]]) << abits;
+            abits += t[group[i]] >> 12;
+        } while (++i < 6);
+        s.push(acc, abits);
+        acc = abits = 0;
+        do { // max 9 * 5 bits
+            acc |= (TBLMASK & t[group[i]]) << abits;
+            abits += t[group[i]] >> 12;
+        } while (++i < 11);
+        s.push(acc, abits);
+        acc = abits = 0;
+        do { // max 9 * 5 bits
+            acc |= (TBLMASK & t[group[i]]) << abits;
+            abits += t[group[i]] >> 12;
+        } while (++i < 16);
+        s.push(acc, abits);
     }
     // Computed encoding, slower, works for rung > 1
     else if (1 < sizeof(T)) { // This vanishes in 8 bit mode
