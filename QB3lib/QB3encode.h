@@ -195,13 +195,13 @@ static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t 
         } while (++i < 6);
         s.push(acc, abits);
         acc = abits = 0;
-        do { // max 9 * 5 bits
+        do { // max 9 * 6 bits
             acc |= (TBLMASK & t[group[i]]) << abits;
             abits += t[group[i]] >> 12;
-        } while (++i < 11);
+        } while (++i < 12);
         s.push(acc, abits);
         acc = abits = 0;
-        do { // max 9 * 5 bits
+        do { // max 9 * 4 bits
             acc |= (TBLMASK & t[group[i]]) << abits;
             abits += t[group[i]] >> 12;
         } while (++i < 16);
