@@ -47,20 +47,20 @@ enum qb3_mode {
     QB3M_BEST = 7,
 
     // original z-curve
-    QB3M_BASE_Z = 0, // Base QB3 with z-curve parsing order
+    QB3M_BASE_Z = 0, // Base
     QB3M_CF = 1, // With common factor
     QB3M_RLE = 2, // BASE + RLE
     QB3M_CF_RLE = 3, // BASE + CF + RLE
 
     // better, with Hilbert curve
-    QB3M_BASE_H = 4, // Base QB3
-    QB3M_CF_H = 5, // QB3 Hilbert + CF
-    QB3M_RLE_H = 6, // QB3 Hilbert + RLE
-    QB3M_CF_RLE_H = 7, // QB3 Hilbert + CF + RLE
+    QB3M_BASE_H = 4, // Hilbert
+    QB3M_CF_H = 5, // Hilbert + CF
+    QB3M_RLE_H = 6, // Hilbert + RLE
+    QB3M_CF_RLE_H = 7, // Hilbert + CF + RLE
 
     // Faster and only slightly worse than base in many cases
     // Hilbert curve but no bit-step, no CF, no RLE
-    QB3M_FTL = 8,
+    QB3M_FTL = 8, // Fastest, Hilbert
     QB3M_END, // Marks the end of the settable modes
 
     QB3M_STORED = 255, // Raw bypass, can't be requested
@@ -83,7 +83,8 @@ LIBQB3_EXPORT encsp qb3_create_encoder(size_t width, size_t height, size_t bands
 // Call when done with the encoder
 LIBQB3_EXPORT void qb3_destroy_encoder(encsp p);
 
-// Reset state, allowing encoder to be reused
+// Reset compression state, allowing encoder to be reused
+// All settings are preserved
 LIBQB3_EXPORT void qb3_reset_encoder(encsp p);
 
 // Change the default core band mapping.

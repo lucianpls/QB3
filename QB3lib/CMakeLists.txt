@@ -9,7 +9,7 @@ endif(NOT CMAKE_BUILD_TYPE)
 
 project(libQB3 
     DESCRIPTION "QB3 Raster Compression Library"
-    VERSION 1.2.0
+    VERSION 1.2.1
     LANGUAGES CXX
 )
 

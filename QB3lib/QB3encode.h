@@ -1,7 +1,7 @@
 /*
 Content: QB3 encoding
 
-Copyright 2020-2024 Esri
+Copyright 2020-2025 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -368,7 +368,7 @@ static int encode_fast(const T* image, oBits& s, encs &info)
         order = HILBERT;
     size_t offset[B2] = {};
     for (size_t i = 0; i < B2; i++) {
-        // Pick up one nibbles, in top to bottom order
+        // nibbles, in top to bottom order
         size_t n = (order >> ((B2 - 1 - i) << 2));
         offset[i] = (xsize * ((n >> 2) & 0b11) + (n & 0b11)) * bands;
     }

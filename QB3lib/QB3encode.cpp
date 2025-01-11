@@ -1,7 +1,7 @@
 /*
 Content: C API QB3 encoding
 
-Copyright 2021-2024 Esri
+Copyright 2021-2025 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -39,25 +39,21 @@ encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt
     p->away = false; // Round to zero
     p->mode = QB3M_DEFAULT; // Fast
     // Start with no inter-band differential
-    for (size_t c = 0; c < bands; c++) {
-        p->band[c].runbits = 0;
-        p->band[c].prev = 0;
-        p->band[c].cf = 0;
+    for (size_t c = 0; c < bands; c++)
         p->cband[c] = static_cast<uint8_t>(c);
-    }
     // For 3 or 4 bands we assume RGB(A) input and use R-G and B-G
     if (bands == 3 || bands == 4)
         p->cband[0] = p->cband[2] = 1;
-    p->error = 0;
+    qb3_reset_encoder(p);
     return p;
 }
 
 void qb3_reset_encoder(encsp p) {
     for (size_t c = 0; c < p->nbands; c++) {
-        p->band[c].runbits = 0;
-        p->band[c].prev = 0;
-        p->band[c].cf = 0;
-        p->cband[c] = static_cast<uint8_t>(c);
+        auto band = p->band + c;
+        band->runbits = 0;
+        band->prev = 0;
+        band->cf = 0;
     }
     p->error = 0;
 }
