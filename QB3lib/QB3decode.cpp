@@ -1,7 +1,7 @@
 /*
 Content: C API QB3 decoding
 
-Copyright 2021-2024 Esri
+Copyright 2021-2025 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -348,6 +348,12 @@ static size_t qb3_decode(decsp p, void* source, size_t src_sz, void* destination
     if (needs_rle(p->mode)) {
         // RLE needs to be decoded into a temporary buffer
         auto sz = deRLE0FFFFSize(src, src_sz);
+        // Abort if the size is larger than the raw data
+        // This is a sanity check, preventing malicious input
+        if (sz > qb3_decoded_size(p)) {
+            p->error = QB3E_ERR;
+            return 0;
+        }
         buffer.resize(sz);
         auto err = deRLE0FFFF(src, src_sz, buffer.data(), sz);
         if (err != 0) {
