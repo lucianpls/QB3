@@ -204,7 +204,7 @@ static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t 
         do { // max 9 * 4 bits
             acc |= (TBLMASK & t[group[i]]) << abits;
             abits += t[group[i]] >> 12;
-        } while (++i < 16);
+        } while (++i < B2);
         s.push(acc, abits);
     }
     // Computed encoding, slower, works for rung > 1

@@ -136,16 +136,12 @@ static std::pair<size_t, uint64_t> qb3dsztbl(uint64_t val, size_t rung) {
 }
 
 // Decode a B2 sized group of QB3 values from s and acc
-// Accumulator should be valid and have at least 56 valid bits
-// For rung 0, it works with 17bits or more
-// For rung 1, it works with 47bits or more
+// At least 56 valid bits in accumulator
 // returns false on failure
 template<bool applystep = true, typename T>
 static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits) {
-    assert(((rung > 1) && (abits <= 8))
-        || ((rung == 1) && (abits <= 17)) // B2 + 1
-        || ((rung == 0) && (abits <= 47))); // 3 * B2 - 1
-    if (0 == rung) { // single bits, direct decoding
+    assert((rung > 1) && (abits <= 8));
+    if (0 == rung) { // single bits, immediate decoding
         if (0 != (acc & 1)) {
             abits += B2;
             for (size_t i = 0; i < B2; i++) {
@@ -222,21 +218,36 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             }
             s.advance(abits);
         }
-        else { // Last part of table decoding, rungs 6-7, four values per accumulator
+        else { // Last part of table decoding, rungs 6-7
             auto drg = DRG[rung];
             const auto m = (1ull << (rung + 2)) - 1;
-            for (size_t j = 0; j < B2; j += B2 / 4) {
-                for (size_t i = 0; i < B2 / 4; i++) {
-                    auto v = drg[acc & m];
-                    group[j + i] = static_cast<T>(v & TBLMASK);
-                    abits += v >> 12;
-                    acc >>= v >> 12;
-                }
-                s.advance(abits);
-                abits = 0;
-                if (j <= B2 / 2) // Skip the last peek
-                    acc = s.peek();
-            }
+            // Three total reads, 6 4 6
+            int i = 0;
+            do {
+                auto v = drg[acc & m];
+                group[i] = T(v & TBLMASK);
+                abits += v >> 12;
+                acc >>= v >> 12;
+            } while (++i < 6);
+            s.advance(abits);
+            acc = s.peek();
+            abits = 0;
+            do {
+                auto v = drg[acc & m];
+                group[i] = T(v & TBLMASK);
+                abits += v >> 12;
+                acc >>= v >> 12;
+            } while (++i < 10);
+            s.advance(abits);
+            acc = s.peek();
+            abits = 0;
+            do {
+                auto v = drg[acc & m];
+                group[i] = T(v & TBLMASK);
+                abits += v >> 12;
+                acc >>= v >> 12;
+            } while (++i < B2);
+            s.advance(abits);
         }
     }
     else { // computed decoding

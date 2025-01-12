@@ -58,7 +58,7 @@ enum qb3_mode {
     QB3M_RLE_H = 6, // Hilbert + RLE
     QB3M_CF_RLE_H = 7, // Hilbert + CF + RLE
 
-    // Faster and only slightly worse than base in many cases
+    // Faster and only slightly worse than base
     // Hilbert curve but no bit-step, no CF, no RLE
     QB3M_FTL = 8, // Fastest, Hilbert
     QB3M_END, // Marks the end of the settable modes
@@ -72,7 +72,7 @@ enum qb3_error {
     QB3E_OK = 0,
     QB3E_EINV, // Invalid parameter
     QB3E_UNKN, // Unknown
-    QB3E_ERR,   // unspecified error
+    QB3E_ERR,  // unspecified error
     QB3E_LIBERR = 255 // internal QB3 error, should not happen
 };
 
