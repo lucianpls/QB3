@@ -15,7 +15,6 @@ limitations under the License.
 Contributors:  Lucian Plesea
 */
 
-#pragma once
 #include <cinttypes>
 #include <cassert>
 #include <type_traits>
@@ -59,12 +58,11 @@ public:
 
 private:
     const uint8_t* v;
-    // In bits
     const size_t len; // in bits, multiple of 8
-    size_t bitp; // read position
+    size_t bitp; // current bit position
 };
 
-// Output bitstream, doesn't check the output buffer size
+// Output bitstream, assumes enough space
 class oBits {
 public:
     oBits(uint8_t * data) : v(data), bitp(0) {}
@@ -72,14 +70,14 @@ public:
     // Number of bits written
     size_t position() const { return bitp; }
 
-    // Rewind to a bit position before the current one
+    // Rewind to a position before the current one
     size_t rewind(size_t pos = 0) {
-        if (pos < position()) { // Don't go past the current end
+        if (pos < bitp) { // Don't go past the current end
             bitp = pos;
-            if (bitp & 7) // clear partial bits in the last byte
-                v[bitp / 8] &= 0xff >> (8 - (bitp & 7));
+            if (pos & 7) // clear partial bits in the last byte
+                v[pos / 8] &= 0xff >> (8 - (pos & 7));
         }
-        return position();
+        return pos;
     }
 
     // Do not call with val having bits above "nbits" set, the results will be corrupt
@@ -101,9 +99,9 @@ public:
     template<typename T> void push(std::pair<size_t, T> p) { push(p.second, p.first); }
 
     // Append content from other output bitstream
-    oBits& operator+=(const oBits&other) {
+    oBits& operator+=(const oBits& other) {
         auto len = other.bitp;
-        for(auto pv = reinterpret_cast<uint64_t *>(other.v); len >= 64; len -= 64, pv++)
+        for (auto pv = reinterpret_cast<uint64_t*>(other.v); len >= 64; len -= 64, pv++)
             push(*pv, 64);
         // bits at the end
         if (len) {
