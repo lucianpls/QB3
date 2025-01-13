@@ -173,7 +173,7 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
         else if (2 == rung) { // max symbol len is 4, there are at least 14 in the accumulator
             // Use inline constants as nibble tables
             // Faster than a double value table decode, but only in this specific code organization
-            // Cleaning it up, for example doing a peek at the start then looping 16 times, makes it slower
+            // Cleaning it up, for example doing a peek at the start then looping 16 times makes it slower
             // The masks and inline constants could be smaller for size, but that eliminates the
             // common expression, making it slower
             // pre-shift accumulator, top 2 bits are not needed
@@ -203,7 +203,7 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             const auto m = (1ull << (rung + 2)) - 1;
             for (size_t i = 0; i < B2 / 2; i++) {
                 auto v = drg[acc & m];
-                group[i] = static_cast<T>(v & TBLMASK);
+                group[i] = T(v & TBLMASK);
                 abits += v >> 12;
                 acc >>= v >> 12;
             }
@@ -212,7 +212,7 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             abits = 0;
             for (size_t i = B2 / 2; i < B2; i++) {
                 auto v = drg[acc & m];
-                group[i] = static_cast<T>(v & TBLMASK);
+                group[i] = T(v & TBLMASK);
                 abits += v >> 12;
                 acc >>= v >> 12;
             }
@@ -261,7 +261,7 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
                 auto p = qb3dsz(acc, rung);
                 abits += p.first;
                 acc >>= p.first;
-                group[i] = static_cast<T>(p.second);
+                group[i] = T(p.second);
             }
             s.advance(abits);
         }
@@ -269,7 +269,7 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             s.advance(abits);
             for (int i = 0; i < B2; i++) {
                 auto p = qb3dsz(s.peek(), rung);
-                group[i] = static_cast<T>(p.second);
+                group[i] = T(p.second);
                 s.advance(p.first);
             }
         }
@@ -278,7 +278,7 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             for (int i = 0; i < B2; i++) {
                 auto p = qb3dsz(s.peek(), rung);
                 auto ovf = p.first & (p.first >> 6);
-                group[i] = static_cast<T>(p.second);
+                group[i] = T(p.second);
                 s.advance(p.first ^ ovf);
                 if (ovf) // The next to top bit got dropped, rare
                     group[i] |= s.get() << 62;
@@ -289,7 +289,7 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
     if (applystep && (0 == (group[B2 - 1] >> rung))) {
         auto stepp = step(group, rung);
         if (stepp < B2)
-            group[stepp] ^= static_cast<T>(1ull << rung);
+            group[stepp] ^= T(1ull << rung);
     }
     return true;
 }
