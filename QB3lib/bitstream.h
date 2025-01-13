@@ -34,12 +34,12 @@ public:
     size_t position() const { return bitp; }
 
     // Single bit fetch
-    uint64_t get() {
-        if (empty()) return 0; // Don't go past the end
-        uint64_t val = static_cast<uint64_t>((v[bitp / 8] >> (bitp % 8)) & 1);
-        bitp++;
-        return val;
-    }
+    //uint64_t get() {
+    //    if (empty()) return 0; // Don't go past the end
+    //    uint64_t val = static_cast<uint64_t>((v[bitp / 8] >> (bitp % 8)) & 1);
+    //    bitp++;
+    //    return val;
+    //}
 
     // Advance read position by d bits
     void advance(size_t d) { bitp = (bitp + d < len) ? (bitp + d) : len; }
@@ -60,7 +60,6 @@ public:
 
     // Not very efficient for small number of bits
     uint64_t pull(size_t bits = 1) {
-        assert(bits && bits <= 64 && !empty());
         uint64_t val = peek() & (~0ull >> (64 - bits));
         advance(bits);
         return val;

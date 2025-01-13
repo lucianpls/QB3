@@ -281,7 +281,7 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
                 group[i] = T(p.second);
                 s.advance(p.first ^ ovf);
                 if (ovf) // The next to top bit got dropped, rare
-                    group[i] |= s.get() << 62;
+                    group[i] |= s.pull() << 62;
             }
         }
     }
