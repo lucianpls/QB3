@@ -189,7 +189,7 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
                 abits += size;
                 acc >>= size;
             }
-            if (abits > 56) { // Rare, max is 60, there are still 2 safe bits
+            if (abits > 54) { // Rare, max is 60, need 8 + 2 bits
                 s.advance(abits - 2);
                 acc = s.peek();
                 abits = 2;
