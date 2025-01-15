@@ -140,7 +140,9 @@ static std::pair<size_t, uint64_t> qb3dsztbl(uint64_t val, size_t rung) {
 // returns false on failure
 template<bool applystep = true, typename T>
 static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits) {
-    assert((rung > 1) && (abits <= 8));
+    assert(((rung > 1) && (abits <= 8))
+        || ((rung == 1) && (abits <= 17)) // B2 + 1
+        || ((rung == 0) && (abits <= 47))); // 3 * B2 - 1
     if (0 == rung) { // single bits, immediate decoding
         if (0 != (acc & 1)) {
             abits += B2;
@@ -185,7 +187,7 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
                 abits += size;
                 acc >>= size;
             }
-            if (abits > 56) { // Rare, max is 60, there are still 2 safe bits
+            if (abits > 54) { // Rare, need 8 bits + 2 from the shift
                 s.advance(abits - 2);
                 acc = s.peek();
                 abits = 2;
