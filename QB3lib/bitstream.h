@@ -77,7 +77,7 @@ public:
             if (pos & 7) // clear partial bits in the last byte
                 v[pos / 8] &= 0xff >> (8 - (pos & 7));
         }
-        return pos;
+        return bitp; // final position
     }
 
     // Do not call with val having bits above "nbits" set, the results will be corrupt
