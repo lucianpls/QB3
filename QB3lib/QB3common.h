@@ -131,6 +131,11 @@ struct decs {
 // in decode.cpp
 extern const int typesizes[8];
 
+// Could be a macro
+static size_t szof(qb3_dtype dt) {
+    return (dt > QB3_I64) ? 0 : typesizes[int(dt)];
+}
+
 // Encode integers as magnitude and sign, with bit 0 for sign.
 // This encoding has the top bits always zero, regardless of sign
 // To keep the range the same as two's complement, the magnitude of 

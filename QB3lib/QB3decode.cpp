@@ -35,7 +35,7 @@ void qb3_destroy_decoder(decsp p) {
 }
 
 size_t qb3_decoded_size(const decsp p) {
-    return p->xsize * p->ysize * p->nbands * typesizes[static_cast<int>(p->type)];
+    return p->xsize * p->ysize * p->nbands * szof(p->type);
 }
 
 qb3_dtype qb3_get_type(const decsp p) {

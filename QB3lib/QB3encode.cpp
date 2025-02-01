@@ -120,7 +120,7 @@ size_t qb3_max_encoded_size(const encsp p) {
     // Pad to 4 x 4
     size_t nvalues = 16 * ((p->xsize + 3) / 4) * ((p->ysize + 3) / 4) * p->nbands;
     // Maximum expansion is under 17/16 bits per input value, for large number of values
-    double bits_per_value = 17.0 / 16.0 + typesizes[static_cast<int>(p->type)] * 8;
+    double bits_per_value = 17.0 / 16.0 + 8 * szof(p->type);
     return 1024 + static_cast<size_t>(bits_per_value * nvalues / 8);
 }
 
