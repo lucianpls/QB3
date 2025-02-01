@@ -36,11 +36,6 @@ endif()
 if (${QB3_DEV})
     add_executable(test_qb3 test_qb3.cpp)
     find_package(libicd CONFIG REQUIRED)
-
-    # On AMD64 uncomment to use avx2 -> faster code
-    # target_compile_options(cqb3 PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/arch:AVX2>)
-    # target_compile_options(cqb3 PRIVATE $<$<CXX_COMPILER_ID:GNU>:-mavx2>)
-
     target_link_libraries(test_qb3 PRIVATE AHTSE::libicd libQB3)
     install(TARGETS test_qb3)
 endif()

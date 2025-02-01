@@ -1,7 +1,7 @@
 /*
 Content: Public API for QB3 library
 
-Copyright 2021-2024 Esri
+Copyright 2021-2025 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -21,13 +21,16 @@ Contributors:  Lucian Plesea
 // For uint64_t
 #include <stdint.h>
 
-// CMake will generate LIBQB3_EXPORT linkage as needed
-#include "libqb3_export.h"
+// Defined when building the library
+#if !defined(LIBQB3_EXPORT)
+#define LIBQB3_EXPORT
+#endif
 
 // Keep this close to plain C so it can have a C API
 #if defined(__cplusplus)
 extern "C" {
 #endif
+// Max number of bands supported by library <= 256
 #define QB3_MAXBANDS 16
 
 typedef struct encs * encsp; // encoder
@@ -46,21 +49,20 @@ enum qb3_mode {
     QB3M_BASE = 4,
     QB3M_BEST = 7,
 
-    // original z-curve
-    QB3M_BASE_Z = 0, // Base
-    QB3M_CF = 1, // With common factor
-    QB3M_RLE = 2, // BASE + RLE
-    QB3M_CF_RLE = 3, // BASE + CF + RLE
+    // Legacy z-curve
+    QB3M_BASE_Z = 0, // Legacy base
+    QB3M_CF = 1, //  + common factor
+    QB3M_RLE = 2, // + RLE
+    QB3M_CF_RLE = 3, // + CF + RLE
 
     // better, with Hilbert curve
-    QB3M_BASE_H = 4, // Hilbert
+    QB3M_BASE_H = 4, // Hilbert base
     QB3M_CF_H = 5, // Hilbert + CF
     QB3M_RLE_H = 6, // Hilbert + RLE
     QB3M_CF_RLE_H = 7, // Hilbert + CF + RLE
 
     // Faster and only slightly worse than base
-    // Hilbert curve but no bit-step, no CF, no RLE
-    QB3M_FTL = 8, // Fastest, Hilbert
+    QB3M_FTL = 8, // Fastest, Hilbert base - step
     QB3M_END, // Marks the end of the settable modes
 
     QB3M_STORED = 255, // Raw bypass, can't be requested

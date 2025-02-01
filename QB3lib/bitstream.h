@@ -29,7 +29,7 @@ public:
     // informational
     size_t avail() const { return len - bitp; }
     bool empty() const { return avail() == 0; }
-    // read position in bits
+    // read bit position
     size_t position() const { return bitp; }
 
     // Advance read position by d bits
@@ -72,15 +72,15 @@ public:
 
     // Rewind to a position before the current one
     size_t rewind(size_t pos = 0) {
-        if (pos < bitp) { // Don't go past the current end
+        if (pos < bitp) { // Only backward
             bitp = pos;
-            if (pos & 7) // clear partial bits in the last byte
+            if (pos & 7) // clear last byte partial bits
                 v[pos / 8] &= 0xff >> (8 - (pos & 7));
         }
         return bitp; // final position
     }
 
-    // Do not call with val having bits above "nbits" set, the results will be corrupt
+    // Do not call with val having bits above "nbits" set
     template<typename T>
     void push(T val, size_t nbits) {
         static_assert(std::is_integral<T>::value && std::is_unsigned<T>::value,

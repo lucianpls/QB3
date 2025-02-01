@@ -23,9 +23,9 @@ Contributors:  Lucian Plesea
 
 // Main header
 // 4 sig
-// 2 xsize
-// 2 ysize
-// 1 nbands
+// 2 xmax
+// 2 ymax
+// 1 bandmax
 // 1 data type
 // 1 mode
 constexpr size_t QB3_HDRSZ = 4 + 2 + 2 + 1 + 1 + 1;
