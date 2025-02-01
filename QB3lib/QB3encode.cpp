@@ -158,7 +158,7 @@ T rounddiv_away(T n, T d) {
 
 // Quantize source, in place. T may be signed, q is positive
 template<typename T> static
-bool quantize(T* source, oBits& , encs& p) {
+bool quantize(T* source, encs& p) {
     size_t nV = p.xsize * p.ysize * p.nbands; // Number of values
     T q = static_cast<T>(p.quanta);
     // Optimized versions have to preserve the sign of the input
@@ -439,7 +439,7 @@ template<typename T> static int enc(const T *source, oBits &s, encsp p)
     auto src = reinterpret_cast<const uint8_t*>(source);
 
 #define QENC(T)\
-    quantize(reinterpret_cast<T *>(buffer.data()), s, subimg);\
+    quantize(reinterpret_cast<T *>(buffer.data()), subimg);\
     if (is_fast(subimg.mode))\
         error = QB3::encode_fast(\
             reinterpret_cast<std::make_unsigned<T>::type *>(buffer.data()), s, subimg);\
