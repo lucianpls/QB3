@@ -140,7 +140,7 @@ LIBQB3_EXPORT size_t qb3_decoded_size(const decsp p);
 
 LIBQB3_EXPORT qb3_dtype qb3_get_type(const decsp p);
 
-// Set line to line to line stride for decoder, defaults to line size
+// Set line to line to line stride for decoder, in dtype units, defaults to xsize * nbands
 LIBQB3_EXPORT void qb3_set_decoder_stride(decsp p, size_t stride);
 
 // Query settings, valid after qb3_read_info

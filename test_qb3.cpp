@@ -169,7 +169,9 @@ void check(vector<uint8_t> &image, const Raster &raster,
 
 // check stride decoding
 template<typename T>
-void check(vector<uint8_t>& image, const Raster& raster, size_t stride, bool fast = 0, uint64_t q = 0) {
+void check_stride_decoding(vector<uint8_t>& image, const Raster& raster, 
+        size_t stride, bool fast = 0, uint64_t q = 0)
+{
 
     if (0 == stride)
         return check<T>(image, raster, 1, 0, fast, 1, false);
@@ -448,25 +450,26 @@ int main(int argc, char **argv)
 
             cout << "Size\tRatio %\tEnc (MB/s)\t(s)\tDec (MB/s)\t(s)\tT_Size\n\n";
 
-            //cout << "Stride ";
-            //check<uint8_t>(image, raster, raster.size.x * raster.size.c + 10, true);
-            //cout << endl << endl;
+            //cout << "Stride decode\n";
+            //check_stride_decoding<uint8_t>(image, raster, raster.size.x * raster.size.c + 10, true);
+            //cout << endl;
 
-            //cout << "Stride ";
-            //check<uint8_t>(image, raster, raster.size.x * raster.size.c + 11, true);
-            //cout << endl << endl;
+            //check_stride_decoding<int8_t>(image, raster, raster.size.x * raster.size.c + 10, true);
+            //cout << endl;
 
-            //cout << "Stride ";
-            //check<uint8_t>(image, raster, raster.size.x * raster.size.c + 90, false);
-            //cout << endl << endl;
+            //check_stride_decoding<uint16_t>(image, raster, raster.size.x * raster.size.c + 11, true);
+            //cout << endl;
 
-            //cout << "Stride ";
-            //check<uint8_t>(image, raster, raster.size.x * raster.size.c + 91, false);
-            //cout << endl << endl;
+            //check_stride_decoding<uint32_t>(image, raster, raster.size.x * raster.size.c + 90, false);
+            //cout << endl;
 
-            //cout << "Stride ";
-            //check<uint8_t>(image, raster, raster.size.x * raster.size.c + 92, false);
-            //cout << endl << endl;
+            //check_stride_decoding<uint64_t>(image, raster, raster.size.x * raster.size.c + 91, false);
+            //cout << endl;
+
+            //check_stride_decoding<int64_t>(image, raster, raster.size.x * raster.size.c + 92, false);
+            //cout << endl;
+
+            //cout << endl;
 
             // The sign really messes things up for normal images, because transitions through 128 are frequent
             // and become massive
@@ -489,8 +492,8 @@ int main(int argc, char **argv)
             cout << endl;
 
             // check stride, any value larger than sizex * sizec, same size as above
-            cout << "Stride and quanta \n3q  ";
-            check<uint8_t>(image, raster, raster.size.x* raster.size.c + 9, true, 3);
+            cout << "Stride decoding and quanta \n3q  ";
+            check_stride_decoding<uint8_t>(image, raster, raster.size.x* raster.size.c + 9, true, 3);
             cout << endl;
 
             cout << 4 << "q  ";
