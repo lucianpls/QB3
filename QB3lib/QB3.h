@@ -15,7 +15,7 @@ limitations under the License.
 Contributors:  Lucian Plesea
 */
 
-#pragma once
+#if !defined(QB3_H)
 // For size_t
 #include <stddef.h>
 // For uint64_t
@@ -109,8 +109,8 @@ LIBQB3_EXPORT size_t qb3_max_encoded_size(const encsp p);
 // If mode value is out of range, it returns the previous mode value of p
 LIBQB3_EXPORT qb3_mode qb3_set_encoder_mode(encsp p, qb3_mode mode);
 
-//// Generate raw qb3 stream, no headers
-//LIBQB3_EXPORT void qb3_set_encoder_raw(encsp p);
+// Set line to line stride, in dtype units, defaults to xsize * nbands
+LIBQB3_EXPORT void qb3_set_encoder_stride(encsp p, size_t stride);
 
 // Encode the source into destination buffer, which should be at least qb3_max_encoded_size
 // Source organization is expected to be y major, then x, then band (interleaved)
@@ -140,7 +140,7 @@ LIBQB3_EXPORT size_t qb3_decoded_size(const decsp p);
 
 LIBQB3_EXPORT qb3_dtype qb3_get_type(const decsp p);
 
-// Set line to line to line stride for decoder, in dtype units, defaults to xsize * nbands
+// Set line to line stride, in dtype units, defaults to xsize * nbands
 LIBQB3_EXPORT void qb3_set_decoder_stride(decsp p, size_t stride);
 
 // Query settings, valid after qb3_read_info
@@ -160,4 +160,5 @@ LIBQB3_EXPORT bool qb3_get_coreband(const decsp p, size_t *cband);
 #if defined(__cplusplus)
 }
 
+#endif
 #endif

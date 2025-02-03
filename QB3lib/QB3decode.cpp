@@ -21,8 +21,8 @@ Contributors:  Lucian Plesea
 #include <cstring>
 #include <vector>
 
-// Main header
-// 4 sig
+// Main QB3 file header
+// 4 signature
 // 2 xmax
 // 2 ymax
 // 1 bandmax
@@ -43,15 +43,11 @@ qb3_dtype qb3_get_type(const decsp p) {
 }
 
 qb3_mode qb3_get_mode(const decsp p) {
-    if (p->stage != 2)
-        return qb3_mode::QB3M_INVALID;
-    return p->mode;
+    return (2 == p->stage) ? p->mode : QB3M_INVALID;
 }
 
 uint64_t qb3_get_quanta(const decsp p) {
-    if (p->stage != 2)
-        return 0; // Error
-    return p->quanta;
+    return (2 == p->stage) ? p->quanta: 0;
 }
 
 uint64_t qb3_get_order(const decsp p) {

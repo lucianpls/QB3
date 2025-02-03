@@ -1,5 +1,5 @@
 /*
-Content: QB3 decoding
+Content: core QB3 decoding
 
 Copyright 2020-2025 Esri
 Licensed under the Apache License, Version 2.0 (the "License");

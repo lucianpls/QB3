@@ -30,10 +30,10 @@ encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt
         || dt > int(QB3_I64))
         return nullptr;
     auto p = new encs;
+    memset(p, 0, sizeof(encs));
     p->xsize = width;
     p->ysize = height;
     p->nbands = bands;
-    p->order = 0; // will get changed to HILBERT
     p->type = static_cast<qb3_dtype>(dt);
     p->quanta = 1; // No quantization
     p->away = false; // Round to zero
@@ -75,6 +75,10 @@ bool qb3_set_encoder_coreband(encsp p, size_t bands, size_t *cband) {
     for (size_t i = 0; i < bands; i++)
         cband[i] = p->cband[i];
     return true;
+}
+
+void qb3_set_encoder_stride(encsp p, size_t stride) {
+    p->stride = stride;
 }
 
 // Sets quantization parameters

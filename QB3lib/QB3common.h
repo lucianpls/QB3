@@ -89,6 +89,8 @@ struct encs {
     size_t xsize;
     size_t ysize;
     size_t nbands;
+    // Line to line stride in type units
+    size_t stride;
     // micro block scanning order
     uint64_t order;
     uint64_t quanta;
@@ -110,7 +112,7 @@ struct decs {
     size_t xsize;
     size_t ysize;
     size_t nbands;
-    // Line to line stride
+    // Line to line stride in type units
     size_t stride;
     // micro block scanning order
     uint64_t order;
