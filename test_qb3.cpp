@@ -499,11 +499,12 @@ int main(int argc, char **argv)
         // best core on my machine, up to 10% faster than first
         mask = 0x10000;
         // worst core on my machine
-        //mask = 0x30;
-        if (!SetThreadAffinityMask(thread, mask))
+        mask = 0x30;
+        if (!SetThreadAffinityMask(thread, mask)) {
             cerr << "Failed to set thread affinity, switching to first core\n";
-        mask = 0x3; // First core, either CPU
-        SetThreadAffinityMask(thread, mask);
+            mask = 0x3; // First core, either CPU
+            SetThreadAffinityMask(thread, mask);
+        }
         CloseHandle(thread);
     }
 #endif
