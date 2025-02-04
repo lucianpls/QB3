@@ -588,8 +588,21 @@ int main(int argc, char **argv)
 
             cout << "Stride encode\n";
 
+            // Check stride encode with a divider of 2
+            check_stride_encode<uint8_t>(image, raster, raster.size.x - 23,
+                false, 2);
+            cout << endl;
+
+            check_stride_encode<uint16_t>(image, raster, raster.size.x - 25,
+                false, 3);
+            cout << endl;
+
             // Make the line size smaller than the real image, 10 is arbitrary
             check_stride_encode<uint8_t>(image, raster, raster.size.x - 10);
+            cout << endl;
+
+            // Make the line size smaller than the real image
+            check_stride_encode<uint32_t>(image, raster, raster.size.x - 20);
             cout << endl;
 
             // The sign really messes things up for normal images, because transitions through 128 are frequent

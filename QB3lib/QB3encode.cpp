@@ -436,10 +436,18 @@ template<typename T> static int enc(const T *source, oBits &s, encsp p)
     encs subimg(*p);
     subimg.ysize = B;
     auto ysz(p->ysize);
-    // In bytes
+
+    // In bytes, input line size
     auto linesize = p->xsize * p->nbands * typesizes[p->type];
+    auto stride = linesize; // Default stride
+    // Compact the subimage if the linesize is different
+    if (p->stride != 0 && p->stride * typesizes[p->type] != stride)
+    {
+        subimg.stride = 0; // No stride in the subimage
+        stride = p->stride * typesizes[p->type];
+    }
     // Temporary data buffer for a single strip
-    std::vector<uint8_t> buffer(linesize * subimg.ysize);
+    std::vector<uint8_t> buffer(raw_size(p));
     auto src = reinterpret_cast<const uint8_t*>(source);
 
 #define QENC(T)\
@@ -452,10 +460,13 @@ template<typename T> static int enc(const T *source, oBits &s, encsp p)
             reinterpret_cast<std::make_unsigned<T>::type *>(buffer.data()), s, subimg);
 
     for (size_t y = 0; y < ysz; y += subimg.ysize) {
-        // Shift the last strip up to handle the edge
+        // Shift the last strip up to handle the unaligned edge
         if (y + subimg.ysize > ysz)
-            src -= linesize * (y + subimg.ysize - ysz);
-        memcpy(buffer.data(), src, buffer.size());
+            src -= stride * (y + subimg.ysize - ysz);
+        // Copy the strip
+        for (size_t i = 0; i < subimg.ysize; i++)
+            memcpy(buffer.data() + i * linesize, src + i * stride, linesize);
+
         switch (p->type) {
         case qb3_dtype::QB3_U8:  QENC(uint8_t);  break;
         case qb3_dtype::QB3_I8:  QENC(int8_t);   break;
@@ -467,7 +478,7 @@ template<typename T> static int enc(const T *source, oBits &s, encsp p)
         case qb3_dtype::QB3_I64: QENC(int64_t);  break;
         default: return QB3E_EINV;
         }
-        src += linesize * subimg.ysize;
+        src += stride * subimg.ysize;
     }
 
 #undef QENC
