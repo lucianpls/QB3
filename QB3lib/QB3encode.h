@@ -383,7 +383,7 @@ static int encode_fast(const T* image, oBits& s, encs &info)
             // If the last column is partial, move it left
             if (x + B > xsize)
                 x = xsize - B;                
-            const size_t loc = (y * xsize + x) * bands; // Top-left pixel address
+            const size_t loc = y * stride + x * bands; // Top-left pixel address
             for (size_t c = 0; c < bands; c++) { // blocks are band interleaved
                 T bitsused(0); // Bits used within this group
                 // Collect the block for this band, convert to running delta mag-sign
