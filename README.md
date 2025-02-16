@@ -49,8 +49,9 @@ adds a file interchange format.
 # Change Log
 
 ## Version 1.3
-- Bug fixes, more comprehensive testing
+- Bug fixes, performance improvements, more comprehensive testing
 - Stride encoding, matching stride decoding
+- QB3.h is the only public header
 
 ## Version 1.2.1
 - Bug fix, decoding of best mode could fail for 32 and 64 bit integers, due to
