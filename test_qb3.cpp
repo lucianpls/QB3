@@ -167,9 +167,124 @@ void check(vector<uint8_t> &image, const Raster &raster,
     }
 }
 
+template<typename T>
+void check_stride_encode(vector<uint8_t>& image, const Raster& raster, 
+    size_t width, bool fast = 0, uint64_t q = 0)
+{
+    size_t bands = raster.size.c;
+    size_t xsize = raster.size.x;
+    size_t ysize = raster.size.y;
+
+    // Verify that the stride is less than xsize
+    if (width >= xsize) {
+        cerr << "New width is too large\n";
+        return;
+    }
+
+    high_resolution_clock::time_point t1, t2;
+    double time_span;
+
+    // Operate on a copy of the vector
+    auto img = to(image, static_cast<T>(1));
+
+    qb3_dtype tp(QB3_U8);
+    if (is_signed<T>()) {
+        tp = sizeof(T) == 8 ? qb3_dtype::QB3_I64 : sizeof(T) == 4 ? qb3_dtype::QB3_I32 :
+            sizeof(T) == 2 ? qb3_dtype::QB3_I16 : qb3_dtype::QB3_I8;
+    }
+    else {
+        tp = sizeof(T) == 8 ? qb3_dtype::QB3_U64 : sizeof(T) == 4 ? qb3_dtype::QB3_U32 :
+            sizeof(T) == 2 ? qb3_dtype::QB3_U16 : qb3_dtype::QB3_U8;
+    }
+
+    // Encode only the given width
+    auto qenc = qb3_create_encoder(width, ysize, bands, tp);
+    qb3_set_encoder_mode(qenc, fast ? qb3_mode::QB3M_BASE : qb3_mode::QB3M_BEST);
+    vector<uint8_t> outvec(qb3_max_encoded_size(qenc));
+    if (q > 1)
+        qb3_set_encoder_quanta(qenc, q, 0);
+    // Use the real image width as line stride
+    qb3_set_encoder_stride(qenc, xsize * bands);
+
+    t1 = high_resolution_clock::now();
+    auto outsize = qb3_encode(qenc, static_cast<void*>(img.data()), outvec.data());
+    time_span = duration_cast<duration<double>>(high_resolution_clock::now() - t1).count();
+    auto err = qb3_get_encoder_state(qenc);
+    qb3_destroy_encoder(qenc);
+    qenc = nullptr;
+
+    cout << outsize << '\t' << outsize * 100.0 / img.size() / sizeof(T)
+        << '\t' << img.size() * sizeof(T) / time_span / 1024 / 1024
+        << '\t' << time_span << '\t';
+    if (err)
+        cout << "\nFailed\n";
+
+    // decode
+    std::vector<T> re(width * ysize * bands, 0);
+    decsp qdec = nullptr;
+    try {
+        size_t image_size[3]; // Space for output values
+        qdec = qb3_read_start(outvec.data(), outsize, image_size);
+        if (!qdec)
+            throw "Can't read qb3 formatted stream header";
+        // Check the size
+        if (width != image_size[0] || ysize != image_size[1] || bands != image_size[2])
+            throw "Wrong decoded size";
+        if (!qb3_read_info(qdec))
+            throw "Reading QB3 headers failed";
+
+        t1 = high_resolution_clock::now();
+        if (!qb3_read_data(qdec, re.data()))
+            throw "Reading QB3 data failed";
+        t2 = high_resolution_clock::now();
+    }
+    catch (const char* error) {
+        cerr << "Error: " << error << endl;
+    }
+    qb3_destroy_decoder(qdec);
+
+    time_span = duration_cast<duration<double>>(t2 - t1).count();
+    auto img_size = sizeof(T) * width * ysize * bands;
+    cout << img_size / time_span / 1024 / 1024 << '\t'
+        << time_span << '\t' << sizeof(T) << '\t' << 1 << '\t';
+    if (fast)
+        cout << "Fast";
+
+    // verify that the stride was respected
+    bool failed = false;
+    auto hq = T(q / 2); // precision
+    for (size_t y = 0; !failed && y < ysize; y++) {
+        auto src = img.data() + xsize * bands * y;
+        auto dst = re.data() + width * bands * y;
+        for (size_t x = 0; x < width * bands; x++)
+            if (q > 1) {
+                auto s = src[x];
+                auto d = dst[x];
+                if (!((s == d) || ((s > d) && (d + hq >= s)) || ((s < d) && (s + hq >= d)))) {
+                    cout << endl << "Difference at line " << y << " column " 
+                        << x / bands << " c " << x % bands
+                        << ", expect " << hex << uint64_t(s) << " != " << uint64_t(d) << dec;
+                    failed = true;
+                    break;
+                }
+            }
+            else {
+                if (src[x] != dst[x]) {
+                    cout << endl << "Difference at line " << y << " column " 
+                        << x / bands << " c " << x % bands
+                        << ", expect " << hex << uint64_t(src[x]) << " got " << uint64_t(dst[x]) << dec;
+                    failed = true;
+                    break;
+                }
+            }
+    }
+}
+
 // check stride decoding
 template<typename T>
-void check(vector<uint8_t>& image, const Raster& raster, size_t stride, bool fast = 0, uint64_t q = 0) {
+void check_stride_decode(vector<uint8_t>& image, const Raster& raster, 
+        size_t stride, bool fast = 0, uint64_t q = 0)
+{
 
     if (0 == stride)
         return check<T>(image, raster, 1, 0, fast, 1, false);
@@ -384,9 +499,12 @@ int main(int argc, char **argv)
         // best core on my machine, up to 10% faster than first
         mask = 0x10000;
         // worst core on my machine
-        //mask = 0x30;
-        if (!SetThreadAffinityMask(thread, mask))
-            cerr << "Failed to set thread affinity\n";
+        mask = 0x30;
+        if (!SetThreadAffinityMask(thread, mask)) {
+            cerr << "Failed to set thread affinity, switching to first core\n";
+            mask = 0x3; // First core, either CPU
+            SetThreadAffinityMask(thread, mask);
+        }
         CloseHandle(thread);
     }
 #endif
@@ -448,25 +566,45 @@ int main(int argc, char **argv)
 
             cout << "Size\tRatio %\tEnc (MB/s)\t(s)\tDec (MB/s)\t(s)\tT_Size\n\n";
 
-            //cout << "Stride ";
-            //check<uint8_t>(image, raster, raster.size.x * raster.size.c + 10, true);
-            //cout << endl << endl;
+            //cout << "Stride decode\n";
+            //check_stride_decode<uint8_t>(image, raster, raster.size.x * raster.size.c + 10, true);
+            //cout << endl;
 
-            //cout << "Stride ";
-            //check<uint8_t>(image, raster, raster.size.x * raster.size.c + 11, true);
-            //cout << endl << endl;
+            //check_stride_decode<int8_t>(image, raster, raster.size.x * raster.size.c + 10, true);
+            //cout << endl;
 
-            //cout << "Stride ";
-            //check<uint8_t>(image, raster, raster.size.x * raster.size.c + 90, false);
-            //cout << endl << endl;
+            //check_stride_decode<uint16_t>(image, raster, raster.size.x * raster.size.c + 11, true);
+            //cout << endl;
 
-            //cout << "Stride ";
-            //check<uint8_t>(image, raster, raster.size.x * raster.size.c + 91, false);
-            //cout << endl << endl;
+            //check_stride_decode<uint32_t>(image, raster, raster.size.x * raster.size.c + 90, false);
+            //cout << endl;
 
-            //cout << "Stride ";
-            //check<uint8_t>(image, raster, raster.size.x * raster.size.c + 92, false);
-            //cout << endl << endl;
+            //check_stride_decode<uint64_t>(image, raster, raster.size.x * raster.size.c + 91, false);
+            //cout << endl;
+
+            //check_stride_decode<int64_t>(image, raster, raster.size.x * raster.size.c + 92, false);
+            //cout << endl;
+
+            //cout << endl;
+
+            cout << "Stride encode\n";
+
+            // Check stride encode with a divider of 2
+            check_stride_encode<uint8_t>(image, raster, raster.size.x - 23,
+                false, 2);
+            cout << endl;
+
+            check_stride_encode<uint16_t>(image, raster, raster.size.x - 25,
+                false, 3);
+            cout << endl;
+
+            // Make the line size smaller than the real image, 10 is arbitrary
+            check_stride_encode<uint8_t>(image, raster, raster.size.x - 10);
+            cout << endl;
+
+            // Make the line size smaller than the real image
+            check_stride_encode<uint32_t>(image, raster, raster.size.x - 20);
+            cout << endl;
 
             // The sign really messes things up for normal images, because transitions through 128 are frequent
             // and become massive
@@ -489,8 +627,8 @@ int main(int argc, char **argv)
             cout << endl;
 
             // check stride, any value larger than sizex * sizec, same size as above
-            cout << "Stride and quanta \n3q  ";
-            check<uint8_t>(image, raster, raster.size.x* raster.size.c + 9, true, 3);
+            cout << "Stride decoding and quanta \n3q  ";
+            check_stride_decode<uint8_t>(image, raster, raster.size.x* raster.size.c + 9, true, 3);
             cout << endl;
 
             cout << 4 << "q  ";

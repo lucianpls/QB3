@@ -64,7 +64,7 @@ struct options {
 
 int Usage(const options &opt) {
     cerr << opt.error << endl << endl
-        << "cqb3 [options] <input_filename> <output_filename>\n"
+        << "cqb3 [options] <input_filename> [output_filename]\n"
         << "Options:\n"
         << "\t-v : verbose\n"
         << "\t-d : decode from QB3\n"
@@ -213,7 +213,7 @@ bool parse_args(int argc, char** argv, options& opt) {
     // Conversion direction dependent options
     if (opt.decode) {
         if (opt.trim || opt.best) {
-            opt.error = "Invalid option for QB3 decoding\n";
+            opt.error = "-t invalid for QB3 decoding\n";
             return Usage(opt);
         }
     }
@@ -366,40 +366,26 @@ int decode_main(options& opts) {
     return 0;
 }
 
-// Trim raster to a multiple of 4x4
-// Remove order is N-1,0,N-2, until size is 4*x
-void trim(Raster& raster, vector<unsigned char> &buffer) {
-    size_t xsize = raster.size.x;
-    size_t ysize = raster.size.y;
-    size_t bands = raster.size.c;
-    if (0 == ((xsize % 4) | (ysize % 4)))
-        return; // Only trim if necessary
-    // Pixel size in bytes
-    size_t psize = ICD::getTypeSize(raster.dt, bands);
-    size_t xstart = (xsize % 4) > 1; // Trim first column
-    size_t ystart = (ysize % 4) > 1; // Trim first row
-    size_t xend = xsize - ((xsize % 4) > 0) - ((xsize % 4) > 2); // Last one or two columns
-    size_t yend = ysize - ((ysize % 4) > 0) - ((ysize % 4) > 2); // Last one or two rows
-    // Adjust output raster size
-    raster.size.x = (raster.size.x / 4) * 4;
-    raster.size.y = (raster.size.y / 4) * 4;
-    // Smaller than the input
-    std::vector<unsigned char> outbuffer;
-    outbuffer.reserve(buffer.size());
-    // copy one line at a time
-    for (size_t y = ystart; y < yend; y++)
-        outbuffer.insert(outbuffer.end(),
-            &buffer[psize * (y * xsize + xstart)],
-            &buffer[psize * (y * xsize + xend)]);
-    // Return in buffer
-    swap(buffer, outbuffer);
-}
-
-// Handles the QB encoding
+// Handles the QB encoding baseod on options
 int encode(Raster &raster, std::vector<std::uint8_t> &image, std::vector<std::uint8_t> &dest, options &opts) {
     qb3_dtype dt = raster.dt == ICDT_Byte ? QB3_U8 : ICDT_UInt16 ? QB3_U16 : QB3_I16;
     auto bands = raster.size.c;
+    size_t offset(0); // Offset to the first pixel
+    size_t stride(raster.size.x * bands); // Stride is the number of values between lines
+    if (opts.trim && (raster.size.x % 4 || raster.size.y %4)) {
+        // Trim the first pixel if the width mod 4 is > 1
+        offset = ((raster.size.c % 4) > 1) ? getTypeSize(raster.dt) * bands : 0;
+        // Trim the complete first line if the height mod 4 is > 1
+        offset += ((raster.size.y % 4) > 1) ? stride * getTypeSize(raster.dt) : 0;
+        // Adjust the encoded width and height to be a multiple of 4
+        raster.size.x -= raster.size.x % 4;
+        raster.size.y -= raster.size.y % 4;
+        cerr << "Trimmed to " << raster.size.x << "x" << raster.size.y << endl;
+    }
+
     auto qenc = qb3_create_encoder(raster.size.x, raster.size.y, bands, dt);
+    qb3_set_encoder_stride(qenc, stride);
+
     dest.resize(qb3_max_encoded_size(qenc));
     size_t outsize(0);
 
@@ -469,8 +455,9 @@ int encode(Raster &raster, std::vector<std::uint8_t> &image, std::vector<std::ui
                 cout << "Lossy compression, quantized by " << (opts.away ? "+" : "") << opts.quanta << endl;
             }
         }
+
         t1 = high_resolution_clock::now();
-        outsize = qb3_encode(qenc, static_cast<void*>(image.data()), dest.data());
+        outsize = qb3_encode(qenc, static_cast<void*>(image.data() + offset), dest.data());
         t2 = high_resolution_clock::now();
         opts.time += duration_cast<duration<double>>(t2 - t1).count();
         if (outsize > dest.size()) { // Too late to catch, buffer did overflow
@@ -546,12 +533,6 @@ int encode_main(options& opts) {
     if (opts.verbose)
         cerr << "Decode time: " << time_span << "s\nRatio " << fsize * 100.0 / image.size() << "%, rate: "
         << image.size() / time_span / 1024 / 1024 << " MB/s\n\n";
-
-    if ((raster.size.x % 4 || raster.size.y % 4) && opts.trim) {
-        trim(raster, image);
-        if (opts.verbose)
-            cerr << "Trimmed to " << raster.size.x << "x" << raster.size.y << endl;
-    }
 
     vector<uint8_t> dest;
     auto bands = raster.size.c;

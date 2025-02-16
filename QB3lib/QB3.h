@@ -1,7 +1,7 @@
 /*
 Content: Public API for QB3 library
 
-Copyright 2021-2024 Esri
+Copyright 2021-2025 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -15,19 +15,22 @@ limitations under the License.
 Contributors:  Lucian Plesea
 */
 
-#pragma once
+#if !defined(QB3_H)
 // For size_t
 #include <stddef.h>
 // For uint64_t
 #include <stdint.h>
 
-// CMake will generate LIBQB3_EXPORT linkage as needed
-#include "libqb3_export.h"
+// Defined when building the library
+#if !defined(LIBQB3_EXPORT)
+#define LIBQB3_EXPORT
+#endif
 
 // Keep this close to plain C so it can have a C API
 #if defined(__cplusplus)
 extern "C" {
 #endif
+// Max number of bands supported by library <= 256
 #define QB3_MAXBANDS 16
 
 typedef struct encs * encsp; // encoder
@@ -46,21 +49,20 @@ enum qb3_mode {
     QB3M_BASE = 4,
     QB3M_BEST = 7,
 
-    // original z-curve
-    QB3M_BASE_Z = 0, // Base
-    QB3M_CF = 1, // With common factor
-    QB3M_RLE = 2, // BASE + RLE
-    QB3M_CF_RLE = 3, // BASE + CF + RLE
+    // Legacy z-curve
+    QB3M_BASE_Z = 0, // Legacy base
+    QB3M_CF = 1, //  + common factor
+    QB3M_RLE = 2, // + RLE
+    QB3M_CF_RLE = 3, // + CF + RLE
 
     // better, with Hilbert curve
-    QB3M_BASE_H = 4, // Hilbert
+    QB3M_BASE_H = 4, // Hilbert base
     QB3M_CF_H = 5, // Hilbert + CF
     QB3M_RLE_H = 6, // Hilbert + RLE
     QB3M_CF_RLE_H = 7, // Hilbert + CF + RLE
 
-    // Faster and only slightly worse than base in many cases
-    // Hilbert curve but no bit-step, no CF, no RLE
-    QB3M_FTL = 8, // Fastest, Hilbert
+    // Faster and only slightly worse than base
+    QB3M_FTL = 8, // Fastest, Hilbert base - step
     QB3M_END, // Marks the end of the settable modes
 
     QB3M_STORED = 255, // Raw bypass, can't be requested
@@ -72,7 +74,7 @@ enum qb3_error {
     QB3E_OK = 0,
     QB3E_EINV, // Invalid parameter
     QB3E_UNKN, // Unknown
-    QB3E_ERR,   // unspecified error
+    QB3E_ERR,  // unspecified error
     QB3E_LIBERR = 255 // internal QB3 error, should not happen
 };
 
@@ -107,8 +109,8 @@ LIBQB3_EXPORT size_t qb3_max_encoded_size(const encsp p);
 // If mode value is out of range, it returns the previous mode value of p
 LIBQB3_EXPORT qb3_mode qb3_set_encoder_mode(encsp p, qb3_mode mode);
 
-//// Generate raw qb3 stream, no headers
-//LIBQB3_EXPORT void qb3_set_encoder_raw(encsp p);
+// Set line to line stride, in dtype units, defaults to xsize * nbands
+LIBQB3_EXPORT void qb3_set_encoder_stride(encsp p, size_t stride);
 
 // Encode the source into destination buffer, which should be at least qb3_max_encoded_size
 // Source organization is expected to be y major, then x, then band (interleaved)
@@ -138,7 +140,7 @@ LIBQB3_EXPORT size_t qb3_decoded_size(const decsp p);
 
 LIBQB3_EXPORT qb3_dtype qb3_get_type(const decsp p);
 
-// Set line to line to line stride for decoder, defaults to line size
+// Set line to line stride, in dtype units, defaults to xsize * nbands
 LIBQB3_EXPORT void qb3_set_decoder_stride(decsp p, size_t stride);
 
 // Query settings, valid after qb3_read_info
@@ -158,4 +160,5 @@ LIBQB3_EXPORT bool qb3_get_coreband(const decsp p, size_t *cband);
 #if defined(__cplusplus)
 }
 
+#endif
 #endif

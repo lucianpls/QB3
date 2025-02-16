@@ -30,18 +30,18 @@ encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt
         || dt > int(QB3_I64))
         return nullptr;
     auto p = new encs;
+    memset(p, 0, sizeof(encs));
     p->xsize = width;
     p->ysize = height;
     p->nbands = bands;
-    p->order = 0; // will get changed to HILBERT
     p->type = static_cast<qb3_dtype>(dt);
     p->quanta = 1; // No quantization
     p->away = false; // Round to zero
     p->mode = QB3M_DEFAULT; // Fast
     // Start with no inter-band differential
     for (size_t c = 0; c < bands; c++)
-        p->cband[c] = static_cast<uint8_t>(c);
-    // For 3 or 4 bands we assume RGB(A) input and use R-G and B-G
+        p->cband[c] = c;
+    // Assume RGB(A) input and use R-G,G,B-G
     if (bands == 3 || bands == 4)
         p->cband[0] = p->cband[2] = 1;
     qb3_reset_encoder(p);
@@ -50,10 +50,9 @@ encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt
 
 void qb3_reset_encoder(encsp p) {
     for (size_t c = 0; c < p->nbands; c++) {
-        auto band = p->band + c;
-        band->runbits = 0;
-        band->prev = 0;
-        band->cf = 0;
+        p->band[c].runbits = 0;
+        p->band[c].prev = 0;
+        p->band[c].cf = 0;
     }
     p->error = 0;
 }
@@ -78,13 +77,15 @@ bool qb3_set_encoder_coreband(encsp p, size_t bands, size_t *cband) {
     return true;
 }
 
+void qb3_set_encoder_stride(encsp p, size_t stride) {
+    p->stride = stride;
+}
+
 // Sets quantization parameters
 // Valid values are 2 and above
 // sign = true when the input data is signed
 // away = true to round away from zero
 bool qb3_set_encoder_quanta(encsp p, size_t q, bool away) {
-    p->quanta = 1;
-    p->away = false;
     if (q < 1)
         return false;
     p->quanta = q;
@@ -113,8 +114,6 @@ bool qb3_set_encoder_quanta(encsp p, size_t q, bool away) {
         break;
     } // data type
 #undef TOO_LARGE
-    if (error)
-        p->quanta = 1;
     return !error;
 }
 
@@ -125,7 +124,7 @@ size_t qb3_max_encoded_size(const encsp p) {
     // Pad to 4 x 4
     size_t nvalues = 16 * ((p->xsize + 3) / 4) * ((p->ysize + 3) / 4) * p->nbands;
     // Maximum expansion is under 17/16 bits per input value, for large number of values
-    double bits_per_value = 17.0 / 16.0 + typesizes[static_cast<int>(p->type)] * 8;
+    double bits_per_value = 17.0 / 16.0 + 8 * szof(p->type);
     return 1024 + static_cast<size_t>(bits_per_value * nvalues / 8);
 }
 
@@ -163,7 +162,7 @@ T rounddiv_away(T n, T d) {
 
 // Quantize source, in place. T may be signed, q is positive
 template<typename T> static
-bool quantize(T* source, oBits& , encs& p) {
+bool quantize(T* source, encs& p) {
     size_t nV = p.xsize * p.ysize * p.nbands; // Number of values
     T q = static_cast<T>(p.quanta);
     // Optimized versions have to preserve the sign of the input
@@ -437,14 +436,22 @@ template<typename T> static int enc(const T *source, oBits &s, encsp p)
     encs subimg(*p);
     subimg.ysize = B;
     auto ysz(p->ysize);
-    // In bytes
+
+    // In bytes, input line size
     auto linesize = p->xsize * p->nbands * typesizes[p->type];
+    auto stride = linesize; // Default stride
+    // Compact the subimage if the linesize is different
+    if (p->stride != 0 && p->stride * typesizes[p->type] != stride)
+    {
+        subimg.stride = 0; // No stride in the subimage
+        stride = p->stride * typesizes[p->type];
+    }
     // Temporary data buffer for a single strip
-    std::vector<uint8_t> buffer(linesize * subimg.ysize);
+    std::vector<uint8_t> buffer(raw_size(p));
     auto src = reinterpret_cast<const uint8_t*>(source);
 
 #define QENC(T)\
-    quantize(reinterpret_cast<T *>(buffer.data()), s, subimg);\
+    quantize(reinterpret_cast<T *>(buffer.data()), subimg);\
     if (is_fast(subimg.mode))\
         error = QB3::encode_fast(\
             reinterpret_cast<std::make_unsigned<T>::type *>(buffer.data()), s, subimg);\
@@ -453,10 +460,13 @@ template<typename T> static int enc(const T *source, oBits &s, encsp p)
             reinterpret_cast<std::make_unsigned<T>::type *>(buffer.data()), s, subimg);
 
     for (size_t y = 0; y < ysz; y += subimg.ysize) {
-        // Shift the last strip up to handle the edge
+        // Shift the last strip up to handle the unaligned edge
         if (y + subimg.ysize > ysz)
-            src -= linesize * (y + subimg.ysize - ysz);
-        memcpy(buffer.data(), src, buffer.size());
+            src -= stride * (y + subimg.ysize - ysz);
+        // Copy the strip
+        for (size_t i = 0; i < subimg.ysize; i++)
+            memcpy(buffer.data() + i * linesize, src + i * stride, linesize);
+
         switch (p->type) {
         case qb3_dtype::QB3_U8:  QENC(uint8_t);  break;
         case qb3_dtype::QB3_I8:  QENC(int8_t);   break;
@@ -468,7 +478,7 @@ template<typename T> static int enc(const T *source, oBits &s, encsp p)
         case qb3_dtype::QB3_I64: QENC(int64_t);  break;
         default: return QB3E_EINV;
         }
-        src += linesize * subimg.ysize;
+        src += stride * subimg.ysize;
     }
 
 #undef QENC

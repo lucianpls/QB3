@@ -21,11 +21,11 @@ Contributors:  Lucian Plesea
 #include <cstring>
 #include <vector>
 
-// Main header
-// 4 sig
-// 2 xsize
-// 2 ysize
-// 1 nbands
+// Main QB3 file header
+// 4 signature
+// 2 xmax
+// 2 ymax
+// 1 bandmax
 // 1 data type
 // 1 mode
 constexpr size_t QB3_HDRSZ = 4 + 2 + 2 + 1 + 1 + 1;
@@ -35,7 +35,7 @@ void qb3_destroy_decoder(decsp p) {
 }
 
 size_t qb3_decoded_size(const decsp p) {
-    return p->xsize * p->ysize * p->nbands * typesizes[static_cast<int>(p->type)];
+    return p->xsize * p->ysize * p->nbands * szof(p->type);
 }
 
 qb3_dtype qb3_get_type(const decsp p) {
@@ -43,15 +43,11 @@ qb3_dtype qb3_get_type(const decsp p) {
 }
 
 qb3_mode qb3_get_mode(const decsp p) {
-    if (p->stage != 2)
-        return qb3_mode::QB3M_INVALID;
-    return p->mode;
+    return (2 == p->stage) ? p->mode : QB3M_INVALID;
 }
 
 uint64_t qb3_get_quanta(const decsp p) {
-    if (p->stage != 2)
-        return 0; // Error
-    return p->quanta;
+    return (2 == p->stage) ? p->quanta: 0;
 }
 
 uint64_t qb3_get_order(const decsp p) {

@@ -1,4 +1,6 @@
 /*
+Content: Bit stream IO, in low endian format
+
 Copyright 2020-2025 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -10,12 +12,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-Content: Bit stream IO, in low endian format
-
 Contributors:  Lucian Plesea
 */
 
-#pragma once
 #include <cinttypes>
 #include <cassert>
 #include <type_traits>
@@ -30,16 +29,8 @@ public:
     // informational
     size_t avail() const { return len - bitp; }
     bool empty() const { return avail() == 0; }
-    // read position in bits
+    // read bit position
     size_t position() const { return bitp; }
-
-    // Single bit fetch
-    uint64_t get() {
-        if (empty()) return 0; // Don't go past the end
-        uint64_t val = static_cast<uint64_t>((v[bitp / 8] >> (bitp % 8)) & 1);
-        bitp++;
-        return val;
-    }
 
     // Advance read position by d bits
     void advance(size_t d) { bitp = (bitp + d < len) ? (bitp + d) : len; }
@@ -60,7 +51,6 @@ public:
 
     // Not very efficient for small number of bits
     uint64_t pull(size_t bits = 1) {
-        assert(bits && bits <= 64 && !empty());
         uint64_t val = peek() & (~0ull >> (64 - bits));
         advance(bits);
         return val;
@@ -68,12 +58,11 @@ public:
 
 private:
     const uint8_t* v;
-    // In bits
     const size_t len; // in bits, multiple of 8
-    size_t bitp; // read position
+    size_t bitp; // current bit position
 };
 
-// Output bitstream, doesn't check the output buffer size
+// Output bitstream, assumes enough space
 class oBits {
 public:
     oBits(uint8_t * data) : v(data), bitp(0) {}
@@ -81,17 +70,17 @@ public:
     // Number of bits written
     size_t position() const { return bitp; }
 
-    // Rewind to a bit position before the current one
+    // Rewind to a position before the current one
     size_t rewind(size_t pos = 0) {
-        if (pos < position()) { // Don't go past the current end
+        if (pos < bitp) { // Only backward
             bitp = pos;
-            if (bitp & 7) // clear partial bits in the last byte
-                v[bitp / 8] &= 0xff >> (8 - (bitp & 7));
+            if (pos & 7) // clear last byte partial bits
+                v[pos / 8] &= 0xff >> (8 - (pos & 7));
         }
-        return position();
+        return bitp; // final position
     }
 
-    // Do not call with val having bits above "nbits" set, the results will be corrupt
+    // Do not call with val having bits above "nbits" set
     template<typename T>
     void push(T val, size_t nbits) {
         static_assert(std::is_integral<T>::value && std::is_unsigned<T>::value,
@@ -110,9 +99,9 @@ public:
     template<typename T> void push(std::pair<size_t, T> p) { push(p.second, p.first); }
 
     // Append content from other output bitstream
-    oBits& operator+=(const oBits&other) {
+    oBits& operator+=(const oBits& other) {
         auto len = other.bitp;
-        for(auto pv = reinterpret_cast<uint64_t *>(other.v); len >= 64; len -= 64, pv++)
+        for (auto pv = reinterpret_cast<uint64_t*>(other.v); len >= 64; len -= 64, pv++)
             push(*pv, 64);
         // bits at the end
         if (len) {

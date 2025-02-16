@@ -1,5 +1,5 @@
 /*
-Content: QB3 encoding
+Content: core QB3 encoding
 
 Copyright 2020-2025 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -204,7 +204,7 @@ static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t 
         do { // max 9 * 4 bits
             acc |= (TBLMASK & t[group[i]]) << abits;
             abits += t[group[i]] >> 12;
-        } while (++i < 16);
+        } while (++i < B2);
         s.push(acc, abits);
     }
     // Computed encoding, slower, works for rung > 1
@@ -367,10 +367,12 @@ static int encode_fast(const T* image, oBits& s, encs &info)
     if (0 == order)
         order = HILBERT;
     size_t offset[B2] = {};
+    auto stride = xsize * bands; // Line stride
+    if (info.stride)
+        stride = info.stride;
     for (size_t i = 0; i < B2; i++) {
-        // nibbles, in top to bottom order
         size_t n = (order >> ((B2 - 1 - i) << 2));
-        offset[i] = (xsize * ((n >> 2) & 0b11) + (n & 0b11)) * bands;
+        offset[i] = stride * ((n >> 2) & 0b11) + (n & 0b11) * bands;
     }
     T group[B2] = {};
     for (size_t y = 0; y < ysize; y += B) {
@@ -381,7 +383,7 @@ static int encode_fast(const T* image, oBits& s, encs &info)
             // If the last column is partial, move it left
             if (x + B > xsize)
                 x = xsize - B;                
-            const size_t loc = (y * xsize + x) * bands; // Top-left pixel address
+            const size_t loc = y * stride + x * bands; // Top-left pixel address
             for (size_t c = 0; c < bands; c++) { // blocks are band interleaved
                 T bitsused(0); // Bits used within this group
                 // Collect the block for this band, convert to running delta mag-sign
@@ -491,7 +493,7 @@ static size_t ienc(const T grp[B2], size_t rung, size_t oldrung, oBits &s) {
 // TODO: Error code mapping
 template <typename T = uint8_t>
 static int encode_best(const T *image, oBits& s, encs &info) {
-    static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
+    static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types");
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     constexpr auto csw = sizeof(T) == 1 ? csw3 : sizeof(T) == 2 ? csw4 : sizeof(T) == 4 ? csw5 : csw6;
     if (check_info(info))
@@ -511,10 +513,12 @@ static int encode_best(const T *image, oBits& s, encs &info) {
     // Set up block offsets based on traversal order, defaults to HILBERT
     const uint64_t order(info.order ? info.order : HILBERT);
     size_t offset[B2] = {};
+    auto stride = xsize * bands; // Line stride
+    if (info.stride)
+        stride = info.stride; // Custom stride
     for (size_t i = 0; i < B2; i++) {
-        // Pick up one nibble, in top to bottom order
         size_t n = (order >> ((B2 - 1 - i) << 2));
-        offset[i] = (xsize * ((n >> 2) & 0b11) + (n & 0b11)) * bands;
+        offset[i] = stride * ((n >> 2) & 0b11) + (n & 0b11) * bands;
     }
     T group[B2] = {}; // 2D group to encode
     for (size_t y = 0; y < ysize; y += B) {
@@ -525,7 +529,7 @@ static int encode_best(const T *image, oBits& s, encs &info) {
             // If the last column is partial, move it left
             if (x + B > xsize)
                 x = xsize - B;
-            size_t loc = (y * xsize + x) * bands; // Top-left pixel address
+            size_t loc = y * stride + x * bands; // Top-left pixel address
             for (size_t c = 0; c < bands; c++) { // blocks are always band interleaved
                 T bitsused(0); // Bits used within this group
                 // Collect the block for this band, convert to running delta mag-sign
