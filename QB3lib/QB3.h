@@ -30,22 +30,26 @@ Contributors:  Lucian Plesea
 #if defined(__cplusplus)
 extern "C" {
 #endif
-// Max number of bands supported by library <= 256
+// Max number of bands <= 256, changes size of the control structures
 #define QB3_MAXBANDS 16
 
 typedef struct encs * encsp; // encoder
 typedef struct decs * decsp; // decoder
 
-// Types
+// Data types
 enum qb3_dtype { QB3_U8 = 0, QB3_I8, QB3_U16, QB3_I16, QB3_U32, QB3_I32, QB3_U64, QB3_I64 };
 
 // To check if the library has QB3M_FTL
 #define QB3_HAS_FTL 1
 
-// Encode mode, default is fastest, best is best compression
+// Encode mode
+// Default is fastest, and faster decoding
+// Base is barely better than FTL, 20% slower than FTL
+// Best is best compression, 2x slower than base for encoding, 
+//      slightly slower than base for decoding
 enum qb3_mode {
     // Aliases, values might change
-    QB3M_DEFAULT = 4,
+    QB3M_DEFAULT = 8, // FTL
     QB3M_BASE = 4,
     QB3M_BEST = 7,
 

@@ -7,17 +7,18 @@ better compression than PNG for 8bit natural images while being extremely fast, 
 
 ## Performance and Implementation
 
-QB3 encodes and decodes 8 bit color imagery at a rate close to 300 MB per second using a single thread of a recent CPU. For 16, 32 and 64bit integer 
-types it is much faster, reaching 2GB/s compression and 3GB/sec decompression. This means that only about 15 CPU clock cycles are needed per 
-raw data value, measured on real cases, despite the relatively long dependency chains. At the same time, being a data type aware raster specific 
-compression, QB3 achieves better compression than byte oriented compressors such as DEFLATE or ZSTD. The high rate is achieved by an implementation
-that avoids code branches as much as possible. In addition, only basic arithmetic operations are used, with no multiplication or divisions. 
-The performance does improve by about 10% using compiler auto-vectorization. Even higher performance could be achieved using manually tuned 
-vectorization at the expense of portability. Parallel execution is also possible.  
-Alternatively, better compression could be achieved using a more complex algorithm. A few extension algorithms are included, where
-encoding speed drops by roughly half while decoding speed stays about the same. For 8 bit images the compression 
-improvement is usually negligible. A better option is to use a generic lossless compression library such as ZSTD at a low effort level 
-as a second encoding pass, the results are very good in both compression ratio and speed.
+QB3 encodes and decodes 8 bit color imagery at 500MB/s using a single thread of a recent CPU. For 16, 32 and 64bit integer 
+types it is much faster, reaching 4GB/s compression and decompression. For the fastest mode, the compression rate is slighlty
+higher than the decompression rate. This means that about 11 CPU cycles are needed per raw data value, on real use cases. 
+At the same time, being a data type aware raster specific compression, QB3 achieves better compression than byte oriented 
+compressors such as DEFLATE or ZSTD. The high rate is achieved by an implementation that avoids code branches as much as 
+possible. In addition, only basic arithmetic operations are used, with no multiplication or divisions.
+The performance does improve by about 10% using compiler auto-vectorization. Even higher performance could be achieved 
+using manually tuned vectorization at the expense of portability.  
+Alternatively, better compression could be achieved using a more complex algorithm. A few extended algorithms are included, 
+where encoding speed drops by roughly half while decoding speed stays about the same. For 8 bit images the compression 
+gain is usually negligible. A better option is to use a second pass generic lossless compression library such as ZSTD 
+at a low effort level, the results being very good for both compression ratio and speed.
 
 ## QB3 Algorithm Overview
 
@@ -128,7 +129,7 @@ rung 1, where the normal QB3 encoding doesn't apply (output codes can be shorter
 ### Rung 0 Encoding
 
 At rung zero, each value requires a single bit, the QB3 ranges can't be used. There is however the special case when all the values 
-within a block are zero. This happens when the input block is constant, which is common enogh to it deserves a special, shorter encoding.
+within a block are zero. This happens when the input block is constant, which is common enogh to deserve a shorter encoding.
 For this case, the rung encoding is directly followed by a single zero bit. Using this encoding, blocks in large areas of constant 
 value will use only two bits, both zero, the first one signifying that the block rung is the same as the one for the previous block 
 (zero), while the next zero means that all the values within the block are zero. Otherwise, for a normal zero rung block where some of 
@@ -143,29 +144,35 @@ At rung 1, the low range is encoded using a single bit, following the QB3 encodi
  - 0b10 -> 0b011
  - 0b11 -> 0b111
 
-Decoding this rung has to be done slightly different from the higher rungs, testing each bit separately since the second bit might not exist.
+Decoding this rung has to be done slightly different from the higher rungs, testing each bit separately since 
+the second bit might not exist.
 
 ### Group Step Encoding
 
+This encoding is not used for the fastest (FTL) mode, this being the source of the speed difference. The step encoding is 
+used to reduce the number of bits required to store a group by 1 or 2 bits, in some cases. The maximum space saving is under 
+.125% of the input for 8bit data, and much lower for larger data types. It requires extra steps during encoding and decoding, 
+which is why it is not used in the fastest mode.  
+
 The rung of a group is the highest bit set for any value within the group. This means that at least one of the values in 
-the group is in the long range of the respective group. The encoder will not generate any encoded group where
-all the values are in the nominal or short range. This kind of block would be a relatively small encoded group, but will always be
-encoded at the next lowest rung.
-Knowing this, it is possible to reduce the bit length of one of the values in an unambiguous way, so it can be restored when decoding. 
-In the case where the first value within the group is the only one in the long range, the top bit can be flipped to zero, 
-which changes the range of that value to the nominal or low. On decoding, if no value in the decoded group is in the long range, it can be
-reasoned that the first value was the one reduced, and the original value can be restored by setting its rung bit. This eliminates 
-group encodings where only the first value is in the long range. This encoding gap can then be used to reduce the second value in 
-the group, if only the first two values are in the long range. This logic progresses all the way to reducing the last value in the group 
-if all the values within the group are in the long range. This situation is also the worst encoding case, where the group would require 
-16 more bits than the nominal. Using this reduction method, the worst case scenario requires at most 15 extra bits, since the last value
-will be reduced.  
+the group has to be the long range of the respective group. The encoder will not generate any encoded group where
+all the values are in the nominal or short range. Knowing this, in some cases it is possible to reduce the bit length of 
+one of the long values in an unambiguous way, so it can be restored when decoding. 
+In the case where the first value within the group is the only value in the long range, the top bit can be flipped to zero, 
+which changes the range of that value to the nominal or low. On decoding, if no value in the decoded group is in the long 
+range, it can be reasoned that the first value was the one reduced, and the original value can be restored by setting its rung bit. 
+This in trun eliminates group encodings where only the first value is in the long range. This encoding gap can then be used to 
+reduce the second value in the group, when only the first two values are in the long range. This logic progresses bit by bit,
+all the way to reducing the last value in the group if all the values within the group are in the long range. This situation is 
+also the worst encoding case, where the group would require 16 more bits than the nominal. By using this reduction method, 
+the worst case scenario requires at most 15 extra bits, since the last value will be reduced.  
 Another way to describe this is by looking at the sequence of the rung bits across the group. If the first n values have the
-rung bit set while then rest of the values have it cleared, the last value with the bit set can be reduced on encoding and
+rung bit set while the rest of the values have it cleared, the last value with the bit set can be reduced on encoding and
 restored on decoding. We know that at least one rung bit is set, so it is not possible to have all the rung bits clear 
-initially. The sequnce of the rung bits is a step down function, going from 1 to 0, so this optimization is called 
-*step encoding*. This optimization reduces the number of bits required to store a group by 1 or 2 bits when the sequence of the 
-rung bit across the group is a step function. This step encoding applies to all rungs except at rung 0.
+initially. The sequnce of the rung bits for the values in the group is a step down function, going from 1 to 0, so this 
+optimization is called *step encoding*. This optimization reduces the number of bits required to store a group by 1 or 2 
+bits when the sequence of the rung bit across the group is a step function. This step encoding applies to all rungs 
+except at rung 0.
 
 ### Common Factor Group Encoding
 
@@ -197,12 +204,21 @@ and would expand all other rung 0 sequences by one bit, likely having a negative
 - Since the CF group rung is reduced by division with CF, the CF group rung has the be at least one
  less than the maximum rung for the datatype. For byte data for example, the group rung can't be 7.  
 
-TODO: use this to add index encoding, the code-switch flag bit is available.
 - The separate CF rung encoding is used when CF-2 is in a larger rung than the 
 rung for the CF group or when the CF-2 rung is much smaller than the group rung 
 (this is an edge case, happens mostly for high byte count data). When CF is 
 encoded with its own rung, CF is always in the top rung, so we can save one or 
 more bits by enconding CF at the next lower rung.
+
+### Index Group Encoding
+
+This encoding is only used by the *best* mode of libQB3, being the third possible encoding for a group.
+The index group encoding applies when there is no common factor, but there are only a few unique values within the group.
+In this case, the values are encoded as an index into a table of unique values. The table has a maximum of 8 entries, which
+means that at least 8 input values are duplicates. The encoding starts with the table index of each entry, encoded at rung 2
+(8 possible values). By decoding the indices first, it is possible to determine the number of unique values in the group, 
+which are encoded after the indices, at the normal rung for the group. Since this encoding uses unused values for the group
+header, the overhead is fairly large. It is only used when the encoding is shorter than either the normal or the CF encoding.
 
 ## QB3 raster file format
 
