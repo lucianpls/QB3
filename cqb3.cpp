@@ -306,7 +306,7 @@ int decode_main(options& opts) {
     auto dt = qb3_get_type(qdec);
     qb3_destroy_decoder(qdec);
     if (opts.verbose) {
-        cerr << "Decode time: " << time_span << "s, rate: "
+        cout << "Decode time: " << time_span << "s, rate: "
             << raw.size() / time_span / 1024 / 1024 << " MB/s\n";
     }
 
@@ -348,7 +348,7 @@ int decode_main(options& opts) {
         return 2;
     }
     if (opts.verbose) {
-        cerr << "Output PNG:\nSize " << png_blob.size 
+        cout << "Output PNG:\nSize " << png_blob.size 
             << " Ratio: " << 100.0 * png_blob.size / src.size() << "%\n"
             << "Encode time: " << time_span << " rate: "
             << raw.size() / time_span / 1024 / 1024 << " MB/s\n";
@@ -380,7 +380,7 @@ int encode(Raster &raster, std::vector<std::uint8_t> &image, std::vector<std::ui
         // Adjust the encoded width and height to be a multiple of 4
         raster.size.x -= raster.size.x % 4;
         raster.size.y -= raster.size.y % 4;
-        cerr << "Trimmed to " << raster.size.x << "x" << raster.size.y << endl;
+        cout << "Trimmed to " << raster.size.x << "x" << raster.size.y << endl;
     }
 
     auto qenc = qb3_create_encoder(raster.size.x, raster.size.y, bands, dt);
@@ -531,7 +531,7 @@ int encode_main(options& opts) {
         cerr << fname << " " << params.error_message << endl;
 
     if (opts.verbose)
-        cerr << "Decode time: " << time_span << "s\nRatio " << fsize * 100.0 / image.size() << "%, rate: "
+        cout << "Decode time: " << time_span << "s\nRatio " << fsize * 100.0 / image.size() << "%, rate: "
         << image.size() / time_span / 1024 / 1024 << " MB/s\n\n";
 
     vector<uint8_t> dest;
