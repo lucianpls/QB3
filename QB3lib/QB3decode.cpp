@@ -298,7 +298,7 @@ static size_t deRLE0Size(const uint8_t* src, size_t len)
             src++;
             continue;
         }
-        count += ((0xff == src[2]) ? 2 : 4 + src[2]);
+        count += ((0xff == src[2]) ? 2 : 4ull + src[2]);
         src += 3;
     }
     return count + end - src;
@@ -317,7 +317,6 @@ static size_t qb3_decode(decsp p, void* source, size_t src_sz, void* dst)
 {
     int error_code = 0;
     auto src = reinterpret_cast<uint8_t *>(source);
-
     // If the data is stored and size is right, just copy it
     if (p->mode == qb3_mode::QB3M_STORED) {
         // Only if the size is what we expect
@@ -328,7 +327,6 @@ static size_t qb3_decode(decsp p, void* source, size_t src_sz, void* dst)
         memcpy(dst, source, src_sz);
         return src_sz;
     }
-
     std::vector<uint8_t> buffer;
     // If RLE is needed, it is expensive, allocates a whole new buffer
     if (needs_rle(p->mode)) {
@@ -374,22 +372,14 @@ static size_t qb3_decode(decsp p, void* source, size_t src_sz, void* dst)
     // We have a quanta, decode in place
     if (!error_code && p->quanta > 1) {
         switch (p->type) {
-        case qb3_dtype::QB3_U8:
-            MUL(uint8_t); break;
-        case qb3_dtype::QB3_I8:
-            MUL(int8_t); break;
-        case qb3_dtype::QB3_U16:
-            MUL(uint16_t); break;
-        case qb3_dtype::QB3_I16:
-            MUL(int16_t); break;
-        case qb3_dtype::QB3_U32:
-            MUL(uint32_t); break;
-        case qb3_dtype::QB3_I32:
-            MUL(int32_t); break;
-        case qb3_dtype::QB3_U64:
-            MUL(uint64_t); break;
-        case qb3_dtype::QB3_I64:
-            MUL(int64_t); break;
+        case qb3_dtype::QB3_U8:  MUL(uint8_t);  break;
+        case qb3_dtype::QB3_I8:  MUL(int8_t);   break;
+        case qb3_dtype::QB3_U16: MUL(uint16_t); break;
+        case qb3_dtype::QB3_I16: MUL(int16_t);  break;
+        case qb3_dtype::QB3_U32: MUL(uint32_t); break;
+        case qb3_dtype::QB3_I32: MUL(int32_t);  break;
+        case qb3_dtype::QB3_U64: MUL(uint64_t); break;
+        case qb3_dtype::QB3_I64: MUL(int64_t);  break;
         default:
             error_code = 3; // Invalid type
         } // data type
