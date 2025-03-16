@@ -351,8 +351,7 @@ template<typename T> static int enc(const T *source, oBits &s, encsp p)
     if (p->quanta < 2) {
         if (is_fast(p->mode))
             return QB3::encode_fast(source, s, *p);
-        else
-            return QB3::encode_best(source, s, *p);
+        return QB3::encode_best(source, s, *p);
     }
 
     // Quantized encoding
@@ -423,7 +422,7 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
         case QB3M_RLE_H: p->mode = QB3M_BASE_H; break;
         case QB3M_CF_RLE_H: p->mode = QB3M_CF_H; break;
         default: // Library internal error
-            p->error = 255;
+            p->error = QB3E_LIBERR;
             return 0;
         }
     }

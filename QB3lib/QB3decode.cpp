@@ -288,8 +288,7 @@ static int64_t deRLE0(const uint8_t* src, size_t slen, uint8_t* d, size_t dlen)
 }
 
 // The size of the decoded data
-static size_t deRLE0Size(const uint8_t* src, size_t len)
-{
+static size_t deRLE0Size(const uint8_t* src, size_t len) {
     const uint8_t* end = src + len;
     size_t count(0);
     while (src < end - 2) { // A run is three bytes
@@ -303,7 +302,6 @@ static size_t deRLE0Size(const uint8_t* src, size_t len)
     }
     return count + end - src;
 }
-
 
 static bool needs_rle(qb3_mode mode) {
     return (QB3M_RLE == mode || QB3M_RLE_H == mode 
@@ -339,8 +337,7 @@ static size_t qb3_decode(decsp p, void* source, size_t src_sz, void* dst)
             return 0;
         }
         buffer.resize(sz);
-        auto err = deRLE0(src, src_sz, buffer.data(), sz);
-        if (err != 0) {
+        if (deRLE0(src, src_sz, buffer.data(), sz)) {
             p->error = QB3E_EINV;
             return 0;
         }
