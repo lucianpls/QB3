@@ -5,9 +5,9 @@
 This document describes the performance of the QB3 system compared to the PNG system, on the same hardware.
 PNG (Portable Network Graphics) is a lossless image format that is widely used on the web. It is based on 
 the DEFLATE compression algorithm, which is also used in the ZIP file format. The image specific part of the
-PNG format is applying a filter to the image data before compressing it with DEFLATE. The filter is a set of
-simple predictive algorithms that tries to predict the value of a pixel based on the values of the pixels 
-around it, which tends to make the data more compressible. PNG can handl 8-bit and 16-bit per channel images.  
+PNG format is applying a filter to the image data before compressing it with DEFLATE. The filter is selected 
+from a set of algorithms that tries to predict the value of a pixel based on the values of the pixels 
+seen before it, which tends to make the data more compressible. PNG can handl 8-bit and 16-bit per channel images.  
 In comparison, QB3 is an integer lossless image compression that does not use any external libraries for 
 entropyy coding. It is also using a predictor filter to make the data more compressible, followed by a simple, 
 fixed entropy coding scheme that does not adapt to the data. QB3 can handle all integer types from 8 to 64 bits.
