@@ -17,8 +17,8 @@ The comparison is done on the 248 RGB 8 bit reference images from the
 [Cloudinary Image Dataset ’22](https://cloudinary.com/labs/cid22) (CID22) dataset. The images used are the 
 reference 512x512 8bit RGB pixels, with the two single band images being removed from the dataset. The images
 are mostly photographs, with a few illustrations and computer generated images.
-The input images have been compressed using the cqb3 tool, using various settings available. Then one of the 
-qb3 output images was converted back to PNG, also using the cqb3 tool which in turn uses libpng 1.6.44 and
+The input images have been compressed using the cqb3 tool, using various settings available. Then the qb3 
+output images were converted back to PNG, also using the cqb3 tool which in turn uses libpng 1.6.44 and
 zlib 1.3.1.1 with the default settings. The PNG images are the restored PNGs, not the original ones. The 
 machine used is an AMD 5955W desktop with sufficient memory to hold the images in memory, in Windows 11. 
 QB3 was compiled using Visual Studio 22 with CLang. The timings used are the ones recorded by the cqb3 tool, 
