@@ -50,7 +50,7 @@ It is clear that QB3 is able to compress these images better than PNG even in th
 with few exceptions. Especially significant is the large differences between the QB3 and PNG for the largest images.
 The difference in size is larger for the images that are less compressible, which are the 
 larger images. The noticeable drop in size in the first 20 imags or so are due to the fact that these images 
-are computer generated, which are very suitable for the PNG compression, which achieve compression ratios of 1:4 
+are computer generated, which are very suitable for the PNG compression, achieving compression ratios of 1:4 
 or better. Yet even for these images QB3 is competitive. Adding the ZSTD post processing step improves the 
 compression significanly for these images, less so for the photographs.  
 
