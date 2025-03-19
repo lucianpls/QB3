@@ -35,10 +35,10 @@ cqb3 can try all the possible RGB band mix combinations and picking the one that
 addition to the default R-G, G, B-G band mix. This was also applied in combination with the best mode, resulting
 in the smallest file size achieavable with QB3 only. With QB3, the BEST plus band mix mode is better or equal 
 to the BEST mode, which is better or equal to the BASE mode, which is better or equal to the FAST mode.
-It is also possible to apply a post processing step to the QB3 compressed image, which can reduce the file size
-even further. In general this step reduces the compressed sized very little. It can be very useful for synthetic, 
-computer generated images, which benefit from the reduction of repeated sequences, which are not taken advantage of
-in the QB3 compression.
+It is also possible to apply a post processing step with DEFLATE or ZSTD to the QB3 compressed image, step which 
+may reduce the file size even further. In general this step reduces the compressed sized very little. It can be 
+very useful for synthetic, computer generated images, which benefit from the reduction of repeated sequences, 
+which are not taken advantage of in the QB3 compression.
 
 First, a graph showing the size of the compressed images, in percentage of the raw size:
 ![Size of compressed images](CID22_QB3vsPNG.svg)
