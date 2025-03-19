@@ -13,8 +13,8 @@ entropyy coding. It is also using a predictor filter to make the data more compr
 fixed entropy coding scheme that does not adapt to the data. QB3 can handle all integer types from 8 to 64 bits.
 
 ## Method
-The comparison is done on a set of 248 RGB 8 bit images from the 
-[Cloudinary Image Dataset ’22](https://cloudinary.com/labs/cid22) (CID22) dataset. The images used are the 
+The comparison is done on the 248 RGB 8 bit reference images from the 
+[Cloudinary Image Dataset â€™22](https://cloudinary.com/labs/cid22) (CID22) dataset. The images used are the 
 reference 512x512 8bit RGB pixels, with the two single band images being removed from the dataset. The images
 are mostly photographs, with a few illustrations and computer generated images.
 The input images have been compressed using the cqb3 tool, using various settings available. Then one of the 
