@@ -40,7 +40,6 @@ may reduce the file size even further. In general this step reduces the compress
 very useful for synthetic, computer generated images, which benefit from the reduction of repeated sequences, 
 which are not taken advantage of in the QB3 compression.
 
-First, a graph showing the size of the compressed images, in percentage of the raw size:
 ![Size of compressed images](CID22_QB3vsPNG.svg)
 
 The images are sorted by the size of the PNG file, from the smallest to the largest, the dashed black line. The 
