@@ -67,7 +67,7 @@ between 6 and 7 MB out of the 90MB of PNG images. The difference between the QB3
 mode being almost identical. The BEST + band mix is significantly better, especially for the images where the FAST QB3
 mode is larger than the PNG. Adding ZSTD post processing improves the savings by 4 MB, which is very significant.
 In best mode, the savings vs PNG are 7.42%, which is very good for a lossless compression, increasing to 11.56% with 
-zstd post processing. This kind of savvings can be extremely significant for long term storage.
+zstd post processing. This size of saving can be extremely significant for long term storage.
 
 #### Aggregate savings
 ```
