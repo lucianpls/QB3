@@ -29,7 +29,7 @@ files and to plot various graphs.
 ## Results
 
 ### Compressed size
-The first thing to look at is the size of the compressed images. The following graph shows the size of the
+The following graph shows the size of the
 compressed images in bytes, for the various QB3 settings. QB3 modes include fast, normal and best. In addition,
 cqb3 can try all the possible RGB band mix combinations and picking the one that results in the smalles file, in
 addition to the default R-G, G, B-G band mix. This was also applied in combination with the best mode, resulting
