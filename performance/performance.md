@@ -22,10 +22,10 @@ The input images have been compressed using the cqb3 tool, using various setting
 output images were converted back to PNG, also using the cqb3 tool which in turn uses libpng 1.6.44 and
 zlib 1.3.1.1 with the default settings. The PNG images used in comparison are the restored PNGs, not the
 original ones. The computer used has an AMD 5955W CPU with sufficient memory to hold the images in 
-memory, running Windows 11. QB3 was compiled using Visual Studio 22 with CLang. The timings used are the ones
-recorded by the cqb3 tool, which only measures the time spent for the compression itself, from raw image to 
-compressed image, in memory. A Jupyter notebook was used to analyze the timings and the size of the image 
-files and to plot various graphs.
+memory, running Windows 11. QB3 V 1.3.1 was compiled using Visual Studio 22 with CLang. The timings used 
+are the ones recorded by the cqb3 tool, which measures only the time spent for the compression itself, 
+from raw image to compressed image, in memory.
+A Jupyter notebook was used to analyze the timings and the size of the image files and to plot various graphs.
 
 ## Results
 
