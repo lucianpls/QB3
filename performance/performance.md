@@ -57,10 +57,12 @@ or better. Yet even for these images QB3 is competitive. Adding the ZSTD post pr
 compression for these images, less so for the photographs.
 
 Another way of looking at the compression quality is to look at the agregate savings of the QB3 compression vs PNG.
+
 ![Aggregated savings](CID22_savings.svg)
-The savings are cummulative, for the 248 input images, split in two groups. The first group, for images 0 to 60, are
-the images where QB3 in FAST mode are larger than the corresponding PNG, resulting in negative savings. The second 
-group are the rest of the images, where QB3 FAST is equal or smaller than the corresponding PNG, thus the size savings
+
+The savings are cummulative, for the 248 input images, split in two groups. The first group, for images 0 to 
+60, are the images where QB3 in FAST mode are larger than the corresponding PNG, resulting in negative savings. 
+The second group are the rest of the images, where QB3 FAST is equal or smaller than the corresponding PNG, thus the size savings
 is positive. Within each group, the images are sorted from the smallest absolute savings to the largest. In other 
 words, the slope of the graph is steeper when the difference in size between the two compression methods is larger, 
 either positive or netgative, and the slope is almost flat where the difference is small. This order
