@@ -117,17 +117,17 @@ FAST mode during this test, single thread, on a 4.5 GHz Zen 3 CPU, without CPU p
 possible to losslessly compress HD video at 60 frames per second in real time using QB3 using a single thread on a modern CPU.
 
 ### Decompression speed
-There is no graph for the decompression speed since QB3 is only about twice as fast as PNG, less significant 
-than the compression speed difference. As opposed to most compression algorithms, QB3 speed is almost symetrical, 
-with the decompression speed slightly slower than the compression, except in the BEST mode, where compression is slower. 
-This reversal is due to the longer dependency chain during decompression, and also being harder for the compiler to vectorize.
-The decompression speed is roughly the same for all QB3 modes, with the FAST mode being slightly faster to 
-decompress than the BASE or BEST.
+PND decompression is much faster than PNG compression. As a result, QB3 is only about twice as fast as PNG, less 
+significant than the compression speed difference. In contrast to most compression algorithms, QB3 speed is 
+almost symetrical, with the decompression speed slightly slower than the compression, except in the BEST 
+mode, where compression is slower. This is due to the longer dependency chain during decompression, also 
+being harder for the compiler to vectorize. The decompression speed is roughly the same for all QB3 modes, 
+with the FAST mode being slightly faster to decompress than the BASE or BEST.
 
 ### Conclusion
 
 QB3 is an extremely fast lossless image compression algorithm that is able to compress natural RGB images very well,
-measurably better than PNG for most inputs and is almost fourty times faster than PNG for 8 bit data. In addition 
+measurably better than PNG for most inputs while being forty times faster than PNG for 8 bit data. In addition 
 to 8 bit data, QB3 also handles 16, 32 and 64 bit integer raster data, with multiple color bands. QB3 is very 
 suitable for high bit depth images, which are increasingly used in many applications. QB3 is a portable, low 
 complexity, single pass compression algorithm with no measurable memory requirements and no external dependencies, 
