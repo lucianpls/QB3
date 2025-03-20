@@ -120,8 +120,16 @@ Summarizing the results in just a few numbers:
 
 ### Decompression speed
 PND decompression is much faster than PNG compression. QB3 consistently decompressed faster than PNG, 
-although the difference is less noticeable than the compression speed difference. 
+although the difference is less noticeable than the compression speed difference. The decompression speed
+of QB3 is also more consistent than the PNG decompression.
 ![Decompression speed](CID22_decode.svg)
+
+|Rate (MB/s)|QB3|PNG|
+|---|---|---|
+|Max|415.18|589.66|
+|Avg|302.30|236.86|
+|Min|253.45|187.62|
+
 In contrast to most 
 compression algorithms, QB3 speed is almost symetrical, with the decompression speed slightly slower 
 than the compression, except in the BEST mode, where compression is slower. 
