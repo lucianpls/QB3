@@ -31,7 +31,7 @@ A Jupyter notebook was used to analyze the timings and the size of the image fil
 
 ### Compressed size
 The following graph shows the size of the
-compressed images in bytes, for the various QB3 settings. QB3 modes include FAST, BASE and BEST. In addition,
+compressed images relative to the raw size, for the various QB3 settings. QB3 modes include FAST, BASE and BEST. In addition,
 cqb3 can try all the possible RGB band mix combinations and picking the one that results in the smallest file, in
 addition to the default R-G, G, B-G band mix. This was also applied in combination with the best mode, resulting
 in the smallest file size achieavable with QB3 only. The compresson in BEST plus band mix mode is better or equal 
