@@ -64,7 +64,7 @@ words, the slope of the graph is steeper when the difference in size between the
 either positive or netgative, and the slope is almost flat where the difference is small. This order
 makes it easier to see inflection point, or the ratio of image where QB3 is better than PNG. The other QB3 modes are
 plotted as well. The conclusion here is that for the complete dataset all the QB3 modes are better than PNG, saving
-between 6 and 7 MB out of the 90MB of PNG images. The difference between the QB3 modes is small, with the FAST and BEST 
+between 6 and 7 MB out of the 90MB of PNG images. The difference between the QB3 modes is small, with the FAST and BASE 
 mode being almost identical. The BEST + band mix brings a significant improvement, especially for the images where 
 the FAST QB3 mode is larger than the PNG. Adding ZSTD increases the savings by an extra 4 MB, which 
 is very significant.
