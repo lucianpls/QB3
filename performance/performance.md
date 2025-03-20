@@ -14,8 +14,10 @@ fixed entropy coding scheme that does not adapt to the data. QB3 can handle all 
 
 ## Method
 This comparison is done on the reference images from the 
-[Cloudinary Image Dataset ’22](https://cloudinary.com/labs/cid22) (CID22) dataset. 
+[Cloudinary Image Dataset ’22](https://cloudinary.com/labs/cid22) (CID22) dataset, shown below.  
+
 ![images](https://cloudinary-marketing-res.cloudinary.com/image/upload/f_auto,q_auto/v1682016607/CID22_full_set)
+
 The images used are the 248 of the 250 reference 512x512 8bit RGB pixels, with two single band (grayscale) 
 images being removed. The images are mostly natural photographs, with a few illustrations and computer 
 generated images. The input images have been compressed using the cqb3 tool, using various settings available. 
