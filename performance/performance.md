@@ -118,10 +118,10 @@ possible to losslessly compress HD video at 60 frames per second in real time us
 
 ### Decompression speed
 There is no graph for the decompression speed since QB3 is only about twice as fast as PNG, less significant 
-than the compression speed difference. QB3 speed is almost symetrical, with the decompression speed being slightly 
-slower than the compression speed, especially for the FAST mode. This is due to the fact that decompression has 
-a longer dependency chain than compression, and it is also harder for the compiler to vectorize. The decompression 
-speed is roughly the same for all QB3 modes, with the FAST mode being slightly faster than the BASE or BEST.
+than the compression speed difference. QB3 speed is almost symetrical, with the decompression speed slightly 
+slower than the compression. This is due to the longer dependency chain during decompression, and it is also 
+harder for the compiler to vectorize. The decompression speed is roughly the same for all QB3 modes, with the 
+FAST mode being slightly faster than the BASE or BEST.
 
 ### Conclusion
 
