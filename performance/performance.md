@@ -158,11 +158,12 @@ roughly 10-15 clock ticks per input value for real images, being able to compres
 
 Two grayscale images from the CID22 have been removed from the comparison. Keeping them would have made 
 the results harder to explain, because the band decorrelation doesn't apply for single band images. 
-The raw sizes and the time taken on these would have been significant outliers (9 times fast on the band mix,
-since there is no RGB band mix to try). The overall compression results would have been very similar, one 
-of the images compresses better with QB3 than PNG, the other worse, as single band grayscale. 
+The raw sizes and the time taken on these would have been significant outliers, such as being 9 times 
+faster on the band mix, since there is no RGB band mix to try.
+The overall compression results would have been very similar, one of the images compresses better with 
+QB3 than PNG, while the other worse, as single band grayscale. 
 Promoting these images to RGB by duplicating the grayscale would have favored QB3, since 
-the band decorrelation in QB3 would make these three band grayscale images compres much better than with PNG.
+the band decorrelation in QB3 would make these three band grayscale images compres much better than PNG.
 
 There are other lossless image formats or lossless variants of oher formats, such as WebP and JpegXL. In 
 comparison to most of those, QB3 is not heavily optimized for compression ratio. Yet QB3 in general compresses 
