@@ -89,6 +89,7 @@ QB3 41.0082% of raw
 ### Compression speed
 
 The next thing to look at is the compression speed, which is really the main advantage of the QB3 format.
+
 ![Compression speed](CID22_speed.svg)
 
 In this graph, the images are sorted by the compression time of the PNG, which is roughly proportional to the 
@@ -124,6 +125,7 @@ Summarizing the results in just a few numbers:
 PND decompression is much faster than PNG compression. QB3 consistently decompressed faster than PNG, 
 although the difference is less noticeable than the compression speed difference. The decompression speed
 of QB3 is also more consistent than the PNG decompression.
+
 ![Decompression speed](CID22_decode.svg)
 
 |Rate (MB/s)|QB3|PNG|
@@ -183,5 +185,3 @@ from [https://imagecompression.info/test_images/](https://imagecompression.info/
 consisting of images selected to be hard to compress, of varying sizes. QB3 compression ratio still 
 compares well to PNG on this set overall, with the expected problems with artificial and noisy images. 
 This set also contains 16 bit images, where QB3 is able to compress significantly better than PNG.
-
-
