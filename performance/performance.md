@@ -152,7 +152,7 @@ which makes it very easy to use. The compression rate does depends very little o
 roughly 10-15 clock ticks per input value for real images, being able to compress and decompress a full HD 
 1080p@60fps sequence of frames in real time while using a single thread of a modern CPU.
 
-### Other notes
+### Notes and observations
 
 Two grayscale images from the CID22 have been removed from the comparison. Keeping them would have made 
 the results harder to explain, because the band decorrelation doesn't apply for single band images. 
@@ -176,7 +176,10 @@ QB3 relies only on the locality of the image data for compression and does not h
 fine for natural images, but for computer generated, synthetic images, QB3 might lag in compression ratio when 
 compared to PNG, needing a post processing step with a contextual entropy encoder such as DEFLATE or ZSTD to 
 achieve competitive results. This is only an issue for images that are highly compressible to start with, which 
-are not a significant issue in general.
+are not a significant issue in general. The ZSTD or DEFLATE should be done at a very low effort level, which is
+still very fast and produces most of the size reduction. Applying a higher effort level entropy coding does 
+not increase the savings over the lower effort in most cases.
+
 At the other extreme, like any lossless compression, QB3 compression is poor for noisy, high contrast images.  
 There are also other image datasets, many of which have different characteristics than the CID22 dataset used here.
 For example the Kodak image set, which is a set of 24 natural images, slightly larger than the CID22 images. 
