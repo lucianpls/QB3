@@ -114,7 +114,7 @@ with a peak of 816 MB/s! The PNG average compression rate is 9.35 MB/s, which is
 Within QB3, the FAST mode is 10 to 20 % faster than the BASE mode, which is twice as fast as the QB3 BEST.
 Raw data rate for HD video (1920x1080), 8 bit 60 FPS is 356MB/s, which is the average compression rate of the QB3 
 FAST mode during this test, single thread, on a 4.5 GHz Zen 3 CPU, without CPU pinning. This means that it is 
-possible to losslessly compress HD video in real time using QB3 using a single thread on a modern CPU.
+possible to losslessly compress HD video at 60 frames per second in real time using QB3 using a single thread on a modern CPU.
 
 ### Decompression speed
 There is no graph for the decompression speed since QB3 is only about twice as fast as PNG, less significant 
