@@ -102,7 +102,7 @@ The next thing to look at is the compression speed, which is really the main adv
 |Avg|357.52|324.39|146.72|9.35|
 |Min|259.39|129.00|110.36|
 
-Images are sorted by increasing compression time of the PNG, which is very similar to the PNG output size, the 
+Images are sorted by the compression time of the PNG, which is very similar to the PNG output size, the 
 thicker brown line, varying between 14 and 150 milliseconds, with an average of 84 milliseconds.
 There is a clear, massive difference in compression speed between QB3 and PNG. The QB3 modes are the almost
 flat lines at the bottom of the graph, taking between 1 and 5 milliseconds to compress a 512x512x3 8 bit image,
