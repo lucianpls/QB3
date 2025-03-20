@@ -150,24 +150,25 @@ the band decorrelation in QB3 would make these three band grayscale images compr
 There are other lossless image formats or lossless variants of oher formats, such as WebP and JpegXL. In 
 comparison to most of those, QB3 is not heavily optimized for compression ratio. Yet QB3 in general compresses 
 better than PNG, which is the most widely used lossless image format. The formats that obtain better compression 
-ratios than QB3 are usually much slower, more complex. They also frequently have large memory requirements and 
-use multiple threads in parallel to achieve reasonable compression speeds.
-This comparison is not exhaustive, but it is representative of the performance of QB3 vs PNG in general.
-There are alternative PNG compression implementations, which could be faster or better than the libpng used here. 
-Even the standard libPNG has settings that can be adjusted to increase compression at the expense of speed or 
-vice versa.  
-QB3 relies only on the locality of the image data for compression, not having a long term context. This is 
-great for natural images, but for computer generated, synthetic images, QB3 might lag in compression ratio when 
+ratios than QB3 are usually much slower, and more complex. They also frequently have large memory requirements 
+and use multiple threads in parallel to achieve reasonable compression speeds.
+This comparison is not exhaustive, but it is representative of the performance of QB3 in general.
+There are alternative PNG compression implementations, which could be faster or better than the reference 
+libpng used here. Even the standard libPNG has settings that can be adjusted to increase compression at the 
+expense of speed or vice versa. It is not within the scope of this study to fully explore the PNG capabilities,
+the default PNG settings are a chosen to produce a reasonable compression in a reasonable amount of time.  
+QB3 relies only on the locality of the image data for compression and does not have a long term context. This is 
+fine for natural images, but for computer generated, synthetic images, QB3 might lag in compression ratio when 
 compared to PNG, needing a post processing step with a contextual entropy encoder such as DEFLATE or ZSTD to 
-achieve competitive results. This is only an issue for images that are very compressible to start with, which 
+achieve competitive results. This is only an issue for images that are highly compressible to start with, which 
 are not a significant issue in general.
-At the other extreme, QB3 is also sensitive to noisy, high contrast images, which can be very hard to compress.  
+At the other extreme, like any lossless compression, QB3 compression is poor for noisy, high contrast images.  
 There are also other image datasets, many of which have different characteristics than the CID22 dataset used here.
 For example the Kodak image set, which is a set of 24 natural images, slightly larger than the CID22 images. 
-QB3 compresses these images bettern than PNG for every image in the Kodak set. There is also the image set
+QB3 compresses better than PNG for each and every image in the Kodak set. Another the image dataset is available
 from [https://imagecompression.info/test_images/](https://imagecompression.info/test_images/). This set is smaller,
-of images that are selected to be hard to compress, images of varying sizes. QB3 compression ratio still 
-compares favorably to PNG on this set overall, with the expected problems with artificial and noisy images. 
+consisting of images selected to be hard to compress, of varying sizes. QB3 compression ratio still 
+compares well to PNG on this set overall, with the expected problems with artificial and noisy images. 
 This set also contains 16 bit images, where QB3 is able to compress significantly better than PNG.
 
 
