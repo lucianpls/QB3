@@ -143,16 +143,38 @@ This is due to the longer dependency chain during decompression, also being hard
 The decompression speed is roughly the same for all QB3 modes, with the FAST mode being slightly faster 
 to decompress than the BASE or BEST.
 
+### More about PNG and QB3
+
+QB3 is not a full replacement for PNG. One of the most important feature of PNG is stability, it has been
+around for more than 30 years without breaking compatibility, likely a reason for its popularity. The 
+standard libPNG has many features that are not intrinsic to the PNG format, but make the library more useful. 
+There are many PNG features that QB3 lacks and vice versa. This study is just a simple comparison of the 
+performance on a particular set of 8 bit RGB images, which both formats can handle, to show the potential 
+of QB3.
+It should be relatively easy to improve PNG compression, for example by adding the band decorrelation 
+step that QB3 uses. Or by replacing the DEFLATE entropy coding with ZSTD, which is considerably faster 
+than DEFLATE and can achieve better compression ratios. It would be a different kind of PNG at that point, 
+not backwards compatible, which is a big negative. 
+Similarly, the improved compression from the second pass ZSTD shows that QB3 compression could be improved 
+by replacing or enhancing the entropy coding with a more sophisticated one. 
+Further, it should be possible to have QB3 added to PNG as an additional compression method. Since it's 
+so fast, it could be done in addition to the existing PNG compression, and have the encoder pick the best 
+one, without increasing the compression time much. Since DEFLATE is already part of PNG, it could be used 
+as the second pass entropy encoding for QB3, making it even better. Of course this would not be fully 
+backwards compatible, but it could be done while keeping the PNG API unchanged, so at least some 
+applications would only need to be recompiled to take advantage of the new compression method.
+
 ### Conclusion
 
-QB3 is an extremely fast lossless image compression algorithm that is able to compress natural RGB images very well,
-measurably better than PNG for most inputs while being forty times faster than PNG for 8 bit data. In addition 
-to 8 bit data, QB3 also handles 16, 32 and 64 bit integer raster data, with multiple color bands. QB3 is very 
-suitable for high bit depth images, which are increasingly used in many applications. QB3 is a portable, low 
-complexity, single pass compression algorithm with no measurable memory requirements and no external dependencies, 
-which makes it very easy to use. The compression rate does depends very little on the input. It operates at 
-roughly 10-15 clock ticks per input value for real images, being able to compress and decompress a full HD 
-1080p@60fps sequence of frames in real time while using a single thread of a modern CPU.
+QB3 is an extremely fast lossless image compression algorithm that is able to compress natural RGB images 
+very well, measurably better than PNG for most inputs while being forty times faster than PNG for 8 bit 
+data. In addition to 8 bit data, QB3 also handles 16, 32 and 64 bit integer raster data, with multiple color 
+bands. QB3 is very suitable for high bit depth images, which are increasingly used in many applications. 
+QB3 is a portable, low complexity, single pass compression algorithm with no measurable memory requirements 
+and no external dependencies, which makes it very easy to use. The compression rate does depends very 
+little on the input. It operates at roughly 10-15 clock ticks per input value for real images, being able 
+to compress and decompress a full HD 1080P sequence of frames at 60 frames per second while using a single 
+thread of a modern CPU.
 
 ### Notes and observations
 
