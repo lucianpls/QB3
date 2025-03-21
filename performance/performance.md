@@ -150,11 +150,11 @@ around for more than 30 years without breaking compatibility, likely a reason fo
 standard libPNG has many features that are not intrinsic to the PNG format, but make the library more useful. 
 There are many PNG features that QB3 lacks and vice versa. This study is just a simple comparison of the 
 performance on a particular set of 8 bit RGB images, which both formats can handle, to show the potential 
-of QB3.
+of QB3.  
 It should be relatively easy to improve PNG compression, for example by adding the band decorrelation 
 step that QB3 uses. Or by replacing the DEFLATE entropy coding with ZSTD, which is considerably faster 
 than DEFLATE and can achieve better compression ratios. It would be a different kind of PNG at that point, 
-not backwards compatible, which is a big negative. 
+not backwards compatible, which is a big negative.
 Similarly, the improved compression from the second pass ZSTD shows that QB3 compression could be improved 
 by replacing or enhancing the entropy coding with a more sophisticated one. 
 Further, it should be possible to have QB3 added to PNG as an additional compression method. Since it's 
