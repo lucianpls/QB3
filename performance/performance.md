@@ -143,7 +143,7 @@ This is due to the longer dependency chain during decompression, also being hard
 The decompression speed is roughly the same for all QB3 modes, with the FAST mode being slightly faster 
 to decompress than the BASE or BEST.
 
-### More about PNG and QB3
+## More about PNG and QB3
 
 QB3 is not a full replacement for PNG. One of the most important feature of PNG is stability, it has been
 around for more than 30 years without breaking compatibility, likely a reason for its popularity. The 
@@ -164,7 +164,7 @@ as the second pass entropy encoding for QB3, making it even better. Of course th
 backwards compatible, but it could be done while keeping the PNG API unchanged, so at least some 
 applications would only need to be recompiled to take advantage of the new compression method.
 
-### Conclusion
+## Conclusion
 
 QB3 is an extremely fast lossless image compression algorithm that is able to compress natural RGB images 
 very well, measurably better than PNG for most inputs while being forty times faster than PNG for 8 bit 
@@ -176,7 +176,7 @@ little on the input. It operates at roughly 10-15 clock ticks per input value fo
 to compress and decompress a full HD 1080P sequence of frames at 60 frames per second while using a single 
 thread of a modern CPU.
 
-### Notes and observations
+## Footnotes
 
 Two grayscale images from the CID22 have been removed from the comparison. Keeping them would have made 
 the results harder to explain, because the band decorrelation doesn't apply for single band images. 
