@@ -7,9 +7,9 @@ PNG (Portable Network Graphics) is a lossless image format that is widely used o
 the DEFLATE compression algorithm, which is also used in the ZIP file format. The image specific part of the
 PNG format is applying a filter to the image data before compressing it with DEFLATE. The filter is selected 
 from a set of algorithms that tries to predict the value of a pixel based on the values of the pixels 
-seen before it, which tends to make the data more compressible. PNG can handl 8-bit and 16-bit per channel images.  
+seen before it, which tends to make the data more compressible. PNG can handle 8-bit and 16-bit per channel images.  
 In comparison, QB3 is an integer lossless image compression that does not use any external libraries for 
-entropyy coding. It is also using a predictor filter to make the data more compressible, followed by a simple, 
+entropy coding. It is also using a predictor filter to make the data more compressible, followed by a simple, 
 fixed entropy coding scheme that does not adapt to the data. QB3 can handle all integer types from 8 to 64 bits.
 
 ## Method
@@ -25,8 +25,9 @@ Then the qb3 output images were converted back to PNG, also using the cqb3 conve
 relies on libpng 1.6.44 and zlib 1.3.1.1 with the default settings. The PNG images used in comparison are the 
 restored PNGs, not the original ones.
 The computer used has an AMD 5955W CPU with sufficient memory to hold the images in memory, running Windows 11. 
-QB3 V 1.3.1 was compiled using Visual Studio 22 with CLang. The timings used are the ones recorded by the cqb3
-tool, which measures only the time spent for the compression itself, from raw image to compressed image, in memory.
+QB3 V 1.3.1 was compiled using Visual Studio 22 with the CLang-CL compiler. The timings used are the ones 
+recorded by the cqb3 tool, which measures only the time spent for the compression itself, from raw image 
+to compressed image, in memory.
 A Jupyter notebook was used to analyze the timings and the size of the image files and to plot various graphs.
 
 ## Results
@@ -36,7 +37,7 @@ The following graph shows the size of the
 compressed images relative to the raw size, for the various QB3 settings. QB3 modes include FAST, BASE and BEST. In addition,
 cqb3 can try all the possible RGB band mix combinations and picking the one that results in the smallest file, in
 addition to the default R-G, G, B-G band mix. This was also applied in combination with the best mode, resulting
-in the smallest file size achieavable with QB3 only. The compresson in BEST plus band mix mode is better or equal 
+in the smallest file size achievable with QB3 only. The compression in BEST plus band mix mode is better or equal 
 to the BEST mode, which is better or equal to the BASE mode, which is better or equal to the FAST mode.
 It is also possible to apply an external post processing step with DEFLATE or ZSTD to the QB3 compressed image, 
 which frequently reduce the file size even further. In general this step reduces the compressed sized very little. 
@@ -51,16 +52,16 @@ lines are the best band mix sizes combined with ZSTD at the default level of 3.
 It is clear that QB3 is able to compress these images better than PNG even in the least compression (FAST) mode, 
 with few exceptions. Especially significant is the large differences between the QB3 and PNG for the largest images.
 The difference in size is larger for the images that are less compressible, which are the 
-larger images. The noticeable drop in size in the first 20 imags or so are due to the fact that these images 
+larger images. The noticeable drop in size in the first 20 images or so are due to the fact that these images 
 are computer generated, very suitable for the PNG compression which reaches compression ratios of 1:4 
 or better. Yet even for these images QB3 is competitive. Adding the ZSTD post processing step improves the 
 compression for these images, less so for the photographs.
 
-Another way of looking at the compression quality is to look at the agregate savings of the QB3 compression vs PNG.
+Another way of looking at the compression quality is to look at the aggregate savings of the QB3 compression vs PNG.
 
 ![Aggregated savings](CID22_savings.svg)
 
-The savings are cummulative, for the 248 input images, split in two groups. The first group, for images 0 to 
+The savings are cumulative, for the 248 input images, split in two groups. The first group, for images 0 to 
 60, are the images where QB3 in FAST mode are larger than the corresponding PNG, resulting in negative savings. 
 The second group are the rest of the images, where QB3 FAST is equal or smaller than the corresponding PNG, thus the size savings
 is positive. Within each group, the images are sorted from the smallest absolute savings to the largest. In other 
@@ -137,7 +138,7 @@ speed difference. The decompression speed of QB3 is also more consistent than th
 |Min|253.45|187.62|
 
 In contrast to most 
-compression algorithms, QB3 speed is almost symetrical, with the decompression speed slightly slower 
+compression algorithms, QB3 speed is almost symmetrical, with the decompression speed slightly slower 
 than the compression, except in the BEST mode, where compression is slower. 
 This is due to the longer dependency chain during decompression, also being harder for the compiler to vectorize. 
 The decompression speed is roughly the same for all QB3 modes, with the FAST mode being slightly faster 
@@ -145,7 +146,7 @@ to decompress than the BASE or BEST.
 
 ## More about PNG and QB3
 
-QB3 is not a full replacement for PNG. One of the most important feature of PNG is stability, it has been
+QB3 is not a full replacement for PNG. One of the important features of PNG is stability, it has been
 around for more than 30 years without breaking compatibility, likely a reason for its popularity. The 
 standard libPNG has many features that are not intrinsic to the PNG format, but make the library more useful. 
 There are many PNG features that QB3 lacks and vice versa. This study is just a simple comparison of the 
@@ -171,7 +172,7 @@ very well, measurably better than PNG for most inputs while being forty times fa
 data. In addition to 8 bit data, QB3 also handles 16, 32 and 64 bit integer raster data, with multiple color 
 bands. QB3 is very suitable for high bit depth images, which are increasingly used in many applications. 
 QB3 is a portable, low complexity, single pass compression algorithm with no measurable memory requirements 
-and no external dependencies, which makes it very easy to use. The compression rate does depends very 
+and no external dependencies, which makes it very easy to use. The compression rate depends very 
 little on the input. It operates at roughly 10-15 clock ticks per input value for real images, being able 
 to compress and decompress a full HD 1080P sequence of frames at 60 frames per second while using a single 
 thread of a modern CPU.
@@ -185,17 +186,18 @@ faster on the band mix, since there is no RGB band mix to try.
 The overall compression results would have been very similar, one of the images compresses better with 
 QB3 than PNG, while the other worse, as single band grayscale. 
 Promoting these images to RGB by duplicating the grayscale would have favored QB3, since 
-the band decorrelation in QB3 would make these three band grayscale images compres much better than PNG.
+the band decorrelation in QB3 would make these three band grayscale images compress much better than PNG.
 
-There are other lossless image formats or lossless variants of oher formats, such as WebP and JpegXL. In 
+There are other lossless image formats or lossless variants of other formats, such as WebP and JpegXL. In 
 comparison to most of those, QB3 is not heavily optimized for compression ratio. Yet QB3 in general compresses 
 better than PNG, which is the most widely used lossless image format. The formats that obtain better compression 
 ratios than QB3 are usually much slower, and more complex. They also frequently have large memory requirements 
 and use multiple threads in parallel to achieve reasonable compression speeds.
 This comparison is not exhaustive, but it is representative of the performance of QB3 in general.
 There are alternative PNG compression implementations, which could be faster or better than the reference 
-libpng used here. Even the standard libPNG has settings that can be adjusted to increase compression at the 
-expense of speed or vice versa. It is not within the scope of this study to fully explore the PNG capabilities,
+libPNG which is used here. Even the standard libPNG has settings that can be adjusted to increase 
+compression at the expense of speed or vice versa. It is not within the scope of this study to exhaustively 
+explore the PNG capabilities,
 the default PNG settings are a chosen to produce a reasonable compression in a reasonable amount of time.  
 QB3 relies only on the locality of the image data for compression and does not have a long term context. This is 
 fine for natural images, but for computer generated, synthetic images, QB3 might lag in compression ratio when 
