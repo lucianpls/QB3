@@ -164,7 +164,7 @@ the 8 bit images, on the average QB3 is almost the same as PNG as far as compres
 the BEST mode with band mix results in space savings. The results are much better for the 16 bit linear 
 images, where QB3 saves 9 to 10% smaller than PNG overall, an amazing result for lossless compression.
 It should be mentioned that overall, PNG only compresses this dataset by about 20% compared with raw, 
-while QB3 reaches 30%. Obviously, the *hard to compress* dataset is true.
+while QB3 reaches 30%. Obviously, the *hard to compress* description of the dataset is true.
 The better behavior of QB3 for 16 bit data is expected, QB3 is fully data type aware while PNG is only 
 partially so. As far as the compression speed, QB3 FAST mode averages 280MB/s while PNG is 
 around 15.5MB/s, making QB3 FAST 18 times faster than PNG. PNG in this case is somewhat favored, since
