@@ -157,12 +157,12 @@ to decompress than the BASE or BEST.
 ## 16 bit images
 
 There are few 16bit image datasets available for use on the internet. The image set available from 
-[https://imagecompression.info/test_images/](https://imagecompression.info/test_images/) is one such set,
-being available in 8 and 16 bit versions. The set consists of 14 images of varying sizes, some of which
-are available in both 8 and 16 bit versions, selected for being difficult to compress. When compressing 
-the 8 bit images, on the average QB3 is almost the same as PNG as far as compression ratio goes, only 
-the BEST mode with band mix results in space savings. The results are much better for the 16 bit linear 
-images, where QB3 saves 9 to 10% smaller than PNG overall, an amazing result for lossless compression.
+[https://imagecompression.info/test_images/](https://imagecompression.info/test_images/) is one 
+such set. The set consists of 14 images of varying sizes available in both 8 and 16 bit versions, 
+selected for being difficult to compress. When compressing the 8 bit images, on the average QB3 is 
+almost the same as PNG as far as compression ratio goes, only the BEST mode with band mix results
+in space savings. The results are much better for the 16 bit linear images, where QB3 saves 9 to 
+10% smaller than PNG overall, an amazing result for lossless compression.
 It should be mentioned that overall, PNG only compresses this dataset by about 20% compared with raw, 
 while QB3 reaches 30%. Obviously, the *hard to compress* description of the dataset is true.
 The better behavior of QB3 for 16 bit data is expected, QB3 is fully data type aware while PNG is only 
