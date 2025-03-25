@@ -1,5 +1,15 @@
 # QB3 Performance vs PNG
 
+## Abstract
+
+QB3 is an extremely fast lossless image compression algorithm that is able to compress natural RGB images 
+very well, measurably better than PNG for most inputs while being forty times faster than PNG for 8 bit 
+data. In addition to 8 bit data, QB3 also handles 16, 32 and 64 bit integer raster data, with multiple color 
+bands. QB3 is a portable, low complexity, single pass compression algorithm with no measurable memory 
+requirements and no external dependencies, which makes it very easy to use. The compression speed depends 
+very little on the input. It is able to compress and decompress a full HD 1080P sequence of frames at 60 
+frames per second while using a single thread of a modern CPU.
+
 ## Introduction
 
 This document describes the performance of the QB3 image compression compared to the PNG, on the same hardware.
@@ -144,6 +154,25 @@ This is due to the longer dependency chain during decompression, also being hard
 The decompression speed is roughly the same for all QB3 modes, with the FAST mode being slightly faster 
 to decompress than the BASE or BEST.
 
+## 16 bit images
+
+There are few 16bit image datasets available for use on the internet. The image set available from 
+[https://imagecompression.info/test_images/](https://imagecompression.info/test_images/) is one such set,
+being available in 8 and 16 bit versions. The set consists of 14 images of varying sizes, some of which
+are available in both 8 and 16 bit versions, selected for being difficult to compress. When compressing 
+the 8 bit images, on the average QB3 is almost the same as PNG as far as compression ratio goes, only 
+the BEST mode with band mix results in space savings. The results are much better for the 16 bit linear 
+images, where QB3 saves 9 to 10% smaller than PNG overall, an amazing result for lossless compression.
+The better behavior of QB3 for 16 bit data is expected, QB3 is fully data type aware while PNG is only 
+partially so. The compression speed difference is even more impressive than for 8 bit images, QB3 is 
+massively faster than PNG. QB3 compression speed is roughly proportional to the number of values in the
+image, the data rate in MB/s being almost double for 16bit images compared to 8 bit images. In contrast,
+PNG compression depends on the number of bytes, so there is no significant improvement in data rate for 
+16 bit images. Adding ZSTD doesn't seem to help much in this case, improving compression by less than 0.2%.
+Out of the images in the dataset, the one named *artificial.png* is the one that penalizes QB3 the most,
+as it is a synthetic image with a lot of repeated patterns. *fireworks.png* is also a difficult image,
+being noisy and high contrast, yet using R-G, G, B color mix helps keeping QB3 competitive.
+
 ## More about PNG and QB3
 
 QB3 is not a full replacement for PNG. One of the important features of PNG is stability, it has been
@@ -164,18 +193,6 @@ one, without increasing the compression time much. Since DEFLATE is already part
 as the second pass entropy encoding for QB3, making it even better. Of course this would not be fully 
 backwards compatible, but it could be done while keeping the PNG API unchanged, so at least some 
 applications would only need to be recompiled to take advantage of the new compression method.
-
-## Conclusion
-
-QB3 is an extremely fast lossless image compression algorithm that is able to compress natural RGB images 
-very well, measurably better than PNG for most inputs while being forty times faster than PNG for 8 bit 
-data. In addition to 8 bit data, QB3 also handles 16, 32 and 64 bit integer raster data, with multiple color 
-bands. QB3 is very suitable for high bit depth images, which are increasingly used in many applications. 
-QB3 is a portable, low complexity, single pass compression algorithm with no measurable memory requirements 
-and no external dependencies, which makes it very easy to use. The compression rate depends very 
-little on the input. It operates at roughly 10-15 clock ticks per input value for real images, being able 
-to compress and decompress a full HD 1080P sequence of frames at 60 frames per second while using a single 
-thread of a modern CPU.
 
 ## Footnotes
 
