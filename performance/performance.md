@@ -163,12 +163,15 @@ are available in both 8 and 16 bit versions, selected for being difficult to com
 the 8 bit images, on the average QB3 is almost the same as PNG as far as compression ratio goes, only 
 the BEST mode with band mix results in space savings. The results are much better for the 16 bit linear 
 images, where QB3 saves 9 to 10% smaller than PNG overall, an amazing result for lossless compression.
+It should be mentioned that overall, PNG only compresses this dataset by about 20% compared with raw, 
+while QB3 reaches 30%. Obviously, the *hard to compress* dataset is true.
 The better behavior of QB3 for 16 bit data is expected, QB3 is fully data type aware while PNG is only 
-partially so. The compression speed difference is even more impressive than for 8 bit images, QB3 is 
-massively faster than PNG. QB3 compression speed is roughly proportional to the number of values in the
-image, the data rate in MB/s being almost double for 16bit images compared to 8 bit images. In contrast,
-PNG compression depends on the number of bytes, so there is no significant improvement in data rate for 
-16 bit images. Adding ZSTD doesn't seem to help much in this case, improving compression by less than 0.2%.
+partially so. As far as the compression speed, QB3 FAST mode averages 280MB/s while PNG is 
+around 15.5MB/s, making QB3 FAST 18 times faster than PNG. PNG in this case is somewhat favored, since
+the data doesn't compress much at all with the DEFLATE algorithm, which makes it considerably faster 
+than usual. At the same time, the QB3 rate is penalized a little by the larger output data size generated, 
+at least relative to the 8 bit CID22 test case.
+Adding ZSTD doesn't seem to help much in this case, improving compression by less than 0.2%.
 Out of the images in the dataset, the one named *artificial.png* is the one that penalizes QB3 the most,
 as it is a synthetic image with a lot of repeated patterns. *fireworks.png* is also a difficult image,
 being noisy and high contrast, yet using R-G, G, B color mix helps keeping QB3 competitive.
