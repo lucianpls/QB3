@@ -7,6 +7,11 @@
 - No significant memory footprint during encoding or decoding
 - No external dependencies, very low complexity
 
+# Performance
+
+![Compression vs PNG](performance/CID22_QB3vsPNG.svg)
+[Detailed comparison](performance/performance.md)
+
 # Library
 The library, located in [QB3lib](QB3lib) provides a C API for the QB3 codec.
 Implemented in C++, can be built on most platforms using cmake.
