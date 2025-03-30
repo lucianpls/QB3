@@ -67,6 +67,8 @@ for decoding. Lossy compression by quantization is also implemented in these fil
 - Made QB3M_FTL the default mode. The output is barely larger than QB3M_BASE 
  while being 25% faster for both encoding and decoding, a significant advantage
 - Update QB3 algorithm description to match the current code
+- Refactored RLE
+- Add comparison with PNG document
 
 ## Version 1.3.0
 - Stride encoding, matching stride decoding
