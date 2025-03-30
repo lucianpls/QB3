@@ -168,10 +168,10 @@ static size_t step(const T* const v, size_t rung) {
     return B2 + (s ? 1 : -setbits16(acc));
 }
 
-// Two QB3 standard parsing order, encoded as a single 64bit value
+// QB3 block order, encoded as a single 64bit value
 // each nibble holds the adress of a pixel, two bits for x and two bits for y
-// Use nibble values in the identity matrix, read in the desired order
-/* Identity matrix, used to read the address
+// Use nibble values in the identity matrix, read in the curve order
+/* Identity matrix
 0 1 2 3
 4 5 6 7
 8 9 a b

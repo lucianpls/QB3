@@ -23,26 +23,25 @@ Contributors:  Lucian Plesea
 #include <cstring>
 
 // constructor
-encsp qb3_create_encoder(size_t width, size_t height, size_t bands, qb3_dtype dt) {
-    if (width < 4 || width > 0x10000ul 
-        || height < 4 || height > 0x10000ul 
-        || bands == 0 || bands > QB3_MAXBANDS 
-        || dt > int(QB3_I64))
+encsp qb3_create_encoder(size_t w, size_t h, size_t b, qb3_dtype dt)
+{
+    if (w < 4 || w > 0x10000ul || h < 4 || h > 0x10000ul 
+        || b == 0 || b > QB3_MAXBANDS || dt > int(QB3_I64))
         return nullptr;
     auto p = new encs;
     memset(p, 0, sizeof(encs));
-    p->xsize = width;
-    p->ysize = height;
-    p->nbands = bands;
+    p->xsize = w;
+    p->ysize = h;
+    p->nbands = b;
     p->type = static_cast<qb3_dtype>(dt);
     p->quanta = 1; // No quantization
     p->away = false; // Round to zero
     p->mode = QB3M_DEFAULT; // Fast
     // Start with no inter-band differential
-    for (size_t c = 0; c < bands; c++)
+    for (size_t c = 0; c < b; c++)
         p->cband[c] = c;
     // Assume RGB(A) input and use R-G,G,B-G
-    if (bands == 3 || bands == 4)
+    if (b == 3 || b == 4)
         p->cband[0] = p->cband[2] = 1;
     qb3_reset_encoder(p);
     return p;
@@ -61,19 +60,19 @@ void qb3_destroy_encoder(encsp p) {
     delete p;
 }
 
-bool qb3_set_encoder_coreband(encsp p, size_t bands, size_t *cband) {
-    if (bands != p->nbands)
+bool qb3_set_encoder_coreband(encsp p, size_t b, size_t *bands) {
+    if (b != p->nbands)
         return false; // Incorrect band number
     // Set it, make sure it's not out of spec
-    for (size_t i = 0; i < bands; i++)
-        p->cband[i] = static_cast<uint8_t>((cband[i] < bands) ? cband[i] : i);
+    for (size_t i = 0; i < b; i++)
+        p->cband[i] = static_cast<uint8_t>((bands[i] < b) ? bands[i] : i);
     // Force core bands to be independent
-    for (size_t i = 0; i < bands; i++)
+    for (size_t i = 0; i < b; i++)
         if (p->cband[i] != i)
             p->cband[p->cband[i]] = p->cband[i];
     // Return the possibly modified band mapping
-    for (size_t i = 0; i < bands; i++)
-        cband[i] = p->cband[i];
+    for (size_t i = 0; i < b; i++)
+        bands[i] = p->cband[i];
     return true;
 }
 
@@ -96,20 +95,13 @@ bool qb3_set_encoder_quanta(encsp p, size_t q, bool away) {
     bool error = false;
     switch (p->type) {
 #define TOO_LARGE(Q, T) (Q > uint64_t(std::numeric_limits<T>::max()))
-    case QB3_I8:
-        error |= TOO_LARGE(p->quanta, int8_t);
-    case QB3_U8:
-        error |= TOO_LARGE(p->quanta, uint8_t);
-    case QB3_I16:
-        error |= TOO_LARGE(p->quanta, int16_t);
-    case QB3_U16:
-        error |= TOO_LARGE(p->quanta, uint16_t);
-    case QB3_I32:
-        error |= TOO_LARGE(p->quanta, int32_t);
-    case QB3_U32:
-        error |= TOO_LARGE(p->quanta, uint32_t);
-    case QB3_I64:
-        error |= TOO_LARGE(p->quanta, int64_t);
+    case QB3_I8:  error |= TOO_LARGE(p->quanta, int8_t);
+    case QB3_U8:  error |= TOO_LARGE(p->quanta, uint8_t);
+    case QB3_I16: error |= TOO_LARGE(p->quanta, int16_t);
+    case QB3_U16: error |= TOO_LARGE(p->quanta, uint16_t);
+    case QB3_I32: error |= TOO_LARGE(p->quanta, int32_t);
+    case QB3_U32: error |= TOO_LARGE(p->quanta, uint32_t);
+    case QB3_I64: error |= TOO_LARGE(p->quanta, int64_t);
     default: // Makes clang -Wswitch happy
         break;
     } // data type
@@ -122,10 +114,10 @@ const int typesizes[8] = { 1, 1, 2, 2, 4, 4, 8, 8 };
 
 size_t qb3_max_encoded_size(const encsp p) {
     // Pad to 4 x 4
-    size_t nvalues = 16 * ((p->xsize + 3) / 4) * ((p->ysize + 3) / 4) * p->nbands;
-    // Maximum expansion is under 17/16 bits per input value, for large number of values
+    size_t n = 16 * ((p->xsize + 3) / 4) * ((p->ysize + 3) / 4) * p->nbands;
+    // Maximum expansion is under 17/16 bits per input value
     double bits_per_value = 17.0 / 16.0 + 8 * szof(p->type);
-    return 1024 + static_cast<size_t>(bits_per_value * nvalues / 8);
+    return 1024 + static_cast<size_t>(bits_per_value * n / 8);
 }
 
 qb3_mode qb3_set_encoder_mode(encsp p, qb3_mode mode) {
@@ -147,16 +139,14 @@ qb3_mode qb3_set_encoder_mode(encsp p, qb3_mode mode) {
 // Round to Zero Division, no overflow
 template<typename T> static
 T rounddiv(T n, T d) {
-    T m = n % d;
-    T h = d / 2;
+    T m(n % d), h(d / 2);
     return n / d + (!(n < 0) & (m > h)) - ((n < 0) & ((m + h) < 0));
 }
 
 // Round from Zero Division, no overflow
 template<typename T> static
 T rounddiv_away(T n, T d) {
-    T m = n % d;
-    T h = d / 2 + d % 2;
+    T m(n % d), h(d / 2 + d % 2);
     return n / d + (!(n < 0) & (m >= h)) - ((n < 0) & ((m + h) <= 0));
 }
 
@@ -213,8 +203,8 @@ void static write_qb3_header(encsp p, oBits& s) {
     s.push((p->xsize - 1), 16);
     s.push((p->ysize - 1), 16);
     s.push((p->nbands - 1), 8);
-    s.push(static_cast<uint8_t>(p->type), 8); // all values are reserved
-    s.push(static_cast<uint8_t>(p->mode), 8);  // Encoding style, all values are reserved
+    s.push(static_cast<uint8_t>(p->type), 8); // all values reserved
+    s.push(static_cast<uint8_t>(p->mode), 8); // all values reserved
 }
 
 // Are there any band mappings
@@ -280,132 +270,68 @@ void static write_headers(encsp p, oBits& s) {
     write_data_header(p, s);
 }
 
-// Returns the number of bytes of value c
-static uint8_t run_count(const uint8_t* s, uint8_t c, uint8_t len = 0xff) {
-    for (uint8_t i = 0; i < len; i++, s++)
-        if (c != *s)
+// Returns the number of zero bytes, up to 0xfe
+static uint8_t run_count(const uint8_t* s, size_t len) {
+    len = len > 0xfe ? 0xfe : len;
+    for (uint8_t i = 0; i < len; i++)
+        if (*s++)
             return i;
-    return len;
+    return uint8_t(len);
 }
 
-// Special purpose RLE encoder, only packs long sequnces of 0
-// Uses 0xff 0xff as a marker
-// It generates the following special patterns
-// FF FF FF ->> FF FF
-// FF FF N ->> 0 repeated N + 4 times, between 4 and 258 
-//
-
-static size_t RLE0FFFF(const uint8_t* src, size_t len, uint8_t* dst) {
+// Encode the data, returns the size of the packed data
+static size_t RLE0(const uint8_t* src, size_t len, uint8_t* dst)
+{
+    auto end = src + len;
     uint8_t* d(dst);
-    while (len--) {
-        const uint8_t c = *src++; // non-special or last two bytes are always copied
-        if (((c + 1) & 0xfe) || (2 > len)) {
-            *d++ = c;
+    uint8_t last(0);  // Last byte emitted, to avoid encoding a run after FFs
+    while (src < end - 2) {  // can't start a run in the last two bytes
+        uint8_t c = *src++;
+        if (((c + 1) & 0xfe) != 0 || c != src[0] ||
+            (!c && (0xff == last || (end - src) < 3 || src[1] || src[2])))
+        { // Not special or not a run
+            last = *d++ = c;
+            continue;
         }
-        else { // Special char, at least one more is available in src
-            uint8_t cc = *src; // not consumed here
-            if (c != cc) { // non-repeating special
-                *d++ = c; // Copy the first char, not special enough
-                continue;
-            }
-            // At least two special chars in a row
-            src++; // Consume the second byte, it will be handled
-            len--;
-
-            if (c) { // Two FFs in a row, encoded as FF FF FF
-                *d++ = c;
-                *d++ = c;
-                *d++ = c;
-                continue;
-            }
-            // Two zeros, if we don't have four it's not a run
-            if (2 > len || 0 != src[0] || 0 != src[1]) { // Not four zeros, emit two
-                *d++ = 0;
-                *d++ = 0;
-                continue;
-            }
-
-            // If the last emitted byte was FF this can't be encoded as a run
-            // emit one zero and put back the second
-            if (d != dst && 0xff == d[-1]) {
-                *d++ = 0;
-                len++;
-                src--;
-                continue;
-            }
-
-            // at least four zeros on input, use the next two
-            src += 2;
-            len -= 2;
-            auto run = static_cast<uint8_t>(len < 0xff ? len : 0xfe); // Can't use 0xff
-            run = run_count(src, 0, run); // In addition to the four
-            // run, emit FF FF run (run is at least 4)
-            *d++ = 0xff;
-            *d++ = 0xff;
-            *d++ = run; // Signifying the 4 to 258 range
-            src += run;
-            len -= run;
+        src++; // Consume the second byte
+        if (c == 0) { // RLE run of zeros
+            src += 2; // At least 4 zeros
+            src += (c = run_count(src, end - src));
         }
+        last = 0; // run after run is fine
+        *d++ = 0xff;
+        *d++ = 0xff;
+        *d++ = c;
     }
+    while (src < end) // 0 to 2 bytes left at the end
+        *d++ = *src++;
     return d - dst;
 }
 
 // Returns the size of the packed data, without writing anything
-static size_t RLE0FFFFSize(const uint8_t* src, size_t len) {
-    uint8_t last(0); // Last byte emitted, to avoid encoding runs of FFs
+static size_t RLE0Size(const uint8_t* src, size_t len)
+{
+    auto end = src + len;
     size_t count(0);
-    while (len--) {
-        const uint8_t c = *src++; // non-special or last two bytes are always copied
-        if (((c + 1) & 0xfe) || (2 > len)) {
+    uint8_t last(0); // Last byte emitted, to avoid encoding a run after FFs
+    while (src < end - 2) { // can't start a run in the last two bytes
+        uint8_t c = *src++;
+        if (((c + 1) & 0xfe) != 0 || (c != src[0]) ||
+            (!c && (0xff == last || (end - src) < 3 || src[1] || src[2])))
+        { // Not special or not a run  
             count++;
             last = c;
+            continue;
         }
-        else { // Special char, at least one more is available in src
-            uint8_t cc = *src; // not consumed here
-            if (c != cc) { // non-repeating special
-                last = c;
-                count++;
-                continue;
-            }
-            // At least two special chars in a row
-            src++; // Consume the second byte, it will be handled
-            len--;
-
-            if (c) { // Two FFs in a row, encoded as FF FF FF
-                last = 0xff;
-                count += 3;
-                continue;
-            }
-            // Two zeros, if we don't have four it's not a run
-            if (2 > len || 0 != src[0] || 0 != src[1]) { // Not four zeros, emit two
-                last = 0;
-                count += 2;
-                continue;
-            }
-
-            // If the last emitted byte was FF this can't be encoded as a run
-            // emit one zero and put back the second
-            if (0xff == last) {
-                last = 0;
-                count++;
-                len++;
-                src--;
-                continue;
-            }
-
-            // at least four zeros on input, use the next two
-            src += 2;
-            len -= 2;
-            uint8_t run = static_cast<uint8_t>(len < 0xff ? len : 0xfe); // Can't use 0xff
-            run = run_count(src, 0, run); // In addition to the four
-            // run, emit FF FF run (run is at least 4)
-            last = run;
-            count += 3;
-            src += run;
-            len -= run;
+        src++;
+        if (c == 0) { // RLE run of zeros
+            src += 2; // Minimum of 4 zeros
+            src += run_count(src, end - src); // In addition to the four
         }
+        last = 0; // Consecutive runs are fine
+        count += 3;
     }
-    return count;
+    return count + end - src;
 }
 
 static size_t raw_size(encsp const &p) {
@@ -425,8 +351,7 @@ template<typename T> static int enc(const T *source, oBits &s, encsp p)
     if (p->quanta < 2) {
         if (is_fast(p->mode))
             return QB3::encode_fast(source, s, *p);
-        else
-            return QB3::encode_best(source, s, *p);
+        return QB3::encode_best(source, s, *p);
     }
 
     // Quantized encoding
@@ -492,20 +417,12 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
     bool rle = (QB3M_RLE == mode || QB3M_CF_RLE == mode || QB3M_CF_RLE_H == mode || QB3M_RLE_H == mode);
     if (rle) {
         switch (mode) {
-        case QB3M_RLE:
-            p->mode = QB3M_BASE_Z;
-            break;
-        case QB3M_CF_RLE:
-            p->mode = QB3M_CF;
-            break;
-        case QB3M_RLE_H:
-            p->mode = QB3M_BASE_H;
-            break;
-        case QB3M_CF_RLE_H:
-            p->mode = QB3M_CF_H;
-            break;
+        case QB3M_RLE: p->mode = QB3M_BASE_Z; break;
+        case QB3M_CF_RLE: p->mode = QB3M_CF; break;
+        case QB3M_RLE_H: p->mode = QB3M_BASE_H; break;
+        case QB3M_CF_RLE_H: p->mode = QB3M_CF_H; break;
         default: // Library internal error
-            p->error = 255;
+            p->error = QB3E_LIBERR;
             return 0;
         }
     }
@@ -548,16 +465,15 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
         if (len <= qb3_max_encoded_size(p) / 2) {
             auto data_size = len - data_position; // Exclude the headers, they will be rewritten
             auto available = qb3_max_encoded_size(p) - len;
-            auto rle_size = RLE0FFFFSize(d + data_position, data_size);
+            auto rle_size = RLE0Size(d + data_position, data_size);
             if (rle_size <= available && rle_size < data_size) { // Only if it fits and is small enough
                 // Encode it at the end of the data
-                auto new_size = RLE0FFFF(d + data_position, data_size, d + len);
+                auto new_size = RLE0(d + data_position, data_size, d + len);
                 // Check that it worked
                 if (new_size != rle_size) { // Paranoid check
                     p->error = QB3E_EINV; // Something went wrong, bail out
                     return 0;
                 }
-
                 // new stream, same buffer
                 oBits srle(d);
                 write_headers(p, srle);

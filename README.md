@@ -1,7 +1,6 @@
 # QB3: Fast and Efficient Image/Raster Compression
 
-- Lossless compression and decompression rate of 500MB/sec for byte data,
- close to 4GB/sec for 64 bit data
+- Lossless compression and decompression rate of 500MB/sec for byte data, 4GB/sec for 64 bit data
 - Better compression than PNG in most cases
 - All integer types, signed and unsigned, 8 to 64bit per value
 - Lossless, or lossy by division with a small integer (quanta)
@@ -28,17 +27,19 @@ QB3 in MRF enabled.
 # C API
 [QB3.h](QB3lib/QB3.h) contains the public C API interface.
 The workflow is to create opaque encoder or decoder control structures, 
-set or query options and encode or decode the raster data.
-There are a couple of QB3 encoder modes. The default one is recommended. The other 
-modes extend the encoding method, which results in slighlty better compression 
-at the expense of encoding speed. For 8bit natural images the compression ratio 
-gain from using the extended methods are usually very small, but can be considerable.
-If even better compression ratio is needed, a good option is to combine the output
-form the QB3 default mode with a second pass generic lossless compressions such 
-as ZSTD or DEFLATE at a very low effort setting. This second pass is especially 
-useful for synthetic images that include repeated identical sequences.  
-Finally, there is a simplified compression mode that is 20% faster than the 
-default and under 0.125% larger. This FTL mode also speeds up decompression.
+set or query options and encode or decode the raster data.  
+There are a couple of QB3 encoder modes. The default mode (QB3M_FTL) is the fastest. 
+The other modes extend the encoding method, which results in slighlty better 
+compression at the expense of encoding speed. The QB3M_FTL mode is 25% faster 
+than QB3M_BASE, while being less than .1% worse in compression ration. 
+The QB3M_BEST is slower still, about half the speed of QB3M_BASE, but can 
+sometimes result in significant compression ratio gains. For 8bit natural 
+images the compression ratio gain from using the best mode are still small.  
+If a better compression ratio is needed, a good option is to combine the output
+form the QB3 fast mode with a second pass generic lossless compression such 
+as ZSTD, at a very low effort setting (zip the QB3 output). This second pass 
+is especially useful for synthetic images that contain identical sequences,
+which QB3 does not compress well.
 
 # Code Organization
 The low level, lossless QB3 compression is implemented in qb3decode.h and 
@@ -48,7 +49,19 @@ The higher level C API, located in qb3encode.cpp and qb3decode.cpp, which also
 adds a file interchange format. Lossy compression by quantization is also 
 implemented in these files.
 
+# Code Organization
+The core lossless QB3 compression is implemented in qb3decode.h and qb3encode.h 
+as C++ templates.  
+The higher level C API is located in qb3encode.cpp and qb3decode.cpp,
+which also define a file interchange format that contains the metadata needed 
+for decoding. Lossy compression by quantization is also implemented in these files.
+
 # Change Log
+
+## Version 1.3.1
+- Made QB3M_FTL the default mode. The output is barely larger than QB3M_BASE 
+ while being 25% faster for both encoding and decoding, a significant advantage
+- Update QB3 algorithm description to match the current code
 
 ## Version 1.3.0
 - Stride encoding, matching stride decoding
@@ -66,18 +79,19 @@ performance benefit
 
 ## Version 1.2.0
 - Speed optimizations, both compression and decompression
-    - More than 400MB/sec for byte data using the default mode
+    - More than 400MB/sec for byte data using the QB3M_BASE mode
 - New QB3M_FTL mode
-	- 500MB/sec for byte data, 25% faster than QB3M_DEFAULT
+	- 500MB/sec for byte data, 25% faster encoding than QB3M_BASE
+    - Faster decoding than QB3M_BASE
  	- Tiny compression penalty, under 0.1% in most cases
   	- Test availability by checking that QB3_HAS_FTL is defined
 - WASM test
     - [prototype code](attic/world.cpp)
 
 ## Version 1.1.0
-- Better scan ordering, second order Hilbert curve is the default
+- Hilbert second order space filling curve is the default scan order
     - 5% better compression with no speed penalty
-    - Original scan order (Morton) is optional
+    - Original scan order (Morton) made optional
 - Minor performance improvements and bug fixes
 - Simplified code, removal of lookup tables for non-byte data
 - Allow stride decoding to non-contiguous line buffers
