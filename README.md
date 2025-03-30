@@ -2,9 +2,10 @@
 
 - Lossless compression and decompression rate of 500MB/sec for byte data, 4GB/sec for 64 bit data
 - Better compression than PNG in most cases
-- No external dependencies, very low complexity
-- No significant memory footprint during encoding or decoding
 - All integer types, signed and unsigned, 8 to 64bit per value
+- Lossless, or lossy by division with a small integer (quanta)
+- No significant memory footprint during encoding or decoding
+- No external dependencies, very low complexity
 
 # Library
 The library, located in [QB3lib](QB3lib) provides a C API for the QB3 codec.
@@ -41,11 +42,12 @@ is especially useful for synthetic images that contain identical sequences,
 which QB3 does not compress well.
 
 # Code Organization
-The low level QB3 algorithm is implemented in the qb3decode.h and qb3encode.h as
-C++ templates. While the core implementation is C++, it does not make use of 
-any advanced features other than templates, conversion to C is very easy.
+The low level, lossless QB3 compression is implemented in qb3decode.h and 
+qb3encode.h as C++ templates. While the core implementation is C++, it does 
+not make use of any advanced features other than templates.
 The higher level C API, located in qb3encode.cpp and qb3decode.cpp, which also 
-adds a file interchange format.
+adds a file interchange format. Lossy compression by quantization is also 
+implemented in these files.
 
 # Code Organization
 The core lossless QB3 compression is implemented in qb3decode.h and qb3encode.h 
@@ -64,6 +66,8 @@ for decoding. Lossy compression by quantization is also implemented in these fil
 ## Version 1.3.0
 - Stride encoding, matching stride decoding
 - QB3.h is the only public header
+- Performance improvements
+- Improved testing
 
 ## Version 1.2.1
 - Bug fix, decoding of best mode could fail for 32 and 64 bit integers, due to
