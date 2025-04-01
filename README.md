@@ -8,6 +8,7 @@
 - No external dependencies, very low complexity
 
 # Performance
+Compared with PNG on a public image dataset, QB3 is 38 times faster while being 7% smaller.  
 
 ![Compression vs PNG](performance/CID22_QB3vsPNG.svg)
 [Detailed comparison](performance/performance.md)
