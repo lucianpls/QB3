@@ -48,14 +48,6 @@ is especially useful for synthetic images that contain identical sequences,
 which QB3 does not compress well.
 
 # Code Organization
-The low level, lossless QB3 compression is implemented in qb3decode.h and 
-qb3encode.h as C++ templates. While the core implementation is C++, it does 
-not make use of any advanced features other than templates.
-The higher level C API, located in qb3encode.cpp and qb3decode.cpp, which also 
-adds a file interchange format. Lossy compression by quantization is also 
-implemented in these files.
-
-# Code Organization
 The core lossless QB3 compression is implemented in qb3decode.h and qb3encode.h 
 as C++ templates.  
 The higher level C API is located in qb3encode.cpp and qb3decode.cpp,
