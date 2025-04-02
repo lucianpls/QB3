@@ -30,8 +30,8 @@ This comparison is done on the reference images from the
 
 ![images](https://cloudinary-marketing-res.cloudinary.com/image/upload/f_auto,q_auto/v1682016607/CID22_full_set)
 
-All of the 512x512 8bit RGB images from the reference images are used, with the two single band (grayscale) 
-images being removed. The images are mostly natural photographs, plus a few illustrations and computer 
+The 512x512 8bit RGB reference images are used, with the two single band (grayscale) images being removed. 
+The images are mostly natural photographs, plus a few illustrations and computer 
 generated images. The input images are compressed using the cqb3 tool, using various QB3 settings available. 
 Then the qb3 output images are converted back to PNG, also using the cqb3 conversion utility, which in turn 
 relies on libpng 1.6.44 and zlib 1.3.1.1 at the default settings. The PNG images used in comparison are the 
