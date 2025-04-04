@@ -21,7 +21,7 @@ and 64 bit integers, which includes AMD64 and ARM64 platforms, as well as WASM.
 Only 64bit builds should be used since this implementation uses 64 bit integers heavily.
 
 # Using QB3
-The included [cqb3](cqb3.md) command line image conversion program converts PNG 
+The included [cqb3](doc/cqb3.md) command line image conversion program converts PNG 
 or JPEG images to QB3, for 8 and 16 bit images. It can also decode QB3 to PNG.
 The source code serves as an example of using the library.
 This optional utility does depend on an external library to read and write 
