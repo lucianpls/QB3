@@ -8,10 +8,10 @@
 - No external dependencies, very low complexity
 
 # Performance
-Compared with PNG on a public image dataset, QB3 is 7% smaller while being 38 times faster.  
+Compared with PNG on a public image dataset, QB3 is 
+![7% smaller while being 38 times faster](performance/performance.md)
 
 ![Compression vs PNG](performance/CID22_QB3vsPNG.svg)
-[Detailed comparison](performance/performance.md)
 
 # Library
 The library, located in [QB3lib](QB3lib) provides a C API for the QB3 codec.
