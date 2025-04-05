@@ -1,14 +1,14 @@
-# QB3: Fast and Efficient Image/Raster Compression
+# QB3: Image/Raster Compression, Fast and Efficient 
 
-- Lossless compression and decompression rate of 500MB/sec for byte data, 4GB/sec for 64 bit data
 - Better compression than PNG in most cases
+- Lossless compression and decompression rate of 500MB/sec for byte data, 4GB/sec for 64 bit data
 - All integer types, signed and unsigned, 8 to 64bit per value
 - Lossless, or lossy by division with a small integer (quanta)
 - No significant memory footprint during encoding or decoding
 - No external dependencies, very low complexity
 
 # Performance
-Compared with PNG on a public image dataset, QB3 is 38 times faster while being 7% smaller.  
+Compared with PNG on a public image dataset, QB3 is 7% smaller while being 38 times faster.  
 
 ![Compression vs PNG](performance/CID22_QB3vsPNG.svg)
 [Detailed comparison](performance/performance.md)
@@ -60,7 +60,7 @@ for decoding. Lossy compression by quantization is also implemented in these fil
 - Made QB3M_FTL the default mode. The output is barely larger than QB3M_BASE 
  while being 25% faster for both encoding and decoding, a significant advantage
 - Update QB3 algorithm description to match the current code
-- Refactored RLE
+- Refactored RLE used in QB3M_BEST
 - Add comparison with PNG document
 
 ## Version 1.3.0
