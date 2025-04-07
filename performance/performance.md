@@ -221,7 +221,7 @@ comparison to these, QB3 is not heavily optimized for compression ratio. Yet QB3
 better than PNG, which is the most widely used lossless image format. The formats that obtain better compression 
 ratios than QB3 are usually slower and more complex. They also frequently have large memory requirements 
 and use multiple threads in parallel to achieve reasonable compression speeds.
-This comparison is by not exhaustive, but it is representative of the performance of QB3 in general.
+This comparison is not exhaustive, but it is representative of the performance of QB3 in general.
 There are alternative PNG compression implementations, which could be faster or better than the 
 reference libPNG used here. Even the standard libPNG has settings that can be adjusted to increase 
 compression at the expense of speed or vice versa. It is not within the scope of this study to 
