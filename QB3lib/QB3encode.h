@@ -143,8 +143,8 @@ static std::pair<size_t, uint64_t> qb3csztbl(uint64_t val, size_t rung) {
 // only encode the group entries, not the rung switch
 // bitsused is used to choose the rung for encoding
 // If abits > 0, the accumulator is also pushed into the stream
-template <typename T>
-static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t abits, bool skipstep = false)
+template <typename T, bool SKIPSTEP = false>
+static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t abits)
 {
     assert(abits <= 64);
     const size_t rung = topbit(bitsused | 1);
@@ -157,7 +157,7 @@ static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t 
         return;
     }
     size_t stepp(B2 + 1);
-    if (!skipstep) {
+    if (!SKIPSTEP) {
         // Flip the last set rung bit if the rung bit sequence is a step down
         // At least one rung bit has to be set, so it can't return 0
         stepp = step(group, rung);
@@ -243,12 +243,12 @@ static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t 
 }
 
 // Base QB3 group encode with code switch, returns encoded size
-template <typename T>
-static void groupencode(T group[B2], T bitsused, size_t oldrung, oBits& s, bool skipstep = false) {
+template <typename T, bool SKIPSTEP = false>
+static void groupencode(T group[B2], T bitsused, size_t oldrung, oBits& s) {
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     constexpr auto csw = sizeof(T) == 1 ? csw3 : sizeof(T) == 2 ? csw4 : sizeof(T) == 4 ? csw5 : csw6;
     uint64_t acc = csw[(topbit(bitsused | 1) - oldrung) & ((1ull << UBITS) - 1)];
-    groupencode(group, bitsused, s, acc & TBLMASK, static_cast<size_t>(acc >> 12), skipstep);
+    groupencode<T, SKIPSTEP>(group, bitsused, s, acc & TBLMASK, static_cast<size_t>(acc >> 12));
 }
 
 // Group encode with cf
@@ -345,7 +345,7 @@ static int check_info(const encs& info) {
 }
 
 // Only basic encoding
-template<typename T>
+template<typename T, bool SKIPSTEP>
 static int encode_fast(const T* image, oBits& s, encs &info)
 {
     static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
@@ -405,7 +405,11 @@ static int encode_fast(const T* image, oBits& s, encs &info)
                     }
                 }
                 prev[c] = prv;
-                groupencode(group, bitsused, runbits[c], s, info.mode == QB3M_FTL);
+                //if (info.mode == QB3M_FTL)
+                if (SKIPSTEP)
+                    groupencode<T, true>(group, bitsused, runbits[c], s);
+                else
+                    groupencode(group, bitsused, runbits[c], s);
                 runbits[c] = topbit(bitsused | 1);
             }
         }

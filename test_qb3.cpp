@@ -566,26 +566,26 @@ int main(int argc, char **argv)
 
             cout << "Size\tRatio %\tEnc (MB/s)\t(s)\tDec (MB/s)\t(s)\tT_Size\n\n";
 
-            //cout << "Stride decode\n";
-            //check_stride_decode<uint8_t>(image, raster, raster.size.x * raster.size.c + 10, true);
-            //cout << endl;
+            cout << "Stride decode\n";
+            check_stride_decode<uint8_t>(image, raster, raster.size.x * raster.size.c + 10, true);
+            cout << endl;
 
-            //check_stride_decode<int8_t>(image, raster, raster.size.x * raster.size.c + 10, true);
-            //cout << endl;
+            check_stride_decode<int8_t>(image, raster, raster.size.x * raster.size.c + 10, true);
+            cout << endl;
 
-            //check_stride_decode<uint16_t>(image, raster, raster.size.x * raster.size.c + 11, true);
-            //cout << endl;
+            check_stride_decode<uint16_t>(image, raster, raster.size.x * raster.size.c + 11, true);
+            cout << endl;
 
-            //check_stride_decode<uint32_t>(image, raster, raster.size.x * raster.size.c + 90, false);
-            //cout << endl;
+            check_stride_decode<uint32_t>(image, raster, raster.size.x * raster.size.c + 90, false);
+            cout << endl;
 
-            //check_stride_decode<uint64_t>(image, raster, raster.size.x * raster.size.c + 91, false);
-            //cout << endl;
+            check_stride_decode<uint64_t>(image, raster, raster.size.x * raster.size.c + 91, false);
+            cout << endl;
 
-            //check_stride_decode<int64_t>(image, raster, raster.size.x * raster.size.c + 92, false);
-            //cout << endl;
+            check_stride_decode<int64_t>(image, raster, raster.size.x * raster.size.c + 92, false);
+            cout << endl;
 
-            //cout << endl;
+            cout << endl;
 
             cout << "Stride encode\n";
 

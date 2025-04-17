@@ -138,7 +138,7 @@ static std::pair<size_t, uint64_t> qb3dsztbl(uint64_t val, size_t rung) {
 // Decode a B2 sized group of QB3 values from s and acc
 // At least 56 valid bits in accumulator
 // returns false on failure
-template<bool applystep = true, typename T>
+template<bool APPLYSTEP = true, typename T>
 static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits) {
     assert(((rung > 1) && (abits <= 8))
         || ((rung == 1) && (abits <= 17)) // B2 + 1
@@ -288,7 +288,7 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
         }
     }
     // template parameter to avoid a test when not needed
-    if (applystep && (0 == (group[B2 - 1] >> rung))) {
+    if (APPLYSTEP && (0 == (group[B2 - 1] >> rung))) {
         auto stepp = step(group, rung);
         if (stepp < B2)
             group[stepp] ^= T(1ull << rung);
@@ -385,6 +385,170 @@ static bool decodeFTL(uint8_t* src, size_t len, T* image, const decs& info)
                 for (int i = 0; i < B2; i++)
                     blockp[offset[i]] = prv += smag(group[i]);
                 prev[c] = prv;
+            } // Per band per block
+            if (failed) break;
+        } // per block
+        if (failed) break;
+        // For performance apply band delta per block strip, in linear order
+        for (size_t j = 0; j < B; j++) {
+            for (int c = 0; c < bands; c++) if (c != cband[c]) {
+                auto dimg = image + stride * (y + j) + c;
+                auto simg = image + stride * (y + j) + cband[c];
+                for (int i = 0; i < xsize; i++, dimg += bands, simg += bands)
+                    *dimg += *simg;
+            }
+        }
+    } // per strip
+    // It might not catch all errors
+    return failed || s.avail() > 7;
+}
+
+template<> 
+bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& info)
+{
+    constexpr auto NORM_MASK(7); // UBITS set
+    constexpr auto LONG_MASK(NORM_MASK * 2 + 1); // UBITS + 1 set
+    constexpr auto dsw = dsw3;
+    auto xsize(info.xsize), ysize(info.ysize), bands(info.nbands), stride(info.stride);
+    auto cband = info.cband;
+    uint8_t prev[QB3_MAXBANDS] = {};
+    size_t runbits[QB3_MAXBANDS] = {};
+    stride = stride ? stride : xsize * bands;
+    // Set up block offsets based on traversal order, defaults to HILBERT
+    uint64_t order(info.order);
+    order = order ? order : HILBERT;
+    size_t offset[B2] = {};
+    for (size_t i = 0; i < B2; i++) {
+        size_t n = (order >> ((B2 - 1 - i) << 2));
+        offset[i] = ((n >> 2) & 0b11) * stride + (n & 0b11) * bands;
+    }
+    iBits s(src, len);
+    bool failed(false);
+
+    for (size_t y = 0; y < ysize; y += B) {
+        // If the last row is partial, roll it up
+        if (y + B > ysize)
+            y = ysize - B;
+        for (size_t x = 0; x < xsize; x += B) {
+            // If the last column is partial, move it left
+            if (x + B > xsize)
+                x = xsize - B;
+            for (int c = 0; c < bands; c++) {
+                auto prv = prev[c];
+                uint8_t* const blockp = image + y * stride + x * bands + c;
+                uint64_t cs(0), abits(1), acc(s.peek());
+                if (acc & 1) { // Rung change
+                    cs = dsw[(acc >> 1) & LONG_MASK];
+                    abits = cs >> 12;
+                    failed |= (0 == (cs & TBLMASK)); // no signals
+                }
+                acc >>= abits;
+                // abits is never > 8, so it's safe to call gdecode
+                auto rung = (runbits[c] + cs) & NORM_MASK;
+                runbits[c] = rung;
+                if (rung < 2) { // decode inlined
+                    if (rung == 0) { // single bits or all zeros
+                        abits++;
+                        if (0 != (acc & 1)) {
+                            abits += B2;
+                            for (int i = 0; i < B2; i++) {
+                                acc >>= 1;
+                                blockp[offset[i]] = prv -= (1 & acc);
+                            }
+                        }
+                        else {
+                            for (int i = 0; i < B2; i++)
+                                blockp[offset[i]] = prv;
+                        }
+                    }
+                    else { // rung == 1
+                        // Use inline constants as nibble tables
+                        // The lower two bits of the accumulator determine the size
+                        // Shift the accumulator to the left to place the selector in the right place
+                        acc <<= 2;
+                        for (int i = 0; i < B2; i++) {
+                            auto size = (0x31213121u >> (acc & 0b11100)) & 0xf;
+                            blockp[offset[i]] = prv += smag(uint8_t((0x30102010u >> (acc & 0b11100)) & 0xf));
+                            abits += size;
+                            acc >>= size;
+                        }
+                    }
+                }
+                else if (rung == 2) {
+                    acc <<= 2;
+                    uint32_t size;
+                    for (int i = 0; i < 14; i++) {
+                        size = (0x4232423242324232ull >> (acc & 0b111100)) & 0xf;
+                        blockp[offset[i]] = prv += smag(uint8_t((0x7130612051304120ull >> (acc & 0b111100)) & 0xf));
+                        abits += size;
+                        acc >>= size;
+                    }
+                    //if (abits > 54) { // Rare, max is 60, need 8 + 2 bits
+                        s.advance(abits - 2);
+                        acc = s.peek();
+                        abits = 2;
+                    //}
+                    size = (0x4232423242324232ull >> (acc & 0b111100)) & 0xf;
+                    blockp[offset[14]] = prv += smag(uint8_t((0x7130612051304120ull >> (acc & 0b111100)) & 0xf));
+                    acc >>= size;
+                    abits += size;
+                    size = (0x4232423242324232ull >> (acc & 0b111100)) & 0xf;
+                    blockp[offset[15]] = prv += smag(uint8_t((0x7130612051304120ull >> (acc & 0b111100)) & 0xf));
+                    abits += size;
+                }
+                else {
+                    auto drg = DRG[rung];
+                    const auto m = (1ull << (rung + 2)) - 1;
+                    if (6 > rung) { // Table decode at 3,4 and 5, two reads
+                        for (size_t i = 0; i < B2 / 2; i++) {
+                            auto v = drg[acc & m];
+                            blockp[offset[i]] = prv += smag(uint8_t(v & TBLMASK));
+                            abits += v >> 12;
+                            acc >>= v >> 12;
+                        }
+                        s.advance(abits);
+                        acc = s.peek();
+                        abits = 0;
+                        for (size_t i = B2 / 2; i < B2; i++) {
+                            auto v = drg[acc & m];
+                            blockp[offset[i]] = prv += smag(uint8_t(v & TBLMASK));
+                            abits += v >> 12;
+                            acc >>= v >> 12;
+                        }
+                        prev[c] = prv;
+                        s.advance(abits);
+                        continue;
+                    }
+
+                    // Rungs 6 and 7, three total reads, 6 4 6
+                    int i = 0;
+                    do {
+                        auto v = drg[acc & m];
+                        blockp[offset[i]] = prv += smag(uint8_t(v & TBLMASK));
+                        abits += v >> 12;
+                        acc >>= v >> 12;
+                    } while (++i < 6);
+                    s.advance(abits);
+                    acc = s.peek();
+                    abits = 0;
+                    do {
+                        auto v = drg[acc & m];
+                        blockp[offset[i]] = prv += smag(uint8_t(v & TBLMASK));
+                        abits += v >> 12;
+                        acc >>= v >> 12;
+                    } while (++i < 10);
+                    s.advance(abits);
+                    acc = s.peek();
+                    abits = 0;
+                    do {
+                        auto v = drg[acc & m];
+                        blockp[offset[i]] = prv += smag(uint8_t(v & TBLMASK));
+                        abits += v >> 12;
+                        acc >>= v >> 12;
+                    } while (++i < B2);
+                }
+                prev[c] = prv;
+                s.advance(abits);
             } // Per band per block
             if (failed) break;
         } // per block
