@@ -405,7 +405,6 @@ static int encode_fast(const T* image, oBits& s, encs &info)
                     }
                 }
                 prev[c] = prv;
-                //if (info.mode == QB3M_FTL)
                 if (SKIPSTEP)
                     groupencode<T, true>(group, bitsused, runbits[c], s);
                 else
