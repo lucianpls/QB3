@@ -36,7 +36,7 @@ generated images. The input images are compressed using the cqb3 tool, using var
 Then the qb3 output images are converted back to PNG, also using the cqb3 conversion utility, which in turn 
 relies on libpng 1.6.44 and zlib 1.3.1.1 at the default settings. The PNG images used in comparison are the 
 restored PNGs, not the original ones.
-The computer used has an AMD 5955W CPU with sufficient memory, running Windows 11. QB3 V1.3.1 compiled 
+The computer used has an AMD 5955W CPU with sufficient memory, running Windows 11. QB3 V1.3.2 compiled 
 using Visual Studio 22 with the CLang-CL compiler was used. The timings used are the ones recorded by the 
 cqb3 tool, which measures only the time spent for the compression itself, from raw image to compressed 
 image, in memory. Finally, a Jupyter notebook was used to analyze the timings and the size of the image 
@@ -112,59 +112,63 @@ The next thing to look at is the compression speed, which is the main advantage 
 
 In this graph, the images are sorted by the compression time of the PNG, which tends to be roughly 
 proportional to the PNG output size, the thicker brown line, varying between 14 and 150 milliseconds, 
-with an average of 84 milliseconds.
+with an average of 83 milliseconds.
 There is a very clear, massive difference in compression speed between QB3 and PNG. The QB3 modes are the almost
 flat lines at the bottom of the graph, taking between 1 and 5 milliseconds to compress a 512x512x3 8 bit image,
 showing very little variation between images. The slowest mode of the QB3 for the slowest to compress image 
 is less than half of the fastest PNG compression time.
-The QB3 compression speed is 20-30 times faster than PNG for natural images. Even QB3 BEST + Band mix, which 
+The QB3 compression speed is 20-40 times faster than PNG for natural images. Even QB3 BEST + Band mix, which 
 compresses the input image 9 times in sequence, is still faster than the PNG compression in most cases. 
 This is the red line on the graph above, which is the only one that is even intersecting the PNG line.
-Note the compression rate of QB3, measured based on the raw data volume, which for the FAST mode averages 357 MB/s, 
-with a peak of 816 MB/s! The PNG average compression rate is 9.35 MB/s, which is 38 times slower than the QB3 FAST mode!
-Within QB3, the FAST mode is 10 to 20 % faster than the BASE mode, which is twice as fast as the QB3 BEST.
-Raw data rate for HD video (1920x1080), 8 bit 60 FPS is 356MB/s, which is the average compression rate of the QB3 
+Note the compression rate of QB3, measured based on the raw data volume, which for the FAST mode averages 375 MB/s, 
+with a peak of 884 MB/s! The PNG average compression rate is 9.47 MB/s, which is almost 40 times slower than 
+the QB3 FAST mode. The difference is even larger at the extreme, for the slowest image to compress, the QB3 FAST 
+mode is more than 55 times faster than PNG.
+Within QB3 modes, the FAST mode is 10 to 20 % faster than the BASE mode, which is twice as fast as the QB3 BEST.
+Raw data rate for HD video (1920x1080), 8 bit 60 FPS is 356MB/s, which is under the average compression rate for QB3 
 FAST mode during this test, single thread, on a 4.5 GHz Zen 3 CPU, without CPU pinning. This means that it is 
-possible to losslessly compress HD video at 60 frames per second in real time using QB3 using a single thread on a modern CPU.
+possible to losslessly compress HD video at 60 frames per second in real time using QB3 using a single thread 
+on a modern CPU.
 Summarizing the results in just a few numbers:
 
 |Time (ms)|FAST|BASE|BEST|PNG|
 |---|---|---|---|---|
-|Max|3.03|6.10|7.13|150|
-|Avg|2.20|2.42|5.36|84.13|
-|Min|0.96|1.01|1.46|14|
+|Max|2.71|3.12|7.04|150|
+|Avg|2.10|2.38|5.30|83.04|
+|Min|0.89|0.99|1.44|12|
 
 
 |Rate (MB/s)|FAST|BASE|BEST|PNG|
 |---|---|---|---|---|
-|Max|816.22|777.18|537.36||
-|Avg|357.52|324.39|146.72|9.35|
-|Min|259.39|129.00|110.36||
+|Max|884.22|790.70|546.78||
+|Avg|375.14|329.77|148.37|9.47|
+|Min|289.70|251.85|111.69||
 
 
 ### Decompression speed
 PND decompression is much faster than PNG compression, one of reasons for its popularity. 
 QB3 consistently decompressed faster than PNG, although the difference is much less than the compression
-speed difference. The decompression speed of QB3 is also more consistent than the PNG decompression.
+speed difference. The decompression speed of QB3 is also very consistent, much more so than the PNG 
+decompression.
 
 ![Decompression speed](CID22_decode.svg)
 
 |Rate (MB/s)|QB3|PNG|
 |---|---|---|
-|Max|415.18|589.66|
-|Avg|302.30|236.86|
-|Min|253.45|187.62|
+|Max|446.38|592.68|
+|Avg|353.20|239.54|
+|Min|299.96|190.27|
 
 In contrast to most 
 compression algorithms, QB3 speed is almost symmetrical, with the decompression being slightly slower 
 than the compression, except in the BEST mode, where compression is slower. 
 This is due to the longer dependency chain during decompression, and also because it is harder for 
-the compiler to vectorize. The decompression speed is roughly the same across all QB3 modes, with the 
-FAST mode being slightly faster to decompress than the BASE or BEST.
+the compiler to vectorize. The decompression speed values presented here are for the QB3 FAST mode.
+Decompression speed for QB3 BASE or BEST mode is about 20% slower, and more dependent on the data.
 
 ## 16 bit images
 
-There are few 16bit image datasets available for use on the internet. The image set available from 
+There are very few 16bit image datasets available for use on the internet. The image set available from 
 [https://imagecompression.info/test_images/](https://imagecompression.info/test_images/) is one 
 such set. The set consists of 14 images of varying sizes available in both 8 and 16 bit versions, 
 selected for being difficult to compress. When compressing the 8 bit images, on the average QB3 is 
