@@ -44,20 +44,10 @@ constexpr size_t B2(B * B);
 static size_t topbit(uint64_t val) {
     return 63 - __lzcnt64(val);
 }
-
-static size_t setbits16(uint64_t val) {
-    return __popcnt64(val);
-}
-
 #elif defined(__GNUC__)
 static size_t topbit(uint64_t val) {
     return 63 - __builtin_clzll(val);
 }
-
-static size_t setbits16(uint64_t val) {
-    return __builtin_popcountll(val);
-}
-
 #else // no builtins, portable C
 // blog2 of val, result is undefined for val == 0
 static size_t topbit(uint64_t v) {
@@ -68,16 +58,6 @@ static size_t topbit(uint64_t v) {
     t = size_t(0 != (v >> 4)) << 2;  v >>= t; r |= t;
     return r + ((0xffffaa50ull >> (v << 1)) & 0x3);
 }
-
-// portable byte bitcount
-static inline size_t nbits(uint8_t v) {
-    return ((((v * 0x8040201u) >> 3u) & 0x11111111u) * 0x11111111u) >> 28u;
-}
-
-static size_t setbits16(uint64_t val) {
-    return nbits(0xff & val) + nbits(0xff & (val >> 8));
-}
-
 #endif
 
 struct band_state {
@@ -155,7 +135,9 @@ static T smag(T v) {
     return (v >> 1) ^ (~T(0) * (v & 1));
 }
 
-// If the rung bits of the input values match 1*0*, returns the index of first 0, otherwise B2 + 1
+// If the rung bits of the input values match 1*0*, returns the index of first 0 + 1
+// Assumes at least one rung bit out of B2 is set
+// Return > B2 if no match
 template<typename T>
 static size_t step(const T* const v, size_t rung) {
     uint64_t acc = 0ull;
@@ -163,9 +145,25 @@ static size_t step(const T* const v, size_t rung) {
     for (size_t i = 0; i < B2; i++)
         acc = (acc << 1) | (1 ^ (v[i] >> rung));
     // Looking for 0*1*, with at least one bit set
-    // s is true if bit pattern is a step down
     bool s = ((acc & (acc + 1)) != 0);
-    return B2 + (s ? 1 : -setbits16(acc));
+    return B2 + B2 * 2 * s - topbit(acc) -1;
+}
+
+// Specialization for 8bit values, loopless, thus faster
+template<>
+size_t step<uint8_t>(const uint8_t* const v, size_t rung) {
+    assert(B2 == 16);
+    auto v64 = reinterpret_cast<const uint64_t*>(v);
+    auto v1 = v64[0] & (0x0101010101010101ull << rung);
+    auto v2 = v64[1] & (0x0101010101010101ull << rung);
+    // Accumulate rung bits at the top
+    v1 *= 0x2040810204081ull;
+    v2 *= 0x2040810204081ull;
+    // Shift the valid bits to the right
+    uint16_t acc = ((v1 >> (49 + rung)) & 0xff) | ((v2 >> (41 + rung)) & 0xff00);
+    // The rung bits are not flipped and they are in LSB order
+    bool s = ((acc & (acc + 1)) != 0);
+    return s * 16 + topbit(acc) + 1;
 }
 
 // QB3 block order, encoded as a single 64bit value
