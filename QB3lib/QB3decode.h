@@ -288,10 +288,10 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
         }
     }
     // template parameter to avoid a test when not needed
-    if (APPLYSTEP && (0 == (group[B2 - 1] >> rung))) {
-        auto stepp = step(group, rung);
-        if (stepp < B2)
-            group[stepp] ^= T(1ull << rung);
+    if (APPLYSTEP) {
+        auto stepv = step(group, rung);
+        if (stepv < B2)
+            group[stepv] ^= T(1ull << rung);
     }
     return true;
 }
@@ -403,7 +403,7 @@ static bool decodeFTL(uint8_t* src, size_t len, T* image, const decs& info)
     return failed || s.avail() > 7;
 }
 
-template<> 
+template<>
 bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& info)
 {
     constexpr auto NORM_MASK(7); // UBITS set
@@ -483,11 +483,10 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
                         abits += size;
                         acc >>= size;
                     }
-                    //if (abits > 54) { // Rare, max is 60, need 8 + 2 bits
-                        s.advance(abits - 2);
-                        acc = s.peek();
-                        abits = 2;
-                    //}
+                    // This is not always needed, but the test is unpredictable and more expensive
+                    s.advance(abits - 2);
+                    acc = s.peek();
+                    abits = 2;
                     size = (0x4232423242324232ull >> (acc & 0b111100)) & 0xf;
                     blockp[offset[14]] = prv += smag(uint8_t((0x7130612051304120ull >> (acc & 0b111100)) & 0xf));
                     acc >>= size;
