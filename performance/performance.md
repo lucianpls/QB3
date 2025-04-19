@@ -133,16 +133,16 @@ Summarizing the results in just a few numbers:
 
 |Time (ms)|FAST|BASE|BEST|PNG|
 |---|---|---|---|---|
-|Max|2.71|3.12|7.04|150|
-|Avg|2.10|2.38|5.30|83.04|
-|Min|0.89|0.99|1.44|12|
+|Max|2.69|2.99|6.92|150|
+|Avg|2.10|2.32|5.20|83.04|
+|Min|0.91|0.99|1.44|12|
 
 
 |Rate (MB/s)|FAST|BASE|BEST|PNG|
 |---|---|---|---|---|
-|Max|884.22|790.70|546.78||
-|Avg|375.14|329.77|148.37|9.47|
-|Min|289.70|251.85|111.69||
+|Max|868.22|790.94|546.59||
+|Avg|375.06|338.45|151.21|9.47|
+|Min|292.32|263.04|113.63||
 
 
 ### Decompression speed
@@ -155,13 +155,12 @@ decompression.
 
 |Rate (MB/s)|QB3|PNG|
 |---|---|---|
-|Max|446.38|592.68|
-|Avg|353.20|239.54|
-|Min|299.96|190.27|
+|Max|447.96|591.12|
+|Avg|352.79|238.80|
+|Min|317.55|182.63|
 
-In contrast to most 
-compression algorithms, QB3 speed is almost symmetrical, with the decompression being slightly slower 
-than the compression, except in the BEST mode, where compression is slower. 
+In contrast to most compression algorithms, QB3 speed is almost symmetrical, with the decompression 
+being slightly slower than the compression, except in the BEST mode, where compression is slower. 
 This is due to the longer dependency chain during decompression, and also because it is harder for 
 the compiler to vectorize. The decompression speed values presented here are for the QB3 FAST mode.
 Decompression speed for QB3 BASE or BEST mode is about 20% slower, and more dependent on the data.

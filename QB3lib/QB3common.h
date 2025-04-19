@@ -144,7 +144,7 @@ static size_t step(T const* v, size_t rung) {
     // Accumulate flipped rung bits
     for (size_t i = 0; i < B2; i++)
         acc = (acc << 1) | (1 ^ (v[i] >> rung));
-    // Looking for 0*1*, with at least one bit set
+    // Looking for 0+1*, zero is good on decoding
     bool s = ((acc & (acc + 1)) != 0);
     return B2 + B2 * 2 * s - topbit(acc * 2 + 1);
 }
@@ -159,11 +159,10 @@ size_t step<uint8_t>(uint8_t const* v, size_t rung) {
     // Accumulate rung bits at the top
     v1 *= 0x2040810204081ull;
     v2 *= 0x2040810204081ull;
-    // Shift and combine the valid bits
+    // Shift and combine the valid bits, they are not flipped and are in LSB order
     auto acc = ((v1 >> (49 + rung)) & 0xff) | ((v2 >> (41 + rung)) & 0xff00);
-    // The rung bits are not flipped and they are in LSB order
     bool s = ((acc & (acc + 1)) != 0);
-    return s * 16 + topbit(acc * 2 + 1);
+    return s * B2 + topbit(acc * 2 + 1);
 }
 
 // QB3 block order, encoded as a single 64bit value
