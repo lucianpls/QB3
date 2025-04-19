@@ -136,7 +136,7 @@ static T smag(T v) {
 }
 
 // If the rung bits of the input values match 1*0*, returns the index of first 0 + 1
-// Assumes at least one rung bit out of B2 is set
+// So we can discern between 0 and 1
 // Return > B2 if no match
 template<typename T>
 static size_t step(T const* v, size_t rung) {
@@ -146,7 +146,7 @@ static size_t step(T const* v, size_t rung) {
         acc = (acc << 1) | (1 ^ (v[i] >> rung));
     // Looking for 0*1*, with at least one bit set
     bool s = ((acc & (acc + 1)) != 0);
-    return B2 + B2 * 2 * s - topbit(acc) - 1;
+    return B2 + B2 * 2 * s - topbit(acc * 2 + 1);
 }
 
 // Specialization for 8bit values, loopless, thus faster
@@ -163,7 +163,7 @@ size_t step<uint8_t>(uint8_t const* v, size_t rung) {
     auto acc = ((v1 >> (49 + rung)) & 0xff) | ((v2 >> (41 + rung)) & 0xff00);
     // The rung bits are not flipped and they are in LSB order
     bool s = ((acc & (acc + 1)) != 0);
-    return s * 16 + topbit(acc) + 1;
+    return s * 16 + topbit(acc * 2 + 1);
 }
 
 // QB3 block order, encoded as a single 64bit value
