@@ -244,7 +244,7 @@ static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t 
 
 // Base QB3 group encode with code switch, returns encoded size
 template <typename T, bool SKIPSTEP = false>
-static void groupencode(T group[B2], T bitsused, size_t oldrung, oBits& s) {
+static void switchgenc(T group[B2], T bitsused, size_t oldrung, oBits& s) {
     constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
     constexpr auto csw = sizeof(T) == 1 ? csw3 : sizeof(T) == 2 ? csw4 : sizeof(T) == 4 ? csw5 : csw6;
     uint64_t acc = csw[(topbit(bitsused | 1) - oldrung) & ((1ull << UBITS) - 1)];
@@ -405,15 +405,12 @@ static int encode_fast(const T* image, oBits& s, encs &info)
                     }
                 }
                 prev[c] = prv;
-                if (SKIPSTEP)
-                    groupencode<T, true>(group, bitsused, runbits[c], s);
-                else
-                    groupencode(group, bitsused, runbits[c], s);
+                switchgenc<T, SKIPSTEP>(group, bitsused, runbits[c], s);
                 runbits[c] = topbit(bitsused | 1);
             }
         }
     }
-    // Save the state
+    // Save the state, in case of multiple stripes
     for (size_t c = 0; c < bands; c++) {
         info.band[c].prev = static_cast<size_t>(prev[c]);
         info.band[c].runbits = runbits[c];
@@ -571,7 +568,7 @@ static int encode_best(const T *image, oBits& s, encs &info) {
                 auto cf = gcf(group);
                 auto start = s.position();
                 if (cf < 2)
-                    groupencode(group, bitsused, oldrung, s);
+                    switchgenc(group, bitsused, oldrung, s);
                 else
                     cfgenc(group, cf, pcf[c], oldrung, s);
                 // Try index encoding
