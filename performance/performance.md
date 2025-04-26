@@ -79,7 +79,7 @@ resulting in negative savings. The second group are the rest of the images, wher
 or smaller than the corresponding PNG, thus the size savings are positive. Within each group, the 
 images are sorted from the smallest absolute savings to the largest. In other words, the slope of the 
 graph is steeper when the difference in size between the two compression methods is larger, 
-either positive or netgative, while the slope is almost flat where the difference is small. This order
+either positive or negative, while the slope is almost flat where the difference is small. This order
 makes it easier to see inflection point, or the ratio of image where QB3 is better than PNG. The other 
 QB3 modes are plotted on the same scale, using the QB3 FAST image order. The conclusion here is that 
 for the complete dataset all the QB3 modes are better than PNG, saving between 6 and 7 MB out of the 
