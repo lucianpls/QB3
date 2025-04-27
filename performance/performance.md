@@ -213,14 +213,14 @@ applications would only need to be recompiled to take advantage of the new compr
 
 ## Footnotes
 
-Two grayscale images from the CID22 have been removed from the comparison. Keeping them would have made 
-the results harder to explain, because the QB3 band decorrelation doesn't apply to single band images. 
-The raw sizes and the time taken on these would have been significant outliers, such as being 9 times 
-faster on the band mix, since there is no RGB band mix to try.
+The two grayscale images that are part of the CID22 dataset have been removed from the comparison. Keeping 
+them would have made the results harder to explain, because the QB3 band decorrelation doesn't apply to 
+single band images. The raw sizes and the time taken on these would have been significant outliers, such 
+as being 9 times faster on the band mix, since there are no RGB bands to mix.
 The overall compression results would have been very similar even with those images included, one of 
-the images compresses better with QB3 than PNG, while the other worse, as single band grayscale. 
-Promoting these images to RGB by duplicating the grayscale would have favored QB3, since 
-the band decorrelation in QB3 would make these three band grayscale images compress much better than PNG.
+the images compresses better with QB3 than PNG and the other one compresses worse, as single band grayscale.
+Promoting these images to RGB by duplicating the grayscale band would have favored QB3, since 
+the standard band decorrelation in QB3 would compress much better than PNG can.
 
 There are other lossless image formats or lossless variants of other formats, such as WebP and JpegXL. In 
 comparison to these, QB3 is not heavily optimized for compression ratio. Yet QB3 in general compresses 
@@ -241,8 +241,8 @@ are not a significant issue in general. The ZSTD or DEFLATE should be done at a 
 still very fast and produces most of the size reduction. Applying a higher effort level entropy coding does 
 not increase the savings over the lower effort in most cases.
 
-At the other extreme, like any lossless compression, QB3 compression is poor for noisy, high contrast images. 
-In some cases QB ends up expanding the data, and then reverting to storing the raw input as is.
+At the other extreme, like any lossless compression, QB3 compression is poor for noisy and high contrast images. 
+In some cases the QB3 algorithm ends up expanding the data slightly, then reverting to storing the raw input as is.
 There are also other image datasets, many of which have different characteristics than the CID22 dataset used here.
 For example the Kodak image set, which is a set of 24 natural images, slightly larger than the CID22 images. 
 QB3 compresses better than PNG for each and every image in the Kodak set. Another image 

@@ -170,16 +170,45 @@ static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t 
         acc = abits = 0;
     }
     auto t = CRG[rung];
+    // For small tables, it's faster to encode with separate values
+    if (rung == 1) { // 2 bits per value
+        static const uint8_t values[] = { 0, 1, 3, 7 };
+        static const uint8_t lens[] = { 1, 2, 3, 3 };
+        for (int i = 0; i < B2; i++)
+        {
+            acc |= uint64_t(values[group[i]]) << abits;
+            abits += lens[group[i]];
+        }
+        s.push(acc, abits);
+    }
+    else
+    if (rung == 2) {
+        static const uint8_t values[] = { 0, 2, 1, 5, 3, 7, 11, 15 };
+        static const uint8_t lens[] = { 2, 2, 3, 3, 4, 4, 4, 4 };
+        for (int i = 0; i < 14; i++)
+        {
+            acc |= uint64_t(values[group[i]]) << abits;
+            abits += lens[group[i]];
+        }
+        if (abits > 56) { // Rare, thus predictable
+            s.push(acc, abits);
+            acc = abits = 0;
+        }
+        for (int i = 14; i < B2; i++)
+        {
+            acc |= uint64_t(values[group[i]]) << abits;
+            abits += lens[group[i]];
+        }
+        s.push(acc, abits);
+    }
+    else
     if (6 > rung) { // Half of the group fits in 64 bits
         for (size_t i = 0; i < B2 / 2; i++) {
             acc |= (TBLMASK & t[group[i]]) << abits;
             abits += t[group[i]] >> 12;
         }
-        // No need to push accumulator at rung 1 and sometimes 2
-        if (rung != 1 && (rung != 2 || abits > 32)) {
-            s.push(acc, abits);
-            acc = abits = 0;
-        }
+        s.push(acc, abits);
+        acc = abits = 0;
         for (size_t i = B2 / 2; i < B2; i++) {
             acc |= (TBLMASK & t[group[i]]) << abits;
             abits += t[group[i]] >> 12;
