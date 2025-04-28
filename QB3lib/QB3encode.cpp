@@ -349,8 +349,11 @@ template<typename T> static int enc(const T *source, oBits &s, encsp p)
 {
     int error(0);
     if (p->quanta < 2) {
-        if (is_fast(p->mode))
-            return QB3::encode_fast(source, s, *p);
+        if (is_fast(p->mode)) {
+            if (p->mode == QB3M_FTL)
+                return QB3::encode_fast<T, true>(source, s, *p);
+            return QB3::encode_fast<T, false>(source, s, *p);
+        }
         return QB3::encode_best(source, s, *p);
     }
 
@@ -377,10 +380,14 @@ template<typename T> static int enc(const T *source, oBits &s, encsp p)
 
 #define QENC(T)\
     quantize(reinterpret_cast<T *>(buffer.data()), subimg);\
-    if (is_fast(subimg.mode))\
-        error = QB3::encode_fast(\
-            reinterpret_cast<std::make_unsigned<T>::type *>(buffer.data()), s, subimg);\
-    else\
+    if (is_fast(subimg.mode)) {\
+        if (subimg.mode == QB3M_FTL)\
+            error = QB3::encode_fast<std::make_unsigned<T>::type, true>(\
+                reinterpret_cast<std::make_unsigned<T>::type *>(buffer.data()), s, subimg);\
+        else\
+            error = QB3::encode_fast<std::make_unsigned<T>::type, false>(\
+                reinterpret_cast<std::make_unsigned<T>::type *>(buffer.data()), s, subimg);\
+    } else\
         error = QB3::encode_best(\
             reinterpret_cast<std::make_unsigned<T>::type *>(buffer.data()), s, subimg);
 

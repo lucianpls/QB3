@@ -9,7 +9,7 @@
 
 # Performance
 Compared with PNG on a public image dataset, QB3 is 
-![7% smaller while being 38 times faster](performance/performance.md)
+[7% smaller while being 38 times faster](performance/performance.md)
 
 ![Compression vs PNG](performance/CID22_QB3vsPNG.svg)
 
@@ -55,6 +55,10 @@ which also define a file interchange format that contains the metadata needed
 for decoding. Lossy compression by quantization is also implemented in these files.
 
 # Change Log
+
+## Version 1.3.2
+ - Significant performance improvements, especially for byte data on x86_64
+ - PNG comparison updated to reflect the latest changes
 
 ## Version 1.3.1
 - Made QB3M_FTL the default mode. The output is barely larger than QB3M_BASE 

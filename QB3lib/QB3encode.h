@@ -143,8 +143,8 @@ static std::pair<size_t, uint64_t> qb3csztbl(uint64_t val, size_t rung) {
 // only encode the group entries, not the rung switch
 // bitsused is used to choose the rung for encoding
 // If abits > 0, the accumulator is also pushed into the stream
-template <typename T>
-static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t abits, bool skipstep = false)
+template <typename T, bool SKIPSTEP = false>
+static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t abits)
 {
     assert(abits <= 64);
     const size_t rung = topbit(bitsused | 1);
@@ -157,7 +157,7 @@ static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t 
         return;
     }
     size_t stepp(B2 + 1);
-    if (!skipstep) {
+    if (!SKIPSTEP) {
         // Flip the last set rung bit if the rung bit sequence is a step down
         // At least one rung bit has to be set, so it can't return 0
         stepp = step(group, rung);
@@ -170,16 +170,45 @@ static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t 
         acc = abits = 0;
     }
     auto t = CRG[rung];
+    // For small tables, it's faster to encode with separate values
+    if (rung == 1) { // 2 bits per value
+        static const uint8_t values[] = { 0, 1, 3, 7 };
+        static const uint8_t lens[] = { 1, 2, 3, 3 };
+        for (int i = 0; i < B2; i++)
+        {
+            acc |= uint64_t(values[group[i]]) << abits;
+            abits += lens[group[i]];
+        }
+        s.push(acc, abits);
+    }
+    else
+    if (rung == 2) {
+        static const uint8_t values[] = { 0, 2, 1, 5, 3, 7, 11, 15 };
+        static const uint8_t lens[] = { 2, 2, 3, 3, 4, 4, 4, 4 };
+        for (int i = 0; i < 14; i++)
+        {
+            acc |= uint64_t(values[group[i]]) << abits;
+            abits += lens[group[i]];
+        }
+        if (abits > 56) { // Rare, thus predictable
+            s.push(acc, abits);
+            acc = abits = 0;
+        }
+        for (int i = 14; i < B2; i++)
+        {
+            acc |= uint64_t(values[group[i]]) << abits;
+            abits += lens[group[i]];
+        }
+        s.push(acc, abits);
+    }
+    else
     if (6 > rung) { // Half of the group fits in 64 bits
         for (size_t i = 0; i < B2 / 2; i++) {
             acc |= (TBLMASK & t[group[i]]) << abits;
             abits += t[group[i]] >> 12;
         }
-        // No need to push accumulator at rung 1 and sometimes 2
-        if (rung != 1 && (rung != 2 || abits > 32)) {
-            s.push(acc, abits);
-            acc = abits = 0;
-        }
+        s.push(acc, abits);
+        acc = abits = 0;
         for (size_t i = B2 / 2; i < B2; i++) {
             acc |= (TBLMASK & t[group[i]]) << abits;
             abits += t[group[i]] >> 12;
@@ -240,15 +269,6 @@ static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t 
     }
     if (stepp <= B2) // Leave the group as found
         group[stepp - 1] ^= static_cast<T>(1ull << rung);
-}
-
-// Base QB3 group encode with code switch, returns encoded size
-template <typename T>
-static void groupencode(T group[B2], T bitsused, size_t oldrung, oBits& s, bool skipstep = false) {
-    constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
-    constexpr auto csw = sizeof(T) == 1 ? csw3 : sizeof(T) == 2 ? csw4 : sizeof(T) == 4 ? csw5 : csw6;
-    uint64_t acc = csw[(topbit(bitsused | 1) - oldrung) & ((1ull << UBITS) - 1)];
-    groupencode(group, bitsused, s, acc & TBLMASK, static_cast<size_t>(acc >> 12), skipstep);
 }
 
 // Group encode with cf
@@ -345,10 +365,13 @@ static int check_info(const encs& info) {
 }
 
 // Only basic encoding
-template<typename T>
+template<typename T, bool SKIPSTEP>
 static int encode_fast(const T* image, oBits& s, encs &info)
 {
     static_assert(std::is_integral<T>() && std::is_unsigned<T>(), "Only unsigned integer types allowed");
+    constexpr size_t UBITS = sizeof(T) == 1 ? 3 : sizeof(T) == 2 ? 4 : sizeof(T) == 4 ? 5 : 6;
+    constexpr auto csw = sizeof(T) == 1 ? csw3 : sizeof(T) == 2 ? csw4 : sizeof(T) == 4 ? csw5 : csw6;
+
     if (check_info(info))
         return check_info(info);
     const size_t xsize(info.xsize), ysize(info.ysize), bands(info.nbands), *cband(info.cband);
@@ -405,17 +428,107 @@ static int encode_fast(const T* image, oBits& s, encs &info)
                     }
                 }
                 prev[c] = prv;
-                groupencode(group, bitsused, runbits[c], s, info.mode == QB3M_FTL);
+                uint64_t acc = csw[(topbit(bitsused | 1) - runbits[c]) & ((1ull << UBITS) - 1)];
+                groupencode<T, SKIPSTEP>(group, bitsused, s, acc & TBLMASK, static_cast<size_t>(acc >> 12));
                 runbits[c] = topbit(bitsused | 1);
             }
         }
     }
-    // Save the state
+    // Save the state, in case of multiple stripes
     for (size_t c = 0; c < bands; c++) {
         info.band[c].prev = static_cast<size_t>(prev[c]);
         info.band[c].runbits = runbits[c];
     }
     return 0;
+}
+
+// Implementation of encode_fast for uint8_t
+template<bool SKIPSTEP>
+static int ef(const uint8_t* image, oBits& s, encs& info) {
+    constexpr size_t UBITS(3);
+
+    if (check_info(info))
+        return check_info(info);
+    const size_t xsize(info.xsize), ysize(info.ysize), bands(info.nbands), * cband(info.cband);
+    // Running code length, start with nominal value
+    size_t runbits[QB3_MAXBANDS] = {};
+    // Previous value, per band
+    uint8_t prev[QB3_MAXBANDS] = {};
+    // Initialize stage
+    for (size_t c = 0; c < bands; c++) {
+        runbits[c] = info.band[c].runbits;
+        prev[c] = static_cast<uint8_t>(info.band[c].prev);
+    }
+    // Set up block offsets based on traversal order, defaults to HILBERT
+    // Best block traversal order
+    uint64_t order(info.order);
+    if (0 == order)
+        order = HILBERT;
+    size_t offset[B2] = {};
+    auto stride = xsize * bands; // Line stride
+    if (info.stride)
+        stride = info.stride;
+    for (size_t i = 0; i < B2; i++) {
+        size_t n = (order >> ((B2 - 1 - i) << 2));
+        offset[i] = stride * ((n >> 2) & 0b11) + (n & 0b11) * bands;
+    }
+    uint8_t group[B2] = {};
+    for (size_t y = 0; y < ysize; y += B) {
+        // If the last row is partial, roll it up
+        if (y + B > ysize)
+            y = ysize - B;
+        for (size_t x = 0; x < xsize; x += B) {
+            // If the last column is partial, move it left
+            if (x + B > xsize)
+                x = xsize - B;
+            const size_t loc = y * stride + x * bands; // Top-left pixel address
+            for (size_t c = 0; c < bands; c++) { // blocks are band interleaved
+                uint8_t bitsused(0); // Bits used within this group
+                // Collect the block for this band, convert to running delta mag-sign
+                auto prv = prev[c];
+                // Use separate loop for basebands to avoid a test inside the hot loop
+                if (c != cband[c]) {
+                    auto cb = cband[c];
+                    for (size_t i = 0; i < B2; i++) {
+                        uint8_t g = image[loc + c + offset[i]] - image[loc + cb + offset[i]];
+                        prv += g -= prv;
+                        bitsused |= group[i] = mags(g);
+                    }
+                }
+                else { // baseband
+                    for (size_t i = 0; i < B2; i++) {
+                        uint8_t g = image[loc + c + offset[i]];
+                        prv += g -= prv;
+                        bitsused |= group[i] = mags(g);
+                    }
+                }
+                prev[c] = prv;
+                uint64_t acc = csw3[(topbit(bitsused | 1) - runbits[c]) & ((1ull << UBITS) - 1)];
+                groupencode<uint8_t, SKIPSTEP>(group, bitsused, s, acc & TBLMASK, static_cast<size_t>(acc >> 12));
+                runbits[c] = topbit(bitsused | 1);
+            }
+        }
+    }
+    // Save the state, in case of multiple stripes
+    for (size_t c = 0; c < bands; c++) {
+        info.band[c].prev = static_cast<size_t>(prev[c]);
+        info.band[c].runbits = runbits[c];
+    }
+    return 0;
+}
+
+// Complete specialization for uint8_t with SKIPSTEP = true
+template<> 
+int encode_fast<uint8_t, true>(const uint8_t* image, oBits& s, encs& info)
+{
+    return ef<true>(image, s, info);
+}
+
+// Complete specialization for uint8_t with SKIPSTEP = false
+template<>
+int encode_fast<uint8_t, false>(const uint8_t* image, oBits& s, encs& info)
+{
+    return ef<false>(image, s, info);
 }
 
 template<typename T> struct KVP { T count, value; };
@@ -551,7 +664,7 @@ static int encode_best(const T *image, oBits& s, encs &info) {
                 }
                 prev[c] = prv;
                 auto oldrung = runbits[c];
-                const size_t rung = topbit(bitsused | 1);
+                auto rung = topbit(bitsused | 1);
                 runbits[c] = rung;
                 if (1 >= bitsused) { // only 1s and 0s, rung is -1 or 0, no cf
                     uint64_t acc = csw[(rung - oldrung) & ((1ull << UBITS) - 1)];
@@ -567,10 +680,13 @@ static int encode_best(const T *image, oBits& s, encs &info) {
 
                 auto cf = gcf(group);
                 auto start = s.position();
-                if (cf < 2)
-                    groupencode(group, bitsused, oldrung, s);
-                else
+                if (cf >= 2) 
                     cfgenc(group, cf, pcf[c], oldrung, s);
+                else
+                {
+                    auto acc = csw[(topbit(bitsused | 1) - oldrung) & ((1ull << UBITS) - 1)];
+                    groupencode(group, bitsused, s, acc & TBLMASK, acc >> 12);
+                }
                 // Try index encoding
                 size_t size(s.position() - start);
                 if (rung > 3 && rung < 63 && size >= (36 + 3 * UBITS + 2 * rung)) {
