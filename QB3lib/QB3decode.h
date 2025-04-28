@@ -146,13 +146,13 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
     if (0 == rung) { // single bits, immediate decoding
         if (0 != (acc & 1)) {
             abits += B2;
-            for (size_t i = 0; i < B2; i++) {
+            for (int i = 0; i < B2; i++) {
                 acc >>= 1;
                 group[i] = static_cast<T>(1 & acc);
             }
         }
         else
-            for (size_t i = 0; i < B2; i++)
+            for (int i = 0; i < B2; i++)
                 group[i] = static_cast<T>(0);
         s.advance(abits + 1);
         return 1;
@@ -164,7 +164,7 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             // The lower two bits of the accumulator determine the size
             // Preshift accumulator
             acc <<= 2;
-            for (size_t i=0; i < B2; i++) {
+            for (int i=0; i < B2; i++) {
                 auto size = (0x31213121u >> (acc & 0b11100)) & 0xf;
                 group[i] = T((0x30102010u >> (acc & 0b11100)) & 0xf);
                 abits += size;
@@ -180,44 +180,46 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             // common expression, making it slower
             // pre-shift accumulator, top 2 bits are not needed
             acc <<= 2;
-            uint32_t size;
-            for (size_t i = 0; i < 14; i++) {
+            uint8_t size;
+            int i = 0;
+            do {
                 size = (0x4232423242324232ull >> (acc & 0b111100)) & 0xf;
                 group[i] = T((0x7130612051304120ull >> (acc & 0b111100)) & 0xf);
                 abits += size;
                 acc >>= size;
-            }
+            } while (++i < 14);
             if (abits > 54) { // Rare, max is 60, need 8 + 2 bits
                 s.advance(abits - 2);
                 acc = s.peek();
                 abits = 2;
             }
-            size = (0x4232423242324232ull >> (acc & 0b111100)) & 0xf;
-            group[14] = T((0x7130612051304120ull >> (acc & 0b111100)) & 0xf);
-            acc >>= size;
-            abits += size;
-            size = (0x4232423242324232ull >> (acc & 0b111100)) & 0xf;
-            group[15] = T((0x7130612051304120ull >> (acc & 0b111100)) & 0xf);
-            s.advance(abits + size);
+            do {
+                size = (0x4232423242324232ull >> (acc & 0b111100)) & 0xf;
+                group[i] = T((0x7130612051304120ull >> (acc & 0b111100)) & 0xf);
+                acc >>= size;
+                abits += size;
+            } while (++i < B2);
+            s.advance(abits);
         }
         else if (6 > rung) { // Table decode at 3,4 and 5, half of the values per accumulator
             auto drg = DRG[rung];
             const auto m = (1ull << (rung + 2)) - 1;
-            for (size_t i = 0; i < B2 / 2; i++) {
+            int i = 0;
+            do {
                 auto v = drg[acc & m];
                 group[i] = T(v & TBLMASK);
                 abits += v >> 12;
                 acc >>= v >> 12;
-            }
+            } while (++i < B2 / 2);
             s.advance(abits);
             acc = s.peek();
             abits = 0;
-            for (size_t i = B2 / 2; i < B2; i++) {
+            do {
                 auto v = drg[acc & m];
                 group[i] = T(v & TBLMASK);
                 abits += v >> 12;
                 acc >>= v >> 12;
-            }
+            } while (++i < B2);
             s.advance(abits);
         }
         else { // Last part of table decoding, rungs 6-7
@@ -450,11 +452,11 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
                     if (rung == 0) { // single bits or all zeros
                         abits++;
                         if (0 != (acc & 1)) {
-                            abits += B2;
                             for (int i = 0; i < B2; i++) {
                                 acc >>= 1;
                                 blockp[offset[i]] = prv -= (1 & acc);
                             }
+                            abits += B2;
                         }
                         else {
                             for (int i = 0; i < B2; i++)
@@ -476,44 +478,48 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
                 }
                 else if (rung == 2) {
                     acc <<= 2;
-                    uint32_t size;
-                    for (int i = 0; i < 14; i++) {
+                    uint8_t size;
+                    int i = 0;
+                    do {
                         size = (0x4232423242324232ull >> (acc & 0b111100)) & 0xf;
                         blockp[offset[i]] = prv += smag(uint8_t((0x7130612051304120ull >> (acc & 0b111100)) & 0xf));
                         abits += size;
                         acc >>= size;
-                    }
+                    } while (++i < B2 - 2);
                     // This is not always needed, but the test is unpredictable and more expensive
                     s.advance(abits - 2);
                     acc = s.peek();
                     abits = 2;
-                    size = (0x4232423242324232ull >> (acc & 0b111100)) & 0xf;
-                    blockp[offset[14]] = prv += smag(uint8_t((0x7130612051304120ull >> (acc & 0b111100)) & 0xf));
-                    acc >>= size;
-                    abits += size;
-                    size = (0x4232423242324232ull >> (acc & 0b111100)) & 0xf;
-                    blockp[offset[15]] = prv += smag(uint8_t((0x7130612051304120ull >> (acc & 0b111100)) & 0xf));
-                    abits += size;
+                    do {
+                        size = (0x4232423242324232ull >> (acc & 0b111100)) & 0xf;
+                        blockp[offset[i]] = prv += smag(uint8_t((0x7130612051304120ull >> (acc & 0b111100)) & 0xf));
+                        abits += size;
+                        acc >>= size;
+                    } while (++i < B2);
+                    prev[c] = prv;
+                    s.advance(abits);
+                    continue;
                 }
                 else {
                     auto drg = DRG[rung];
                     const auto m = (1ull << (rung + 2)) - 1;
                     if (6 > rung) { // Table decode at 3,4 and 5, two reads
-                        for (size_t i = 0; i < B2 / 2; i++) {
+                        int i = 0;
+                        do {
                             auto v = drg[acc & m];
                             blockp[offset[i]] = prv += smag(uint8_t(v & TBLMASK));
                             abits += v >> 12;
                             acc >>= v >> 12;
-                        }
+                        } while (++i < B2 / 2);
                         s.advance(abits);
                         acc = s.peek();
                         abits = 0;
-                        for (size_t i = B2 / 2; i < B2; i++) {
+                        do {
                             auto v = drg[acc & m];
                             blockp[offset[i]] = prv += smag(uint8_t(v & TBLMASK));
                             abits += v >> 12;
                             acc >>= v >> 12;
-                        }
+                        } while (++i < B2);
                         prev[c] = prv;
                         s.advance(abits);
                         continue;
