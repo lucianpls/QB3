@@ -133,16 +133,16 @@ Summarizing the results in just a few numbers:
 
 |Time (ms)|FAST|BASE|BEST|PNG|
 |---|---|---|---|---|
-|Max|2.69|2.93|6.92|150|
-|Avg|2.07|2.25|5.20|82.90|
-|Min|0.87|0.93|1.44|12|
+|Max|2.66|2.93|6.90|150|
+|Avg|2.05|2.23|5.21|82.90|
+|Min|0.88|0.95|1.51|12|
 
 
 |Rate (MB/s)|FAST|BASE|BEST|PNG|
 |---|---|---|---|---|
-|Max|907.49|843.09|546.59||
-|Avg|380.59|349.11|151.21|9.49|
-|Min|292.79|268.00|113.63||
+|Max|890.84|831.59|521.58||
+|Avg|382.82|352.94|150.83|9.49|
+|Min|295.85|268.80|113.98||
 
 
 ### Decompression speed
@@ -156,9 +156,9 @@ These results are for the QB3 FAST mode, they would be 10-20% slower for the BAS
 
 |Rate (MB/s)|QB3|PNG|
 |---|---|---|
-|Max|443.69|595.83|
-|Avg|353.33|240.17|
-|Min|324.69|191.58|
+|Max|426.02|587.68|
+|Avg|354.57|240.17|
+|Min|331.56|190.15|
 
 In contrast to most compression algorithms, QB3 speed is almost symmetrical, with the decompression 
 being slightly slower than the compression, except in the BEST mode, where compression is slower. 
