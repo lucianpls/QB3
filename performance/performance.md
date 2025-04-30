@@ -111,7 +111,7 @@ The next thing to look at is the compression speed, which is the main advantage 
 ![Compression speed](CID22_speed.svg)
 
 In this graph, the images are sorted by the compression time of the PNG, which tends to be roughly 
-proportional to the PNG output size, the thicker brown line, varying between 14 and 150 milliseconds, 
+proportional to the PNG output size, the thicker purple line, varying between 14 and 150 milliseconds, 
 with an average of 83 milliseconds. The QB3 modes are the almost flat lines at the bottom of the graph, 
 taking between 1 and 5 milliseconds to compress a 512x512x3 8 bit image, showing very little 
 variation between images. There is a massive difference between QB3 and PNG in compression speed.
