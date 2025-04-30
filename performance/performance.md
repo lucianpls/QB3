@@ -145,7 +145,7 @@ Summarizing the results in just a few numbers:
 
 
 ### Decompression speed
-PND decompression is much faster than PNG compression, one of reasons for its popularity. 
+PNG decompression is much faster than PNG compression, one of reasons for its popularity. 
 QB3 decompression is consistently faster than PNG, although the difference is much smaller than the 
 compression speed difference. The decompression speed of QB3 is also very consistent, more so 
 than the PNG decompression. On the average, PNG decompression is 50% slower than QB3 decompression.
