@@ -9,7 +9,7 @@
 
 # Performance
 Compared with PNG on a public image dataset, QB3 is 
-[7% smaller while being 38 times faster](performance/performance.md)
+[7% smaller while being 40 times faster](performance/performance.md)
 
 ![Compression vs PNG](performance/CID22_QB3vsPNG.svg)
 
