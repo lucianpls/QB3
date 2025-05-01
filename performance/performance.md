@@ -13,7 +13,7 @@ using a single thread of a modern CPU.
 
 ## Introduction
 
-This document describes the performance of the QB3 image compression compared to the PNG, on the same hardware.
+This document describes the performance of the QB3 image compression compared to PNG, on the same hardware.
 PNG (Portable Network Graphics) is a lossless image format that is widely used on the web. It is based on 
 the DEFLATE compression algorithm, which is also used in the ZIP file format. The image specific part of the
 PNG format is applying a filter to the image data before compressing it with DEFLATE. The filter is selected 
