@@ -251,6 +251,7 @@ is about the same as PNG on this set overall, with the expected problems with ar
 noisy images. This set also contains 16 bit images, where QB3 is able to compress significantly 
 better than PNG.
 
-QB3 also works well on ARM64 architecture. On a g7 (Graviton) Linux al2023 instance on AWS, the results for this test 
-are about 10 to 20% slower across the board. PNG decompression is much slower on that architecture, making QB3
-decompression look better.
+QB3 also works well on ARM64 architecture. On a g7 (Graviton 3) Linux al2023 instance on AWS, the results for this test 
+are about 10 to 20% slower across the board. On a g8 instance (Graviton 4) the results are 10 to 20% faster than 
+the ones presented here. PNG decompression is much slower on that architecture, making QB3 decompression look better
+in comparison.
