@@ -129,7 +129,7 @@ static std::pair<size_t, uint64_t> qb3dsz(uint64_t val, size_t rung) {
 // Decode using tables when possible, works for all rungs
 static std::pair<size_t, uint64_t> qb3dsztbl(uint64_t val, size_t rung) {
     if ((sizeof(DRG) / sizeof(*DRG)) > rung) {
-        auto code = DRG[rung][val & ((1ull << (rung + 2)) - 1)];
+        auto code = DRG[rung][val & (0x1ffull >> (7 - rung))];
         return std::make_pair<size_t, uint64_t>(code >> 12, code & TBLMASK);
     }
     return qb3dsz(val, rung);
@@ -203,7 +203,7 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
         }
         else if (6 > rung) { // Table decode at 3,4 and 5, half of the values per accumulator
             auto drg = DRG[rung];
-            const auto m = (1ull << (rung + 2)) - 1;
+            const auto m = 0x1ffull >> (7 - rung);
             int i = 0;
             do {
                 auto v = drg[acc & m];
@@ -224,7 +224,7 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
         }
         else { // Last part of table decoding, rungs 6-7
             auto drg = DRG[rung];
-            const auto m = (1ull << (rung + 2)) - 1;
+            const auto m = 0x1ffull >> (7 - rung);
             // Three total reads, 6 4 6
             int i = 0;
             do {
