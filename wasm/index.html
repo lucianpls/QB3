@@ -102,7 +102,7 @@
                 var xhr = new XMLHttpRequest();
                 xhr.responseType = 'arraybuffer';
 
-                var url = 'tile' + '/' + coords.z + '/' + coords.x + '/' + coords.y;
+                var url = 'tile' + '/' + coords.z + '/' + coords.y + '/' + coords.x;
                 xhr.open("Get", url, true);
                 xhr.send();
                 
@@ -137,15 +137,16 @@
                 // This needs to convert the values to 8 bit and draw them
                 let ctx = tile.getContext('2d');
                 let imageData = ctx.createImageData(width, height);
-                // Convert bands 0,1,2 to RGB
+                // Convert bands 0,1,5 to RGB in some way
                 for (let i = 0; i < width * height; i++) {
-                    let r = values[i * nbands] >> 8; // Red band
-                    let g = values[i * nbands + 1] >> 8; // Green band
-                    let b = values[i * nbands + 2] >> 8; // Blue band
+                    let r = 0xff & values[i * nbands] >> 6; // Red band
+                    let g = 0xff & values[i * nbands + 1] >> 6; // Green band
+                    let b = 0xff & values[i * nbands + 5] >> 6; // Blue band
                     imageData.data[i * 4] = r;
                     imageData.data[i * 4 + 1] = g;
                     imageData.data[i * 4 + 2] = b;
-                    imageData.data[i * 4 + 3] = 255; // Alpha
+                    // Set alpha to 0 when all bands are zero
+                    imageData.data[i * 4 + 3] = (r === 0 && g === 0 && b === 0) ? 0 : 255; // Alpha
                 }
 
                 ctx.putImageData(imageData, 0, 0);
