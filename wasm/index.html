@@ -105,9 +105,10 @@
                 
                 xhr.onreadystatechange = function (evt) {
                     if (evt.target.readyState == 4 && evt.target.status == 200) {
-                        var data = new Uint8Array(evt.target.response);
-                        tile.image = QB3dec.decodeData(data);
-                        if (tile.image)
+                        tile.data = new Uint8Array(evt.target.response);
+                        // var data = new Uint8Array(evt.target.response);
+                        // tile.image = QB3dec.decodeData(data);
+                        if (tile.data)
                           this.draw(tile);
                         else {
                             erro = "Unrecognized QB3 data";
@@ -120,10 +121,29 @@
             },
 
             draw: function(tile) {
+                if (!tile.data) {
+                    console.log("No data to draw");
+                    return;
+                }
+
+                // Decode the tile data
+                // console.time("Decode Tile Data");
+                image = QB3dec.decodeData(tile.data);
+                // console.timeEnd("Decode Tile Data");
+                if (!image) {
+                    console.error("Failed to decode tile data");
+                    return;
+                }
+
                 let width = tile.width;
                 let height = tile.height;
-                let nbands = tile.image.nbands;
-                let values = tile.image.data;
+                if (image.xsize !== width || image.ysize !== height) {
+                    console.error("Tile size mismatch: expected " + width + "x" + height + ", got " + image.xsize + "x" + image.ysize);
+                    return;
+                }
+
+                let nbands = image.nbands;
+                let values = image.data;
 
                 // Verify that the image data has the expected size
                 if (values.length !== width * height * nbands) {
@@ -208,7 +228,7 @@
   <body>
     <div id="map"></div>
         <div id="info-pane">
-        <h2>QB3 prototype</h2>
+        <h3>QB3 prototype</h3>
         <div id="picker">
             <select id="band-picker">
                 <option value="4,3,2">Color</option>
@@ -255,12 +275,14 @@
             QB3L.selection = bands;
             // Redraw the tiles in the layer
 
+            // Time this loop
+            console.time("Redraw Tiles");
             for (var key in QB3L._tiles) {
                 var tile = QB3L._tiles[key].el;
-                if (!tile || !tile.image || tile.image.data.length == 0) continue;
+                if (!tile || !tile.data || tile.data.length == 0) continue;
                 QB3L.draw(tile);
             }
-            // QB3L.redraw();
+            console.timeEnd("Redraw Tiles");
         });
     
     </script>
