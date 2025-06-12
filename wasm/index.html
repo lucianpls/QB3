@@ -48,7 +48,7 @@
                     return null;
                 }
                 // Print the image info to console
-                console.log("Image Info:", image);
+                // console.log("Image Info:", image);
 
                 // Copy the data to wasm
                 rawqb3 = this._malloc(data.length);
@@ -76,17 +76,14 @@
                 }
                 this._free(message);
 
-                // View, no need to free. Pixel interleaved
-                image.data = new Uint16Array(this.HEAPU8.buffer, 
-                    outPtr, image.xsize * image.ysize * image.nbands);
-                image.outPtr = outPtr;
-                image.clean = function() {
-                    QB3dec._free(this.outPtr);
-                }
+                // Copy from a typed view, then release it
+                image.data = new Uint16Array(new Uint16Array(this.HEAPU8.buffer, 
+                    outPtr, image.xsize * image.ysize * image.nbands));
+                this._free(outPtr);
                 return image;
         }
 
-        QB3_012.addTo(map);
+        QB3L.addTo(map);
     }
     </script>
 
@@ -134,14 +131,27 @@
                     return;
                 }
 
+                // Table of min-max per band. These should come from the MRF XML
+                let minMax = [];
+                minMax.push({min: 6131, max: 65535}); // Band 0
+                minMax.push({min: 6812, max: 35999}); // Band 1
+                minMax.push({min: 6427, max: 20046}); // Band 2
+                minMax.push({min: 5566, max: 20382}); // Band 3
+                minMax.push({min: 4608, max: 32502}); // Band 4
+                minMax.push({min: 4649, max: 65535}); // Band 5
+                minMax.push({min: 4257, max: 65535}); // Band 6
+                minMax.push({min: 4372, max: 13262}); // Band 7
+                
                 // This needs to convert the values to 8 bit and draw them
                 let ctx = tile.getContext('2d');
                 let imageData = ctx.createImageData(width, height);
-                // Convert bands 0,1,5 to RGB in some way
+                rband = this.selection[0];
+                gband = this.selection[1];
+                bband = this.selection[2];
                 for (let i = 0; i < width * height; i++) {
-                    let r = 0xff & values[i * nbands] >> 6; // Red band
-                    let g = 0xff & values[i * nbands + 1] >> 6; // Green band
-                    let b = 0xff & values[i * nbands + 5] >> 6; // Blue band
+                    let r = 0xff & (512 * (values[i * nbands + rband] - minMax[rband].min) / (minMax[rband].max - minMax[rband].min));
+                    let g = 0xff & (512 * (values[i * nbands + gband] - minMax[gband].min) / (minMax[gband].max - minMax[gband].min));
+                    let b = 0xff & (512 * (values[i * nbands + bband] - minMax[bband].min) / (minMax[bband].max - minMax[bband].min));
                     imageData.data[i * 4] = r;
                     imageData.data[i * 4 + 1] = g;
                     imageData.data[i * 4 + 2] = b;
@@ -177,6 +187,15 @@
         background: white;
       }
 
+      #picker {
+        position: relative;
+        top: 10px;
+        left: 10px;
+        z-index: 500;
+        padding: 1em;
+        background: white;
+      }
+
       .noUi-connect {
         background: #ccc;
       }
@@ -185,8 +204,18 @@
 
   <body>
     <div id="map"></div>
-    <div id="info-pane">
-      <h2>QB3 prototype</h2>
+        <div id="info-pane">
+        <h2>QB3 prototype</h2>
+        <div id="picker">
+            <select id="band-picker">
+                <option value="4,3,2">Color</option>
+                <option value="7,6,4">Short Wave IR</option>
+                <option value="5,4,3">Color IR</option>
+                <option value="6,5,2">Agriculture</option>
+                <option value="4,3,1">Bathymetric</option>
+                <option value="7,6,2">Geology</option>
+            </select>
+        </div>
     </div>
 
     <script>
@@ -200,19 +229,37 @@
             center: [0, 0],
             zoom: 2,
             zoomControl: true,
-            maxBounds: bounds,
+            maxZoom: 5,
+            // maxBounds: bounds,
             attributionControl: true
         });
     
       
-        let QB3_012 = new QB3Layer({
-            tileSize: 512,
+        let QB3L = new QB3Layer({
             attribution: 'QB3 prototype'
         });
+        QB3L.selection = [4,3,2]; // Red, Green, Blue bands
+
+        // Read the band selection from the picker
+        document.getElementById('band-picker').addEventListener('change', function() {
+            let bands = this.value.split(',').map(Number);
+            if (bands.length !== 3) {
+                console.error("Please select exactly three bands.");
+                return;
+            }
+            // Adjust the bands to be zero-indexed
+            bands = bands.map(band => band - 1);
+            QB3L.selection = bands;
+            // Redraw the tiles in the layer
+
+            for (var key in QB3L._tiles) {
+                var tile = QB3L._tiles[key].el;
+                if (!tile || !tile.image || tile.image.data.length == 0) continue;
+                QB3L.draw(tile);
+            }
+            // QB3L.redraw();
+        });
     
-        // Add a marker for testing
-        var marker = L.marker([0, 0]).addTo(map);
-        marker.bindPopup('QB3 prototype').openPopup();
     </script>
   </body>
   </html>
