@@ -72,7 +72,6 @@ char *GetInfo(void *data, size_t sz) {
     }
 
     qb3_destroy_decoder(p);
-    
     return strdup(j.dump().c_str());
 }
 
