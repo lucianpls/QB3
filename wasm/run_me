@@ -1,6 +1,6 @@
 rm -rf qb3dec.wasm qb3dec.js qb3decapi.o
 
-OPTS=-O3
+OPTS="-O3 -flto"
 # Standard emscripten functions
 EXPORTS=_malloc,_free
 
