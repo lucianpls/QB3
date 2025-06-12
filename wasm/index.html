@@ -268,16 +268,15 @@
             zoom: 2,
             zoomControl: true,
             maxZoom: 5,
-            // maxBounds: bounds,
+            maxBounds: bounds,
             attributionControl: true
         });
     
-      
         let QB3L = new QB3Layer({
             attribution: 'QB3 prototype',
             tileSize: 512
         });
-        QB3L.selection = [4,3,2]; // Red, Green, Blue bands
+        QB3L.selection = "3,2,1".split(',').map(Number);
 
         // Read the band selection from the picker
         document.getElementById('band-picker').addEventListener('change', function() {
@@ -292,13 +291,13 @@
             // Redraw the tiles in the layer
 
             // Time this loop
-            // console.time("Redraw Tiles");
+            console.time("Redraw Tiles");
             for (var key in QB3L._tiles) {
                 var tile = QB3L._tiles[key].el;
                 if (!tile || !tile.data || tile.data.length == 0) continue;
                 QB3L.draw(tile);
             }
-            // console.timeEnd("Redraw Tiles");
+            console.timeEnd("Redraw Tiles");
         });
     
     </script>
