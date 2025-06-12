@@ -95,12 +95,19 @@
                 var tile = L.DomUtil.create('canvas', 'leaflet-tile');
                 tile.width = this.options.tileSize;
                 tile.height = this.options.tileSize;
+                // console.log(coords);
                 tile.zoom = coords.z;
+                if (tile.zoom < 1) {
+                    error = "Zoom level too low";
+                    done(error, tile);
+                    return tile;
+                }
 
                 var xhr = new XMLHttpRequest();
                 xhr.responseType = 'arraybuffer';
 
-                var url = 'tile' + '/' + coords.z + '/' + coords.y + '/' + coords.x;
+                // Adjust zoom for 512 tile size
+                var url = 'tile' + '/' + (coords.z - 1) + '/' + coords.y + '/' + coords.x;
                 xhr.open("Get", url, true);
                 xhr.send();
                 
@@ -267,7 +274,8 @@
     
       
         let QB3L = new QB3Layer({
-            attribution: 'QB3 prototype'
+            attribution: 'QB3 prototype',
+            tileSize: 512
         });
         QB3L.selection = [4,3,2]; // Red, Green, Blue bands
 
