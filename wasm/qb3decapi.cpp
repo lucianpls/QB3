@@ -100,8 +100,6 @@ size_t decode(void *data, size_t sz, void *outbuf, char *message) {
     }
     qb3_destroy_decoder(p);
     return read_bytes; // Return number of bytes read
-    // strncpy(message, "Decoding not implemented", 1024);
-    // return 0; // Indicate failure, as decoding is not implemented
 }
 
 
