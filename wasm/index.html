@@ -149,14 +149,17 @@
                 gband = this.selection[1];
                 bband = this.selection[2];
                 for (let i = 0; i < width * height; i++) {
-                    let r = 0xff & (512 * (values[i * nbands + rband] - minMax[rband].min) / (minMax[rband].max - minMax[rband].min));
-                    let g = 0xff & (512 * (values[i * nbands + gband] - minMax[gband].min) / (minMax[gband].max - minMax[gband].min));
-                    let b = 0xff & (512 * (values[i * nbands + bband] - minMax[bband].min) / (minMax[bband].max - minMax[bband].min));
+                    let r = values[i * nbands + rband];
+                    let g = values[i * nbands + gband];
+                    let b = values[i * nbands + bband];
+                    imageData.data[i * 4 + 3] = (r === 0 && g === 0 && b === 0) ? 0 : 255; // Alpha
+                    r = 0xff & (512 * (r - minMax[rband].min) / (minMax[rband].max - minMax[rband].min));
+                    g = 0xff & (512 * (g - minMax[gband].min) / (minMax[gband].max - minMax[gband].min));
+                    b = 0xff & (512 * (b - minMax[bband].min) / (minMax[bband].max - minMax[bband].min));
                     imageData.data[i * 4] = r;
                     imageData.data[i * 4 + 1] = g;
                     imageData.data[i * 4 + 2] = b;
                     // Set alpha to 0 when all bands are zero
-                    imageData.data[i * 4 + 3] = (r === 0 && g === 0 && b === 0) ? 0 : 255; // Alpha
                 }
 
                 ctx.putImageData(imageData, 0, 0);
