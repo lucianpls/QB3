@@ -78,7 +78,6 @@ char *GetInfo(void *data, size_t sz) {
 
 // Full decode
 size_t decode(void *data, size_t sz, void *outbuf, char *message) {
-    // Stub for now
     message[0] = '\0'; // Clear message buffer
     size_t image_size[3] = {0, 0, 0};
     decsp p = qb3_read_start(data, sz, image_size);
