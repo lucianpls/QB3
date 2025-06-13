@@ -109,9 +109,6 @@ bool qb3_set_encoder_quanta(encsp p, size_t q, bool away) {
     return !error;
 }
 
-// bytes per value by qb3_dtype, keep them in sync
-const int typesizes[8] = { 1, 1, 2, 2, 4, 4, 8, 8 };
-
 size_t qb3_max_encoded_size(const encsp p) {
     // Pad to 4 x 4
     size_t n = 16 * ((p->xsize + 3) / 4) * ((p->ysize + 3) / 4) * p->nbands;

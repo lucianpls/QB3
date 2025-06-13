@@ -21,6 +21,9 @@ Contributors:  Lucian Plesea
 #include <cstring>
 #include <vector>
 
+// bytes per value by qb3_dtype, keep them in sync with qb3_dtype
+const int typesizes[8] = { 1, 1, 2, 2, 4, 4, 8, 8 };
+
 // Main QB3 file header
 // 4 signature
 // 2 xmax
