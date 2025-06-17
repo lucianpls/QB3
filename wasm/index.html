@@ -70,93 +70,17 @@
                     <option value="8,8,8">QA</option>
                 </select>
             </div>
-        </div>
-    
+        </div>    
     </body>
 
-    <!-- load our WASM plugin -->
-    <script src="qb3dec.js"></script>
+    <script type = "module">
+        import qb3decoder from './qb3-wasm.mjs';
 
-    <script>
-        var QB3dec = Module;
-        QB3dec.onRuntimeInitialized = () => {
-
-            // char * GetInfo(void *data, size_t sz);
-            // important fields are
-            // xsize, ysize, nbands, and type
-            // type is one of <u>int[8|16|32|64]
-            QB3dec.GetInfo = this.cwrap('GetInfo', 'number', ['number', 'number']);
-
-            // size_t decode(void *data, size_t sz, double *out, char *message);
-            QB3dec.decode = this.cwrap('decode', 'number', ['number', 'number', 'number', 'number']);
-
-            // Attach the higher level functions
-            QB3dec.getInfo = function (data) {
-                // Use a small array, to avoid the full size
-                if (data.length > 1000)
-                    data = data.slice(0, 1000);
-                var dataPtr = this._malloc(data.length);
-                this.writeArrayToMemory(data, dataPtr);
-                let cresult = this.GetInfo(dataPtr, data.length);
-                // This is actually a json string
-                if (cresult == 0)
-                    return null;
-                let response = this.UTF8ToString(cresult);
-                this._free(dataPtr);
-                return JSON.parse(response);
-            }
-
-            QB3dec.decodeData = function (data) {
-                let image = QB3dec.getInfo(data);
-                if (!image) {
-                    console.error("Failed to get QB3 raster");
-                    return null;
-                }
-
-                // console.log("Image Info:", image);
-
-                // The decoder is fine, but the code that follows is not
-                if (image.dtype != "uint16") {
-                    console.error("Unsupported data type: " + image.type);
-                    return null;
-                }
-
-                // Copy the data to wasm
-                rawqb3 = this._malloc(data.length);
-                this.writeArrayToMemory(data, rawqb3);
-
-                // Image size in bytes
-                let imageSize = image.xsize * image.ysize * image.nbands * 2;
-                // Allocate the output buffer
-                let outPtr = this._malloc(imageSize);
-                // Allocate a buffer for the message
-                let message = this._malloc(1024);
-                decoded = this.decode(rawqb3, data.length, outPtr, message);
-                // Free the raw data buffer
-                this._free(rawqb3);
-                if (decoded == 0) {
-                    this._free(outPtr);
-                    console.error("Decoding failed: " + this.UTF8ToString(message));
-                    this._free(message);
-                    return null;
-                }
-                this._free(message);
-
-                // Copy from a typed view, then release it
-                image.data = new Uint16Array(new Uint16Array(this.HEAPU8.buffer,
-                    outPtr, image.xsize * image.ysize * image.nbands));
-                this._free(outPtr);
-                return image;
-            }
-
-            QB3L.addTo(map);
-        }
-
-        var QB3Layer = L.GridLayer.extend({
+        let QB3Layer = L.GridLayer.extend({
             // Fetch only
             createTile: function(coords, done) {
-                var error;
-                var tile = L.DomUtil.create('canvas', 'leaflet-tile');
+                let error;
+                let tile = L.DomUtil.create('canvas', 'leaflet-tile');
                 tile.width = this.options.tileSize;
                 tile.height = this.options.tileSize;
                 // console.log(coords);
@@ -167,11 +91,12 @@
                     return tile;
                 }
 
-                var xhr = new XMLHttpRequest();
+                let xhr = new XMLHttpRequest();
                 xhr.responseType = 'arraybuffer';
 
                 // Adjust zoom for 512 tile size
-                var url = 'tile' + '/' + (coords.z - 1) + '/' + coords.y + '/' + coords.x;
+                let url = 'http://earthlive.maptiles.arcgis.com/qb3/tile' 
+                    + '/' + (coords.z - 1) + '/' + coords.y + '/' + coords.x;
                 xhr.open("Get", url, true);
                 xhr.send();
                 
@@ -179,14 +104,12 @@
                     if (evt.target.readyState == 4 && evt.target.status == 200) {
                         tile.data = new Uint8Array(evt.target.response);
                         if (tile.data)
-                          this.draw(tile);
-                        else {
-                            erro = "Unrecognized QB3 data";
-                        }
+                            this.draw(tile);
+                        else
+                            error = "Unrecognized QB3 data";
                         done(error, tile);                        
                     }
                 }.bind(this);
-
                 return tile;
             },
 
@@ -197,30 +120,23 @@
                     return;
                 }
 
+                let width = tile.width;
+                let height = tile.height;
                 // Decode the tile data
-                // console.time("Decode Tile Data");
-                image = QB3dec.decodeData(tile.data);
-                // console.timeEnd("Decode Tile Data");
+                let image = QB3dec.decode(tile.data, 
+                {
+                    xsize: width, ysize: height,
+                    nbands: 8, // Number of bands in the QB3 data
+                    dtype: 'uint16', // Data type of the bands
+                })
+
                 if (!image) {
                     console.error("Failed to decode tile data");
                     return;
                 }
 
-                let width = tile.width;
-                let height = tile.height;
-                if (image.xsize !== width || image.ysize !== height) {
-                    console.error("Tile size mismatch: expected " + width + "x" + height + ", got " + image.xsize + "x" + image.ysize);
-                    return;
-                }
-
                 let nbands = image.nbands;
                 let values = image.data;
-
-                // Verify that the image data has the expected size
-                if (values.length !== width * height * nbands) {
-                    console.error("Image data size mismatch: expected " + (width * height * nbands) + ", got " + values.length);
-                    return;
-                }
 
                 // Table of min-max per band. These should come from the MRF XML
                 let minMax = [];
@@ -236,14 +152,14 @@
                 // This needs to convert the values to 8 bit and draw them
                 let ctx = tile.getContext('2d');
                 let imageData = ctx.createImageData(width, height);
-                rband = this.selection[0];
-                gband = this.selection[1];
-                bband = this.selection[2];
+                let rband = this.selection[0];
+                let gband = this.selection[1];
+                let bband = this.selection[2];
                 for (let i = 0; i < width * height; i++) {
                     let r = values[i * nbands + rband];
                     let g = values[i * nbands + gband];
                     let b = values[i * nbands + bband];
-                    alpha = (r === 0 && g === 0 && b === 0) ? 0 : 255;
+                    let alpha = (r === 0 && g === 0 && b === 0) ? 0 : 255;
                     r = 0xff & (512 * (r - minMax[rband].min) / (minMax[rband].max - minMax[rband].min));
                     g = 0xff & (512 * (g - minMax[gband].min) / (minMax[gband].max - minMax[gband].min));
                     b = 0xff & (512 * (b - minMax[bband].min) / (minMax[bband].max - minMax[bband].min));
@@ -299,6 +215,10 @@
             }
             console.timeEnd("Redraw Tiles");
         });
+
+        var QB3dec = await qb3decoder();
+        console.log("QB3 decoder loaded");
+        QB3L.addTo(map);
     </script>
 
   </html>
