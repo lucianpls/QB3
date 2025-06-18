@@ -96,7 +96,7 @@
             xhr.responseType = 'arraybuffer';
 
             // Adjust zoom for 512 tile size
-            let url = 'http://earthlive.maptiles.arcgis.com/qb3/tile'
+            let url = 'https://earthlive.maptiles.arcgis.com/qb3/tile'
                 + '/' + (coords.z - 1) + '/' + coords.y + '/' + coords.x;
             xhr.open("Get", url, true);
             xhr.send();
