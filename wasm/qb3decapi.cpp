@@ -1,5 +1,7 @@
 #include <stdlib.h>
 #include <emscripten.h>
+// From https://github.com/nlohmann/json
+#include <json.hpp>
 
 extern "C" {
     // Take a look at a QB3 blob, return JSON info without full decoding
@@ -14,9 +16,6 @@ extern "C" {
     EMSCRIPTEN_KEEPALIVE
     size_t decode(void *data, size_t sz, void *outbuf, char *message);
 }
-
-// From https://github.com/nlohmann/json
-#include "json.hpp"
 
 #include "../QB3lib/QB3.h"
 
@@ -117,5 +116,3 @@ size_t decode(void *data, size_t sz, void *outbuf, char *message) {
     qb3_destroy_decoder(p);
     return read_bytes; // Return number of bytes read
 }
-
-
