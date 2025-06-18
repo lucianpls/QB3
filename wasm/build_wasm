@@ -2,6 +2,7 @@
 
 #Build qb3-wasm decoder as an JS6 module using emscripten
 # Assume libQB3.a is already built and available in the current folder
+# Assume json.hpp is in the include path for emcc
 
 OPTS="-O3 -flto"
 # Standard emscripten functions
