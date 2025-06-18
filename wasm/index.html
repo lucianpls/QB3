@@ -1,6 +1,7 @@
 <!DOCTYPE html>
-  <html>
-  <head>
+<html>
+
+<head>
     <meta charset=utf-8 />
     <title>QB3 decoder protytype</title>
     <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
@@ -14,7 +15,7 @@
             margin: 0;
             padding: 0;
         }
-    
+
         #map {
             position: absolute;
             top: 0;
@@ -22,7 +23,7 @@
             right: 0;
             left: 0;
         }
-    
+
         #info-pane {
             position: absolute;
             top: 10px;
@@ -32,7 +33,7 @@
             padding: 1em;
             background: white;
         }
-    
+
         #picker {
             position: relative;
             top: 10px;
@@ -41,184 +42,184 @@
             padding: 1em;
             background: white;
         }
-    
+
         .noUi-connect {
             background: #ccc;
         }
     </style>
-    </head>
-    
-    <body>
-        <div id="map"></div>
-        <div id="info-pane">
-            <h3>QB3 prototype</h3>
-            <div id="picker">
-                <select id="band-picker">
-                    <option value="4,3,2">Color</option>
-                    <option value="7,6,4">Short Wave IR</option>
-                    <option value="5,4,3">Color IR</option>
-                    <option value="6,5,2">Agriculture</option>
-                    <option value="4,3,1">Bathymetric</option>
-                    <option value="7,6,2">Geology</option>
-                    <option value="1,1,1">1</option>
-                    <option value="2,2,2">2</option>
-                    <option value="3,3,3">3</option>
-                    <option value="4,4,4">4</option>
-                    <option value="5,5,5">5</option>
-                    <option value="6,6,6">6</option>
-                    <option value="7,7,7">7</option>
-                    <option value="8,8,8">QA</option>
-                </select>
-            </div>
-        </div>    
-    </body>
+</head>
 
-    <script type = "module">
-        import qb3decoder from './qb3-wasm.mjs';
+<body>
+    <div id="map"></div>
+    <div id="info-pane">
+        <h3>QB3 prototype</h3>
+        <div id="picker">
+            <select id="band-picker">
+                <option value="4,3,2">Color</option>
+                <option value="7,6,4">Short Wave IR</option>
+                <option value="5,4,3">Color IR</option>
+                <option value="6,5,2">Agriculture</option>
+                <option value="4,3,1">Bathymetric</option>
+                <option value="7,6,2">Geology</option>
+                <option value="1,1,1">1</option>
+                <option value="2,2,2">2</option>
+                <option value="3,3,3">3</option>
+                <option value="4,4,4">4</option>
+                <option value="5,5,5">5</option>
+                <option value="6,6,6">6</option>
+                <option value="7,7,7">7</option>
+                <option value="8,8,8">QA</option>
+            </select>
+        </div>
+    </div>
+</body>
 
-        let QB3Layer = L.GridLayer.extend({
-            // Fetch only
-            createTile: function(coords, done) {
-                let error;
-                let tile = L.DomUtil.create('canvas', 'leaflet-tile');
-                tile.width = this.options.tileSize;
-                tile.height = this.options.tileSize;
-                // console.log(coords);
-                tile.zoom = coords.z;
-                if (tile.zoom < 1) {
-                    error = "Zoom level too low";
-                    done(error, tile);
-                    return tile;
-                }
+<script type="module">
+    import qb3decoder from './qb3-wasm.mjs';
 
-                let xhr = new XMLHttpRequest();
-                xhr.responseType = 'arraybuffer';
-
-                // Adjust zoom for 512 tile size
-                let url = 'http://earthlive.maptiles.arcgis.com/qb3/tile' 
-                    + '/' + (coords.z - 1) + '/' + coords.y + '/' + coords.x;
-                xhr.open("Get", url, true);
-                xhr.send();
-                
-                xhr.onreadystatechange = function (evt) {
-                    if (evt.target.readyState == 4 && evt.target.status == 200) {
-                        tile.data = new Uint8Array(evt.target.response);
-                        if (tile.data)
-                            this.draw(tile);
-                        else
-                            error = "Unrecognized QB3 data";
-                        done(error, tile);                        
-                    }
-                }.bind(this);
+    let QB3Layer = L.GridLayer.extend({
+        // Fetch only
+        createTile: function (coords, done) {
+            let error;
+            let tile = L.DomUtil.create('canvas', 'leaflet-tile');
+            tile.width = this.options.tileSize;
+            tile.height = this.options.tileSize;
+            // console.log(coords);
+            tile.zoom = coords.z;
+            if (tile.zoom < 1) {
+                error = "Zoom level too low";
+                done(error, tile);
                 return tile;
-            },
+            }
 
-            // Decode and draw
-            draw: function(tile) {
-                if (!tile.data) {
-                    console.log("No data to draw");
-                    return;
+            let xhr = new XMLHttpRequest();
+            xhr.responseType = 'arraybuffer';
+
+            // Adjust zoom for 512 tile size
+            let url = 'http://earthlive.maptiles.arcgis.com/qb3/tile'
+                + '/' + (coords.z - 1) + '/' + coords.y + '/' + coords.x;
+            xhr.open("Get", url, true);
+            xhr.send();
+
+            xhr.onreadystatechange = function (evt) {
+                if (evt.target.readyState == 4 && evt.target.status == 200) {
+                    tile.data = new Uint8Array(evt.target.response);
+                    if (tile.data)
+                        this.draw(tile);
+                    else
+                        error = "Unrecognized QB3 data";
+                    done(error, tile);
                 }
+            }.bind(this);
+            return tile;
+        },
 
-                let width = tile.width;
-                let height = tile.height;
-                // Decode the tile data
-                let image = QB3dec.decode(tile.data, 
+        // Decode and draw
+        draw: function (tile) {
+            if (!tile.data) {
+                console.log("No data to draw");
+                return;
+            }
+
+            let width = tile.width;
+            let height = tile.height;
+            // Decode the tile data
+            let image = QB3dec.decode(tile.data,
                 {
                     xsize: width, ysize: height,
                     nbands: 8, // Number of bands in the QB3 data
                     dtype: 'uint16', // Data type of the bands
                 })
 
-                if (!image) {
-                    console.error("Failed to decode tile data");
-                    return;
-                }
-
-                let nbands = image.nbands;
-                let values = image.data;
-
-                // Table of min-max per band. These should come from the MRF XML
-                let minMax = [];
-                minMax.push({min: 6131, max: 65535}); // Band 0
-                minMax.push({min: 6812, max: 35999}); // Band 1
-                minMax.push({min: 6427, max: 20046}); // Band 2
-                minMax.push({min: 5566, max: 20382}); // Band 3
-                minMax.push({min: 4608, max: 32502}); // Band 4
-                minMax.push({min: 4649, max: 65535}); // Band 5
-                minMax.push({min: 4257, max: 65535}); // Band 6
-                minMax.push({min: 4372, max: 13262}); // Band 7
-                
-                // This needs to convert the values to 8 bit and draw them
-                let ctx = tile.getContext('2d');
-                let imageData = ctx.createImageData(width, height);
-                let rband = this.selection[0];
-                let gband = this.selection[1];
-                let bband = this.selection[2];
-                for (let i = 0; i < width * height; i++) {
-                    let r = values[i * nbands + rband];
-                    let g = values[i * nbands + gband];
-                    let b = values[i * nbands + bband];
-                    let alpha = (r === 0 && g === 0 && b === 0) ? 0 : 255;
-                    r = 0xff & (512 * (r - minMax[rband].min) / (minMax[rband].max - minMax[rband].min));
-                    g = 0xff & (512 * (g - minMax[gband].min) / (minMax[gband].max - minMax[gband].min));
-                    b = 0xff & (512 * (b - minMax[bband].min) / (minMax[bband].max - minMax[bband].min));
-                    imageData.data[i * 4] = r;
-                    imageData.data[i * 4 + 1] = g;
-                    imageData.data[i * 4 + 2] = b;
-                    imageData.data[i * 4 + 3] = alpha;
-                }
-
-                ctx.putImageData(imageData, 0, 0);
-            }
-        })
-
-        let southWest = L.latLng(-90, -179);
-        let northEast = L.latLng(90, 179);
-        let bounds = L.latLngBounds(southWest, northEast);
-
-        // Create the map
-        var map = L.map('map', {
-            noWrap: true,
-            center: [0, 0],
-            zoom: 2,
-            zoomControl: true,
-            maxZoom: 5,
-            maxBounds: bounds,
-            attributionControl: true
-        });
-    
-        let QB3L = new QB3Layer({
-            attribution: 'QB3 prototype',
-            tileSize: 512
-        });
-        QB3L.selection = "3,2,1".split(',').map(Number);
-
-        // Read the band selection from the picker
-        document.getElementById('band-picker').addEventListener('change', function() {
-            let bands = this.value.split(',').map(Number);
-            if (bands.length !== 3) {
-                console.error("Please select exactly three bands.");
+            if (!image) {
+                console.error("Failed to decode tile data");
                 return;
             }
-            // Adjust the bands to be zero-indexed
-            bands = bands.map(band => band - 1);
-            QB3L.selection = bands;
-            // Redraw the tiles in the layer
 
-            // Time this loop
-            console.time("Redraw Tiles");
-            for (var key in QB3L._tiles) {
-                var tile = QB3L._tiles[key].el;
-                if (!tile || !tile.data || tile.data.length == 0) continue;
-                QB3L.draw(tile);
+            let nbands = image.nbands;
+            let values = image.data;
+
+            // Table of min-max per band. These should come from the MRF XML
+            let minMax = [];
+            minMax.push({ min: 6131, max: 65535 }); // Band 0
+            minMax.push({ min: 6812, max: 35999 }); // Band 1
+            minMax.push({ min: 6427, max: 20046 }); // Band 2
+            minMax.push({ min: 5566, max: 20382 }); // Band 3
+            minMax.push({ min: 4608, max: 32502 }); // Band 4
+            minMax.push({ min: 4649, max: 65535 }); // Band 5
+            minMax.push({ min: 4257, max: 65535 }); // Band 6
+            minMax.push({ min: 4372, max: 13262 }); // Band 7
+
+            // This needs to convert the values to 8 bit and draw them
+            let ctx = tile.getContext('2d');
+            let imageData = ctx.createImageData(width, height);
+            let rband = this.selection[0];
+            let gband = this.selection[1];
+            let bband = this.selection[2];
+            for (let i = 0; i < width * height; i++) {
+                let r = values[i * nbands + rband];
+                let g = values[i * nbands + gband];
+                let b = values[i * nbands + bband];
+                let alpha = (r === 0 && g === 0 && b === 0) ? 0 : 255;
+                r = 0xff & (512 * (r - minMax[rband].min) / (minMax[rband].max - minMax[rband].min));
+                g = 0xff & (512 * (g - minMax[gband].min) / (minMax[gband].max - minMax[gband].min));
+                b = 0xff & (512 * (b - minMax[bband].min) / (minMax[bband].max - minMax[bband].min));
+                imageData.data[i * 4] = r;
+                imageData.data[i * 4 + 1] = g;
+                imageData.data[i * 4 + 2] = b;
+                imageData.data[i * 4 + 3] = alpha;
             }
-            console.timeEnd("Redraw Tiles");
-        });
 
-        var QB3dec = await qb3decoder();
-        console.log("QB3 decoder loaded");
-        QB3L.addTo(map);
-    </script>
+            ctx.putImageData(imageData, 0, 0);
+        }
+    })
 
-  </html>
+    let southWest = L.latLng(-90, -179);
+    let northEast = L.latLng(90, 179);
+    let bounds = L.latLngBounds(southWest, northEast);
+
+    // Create the map
+    var map = L.map('map', {
+        noWrap: true,
+        center: [0, 0],
+        zoom: 2,
+        zoomControl: true,
+        maxZoom: 5,
+        maxBounds: bounds,
+        attributionControl: true
+    });
+
+    let QB3L = new QB3Layer({
+        attribution: 'QB3 prototype',
+        tileSize: 512
+    });
+    QB3L.selection = "3,2,1".split(',').map(Number);
+
+    // Read the band selection from the picker
+    document.getElementById('band-picker').addEventListener('change', function () {
+        let bands = this.value.split(',').map(Number);
+        if (bands.length !== 3) {
+            console.error("Please select exactly three bands.");
+            return;
+        }
+        // Adjust the bands to be zero-indexed
+        bands = bands.map(band => band - 1);
+        QB3L.selection = bands;
+        // Redraw the tiles in the layer
+
+        // Time this loop
+        console.time("Redraw Tiles");
+        for (var key in QB3L._tiles) {
+            var tile = QB3L._tiles[key].el;
+            if (!tile || !tile.data || tile.data.length == 0) continue;
+            QB3L.draw(tile);
+        }
+        console.timeEnd("Redraw Tiles");
+    });
+
+    var QB3dec = await qb3decoder();
+    console.log("QB3 decoder loaded");
+    QB3L.addTo(map);
+</script>
+
+</html>
