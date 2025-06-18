@@ -8,14 +8,16 @@ extern "C" {
     char *GetInfo(void *data, size_t sz);
 
     // Full decode of a QB3 blob into a user-allocated buffer
-    // Memory for outbuf and message(1024) must be allocated by caller
+    // Memory for outbuf and message(1024) must be allocated and freed by caller
     // Size of outbuf must be what GetInfo returns in decoded_size field, in bytes
     // Message holds an error message if decoding fails, or is empty on success
     EMSCRIPTEN_KEEPALIVE
     size_t decode(void *data, size_t sz, void *outbuf, char *message);
 }
 
+// From https://github.com/nlohmann/json
 #include "json.hpp"
+
 #include "../QB3lib/QB3.h"
 
 static const char *type(qb3_dtype type) {

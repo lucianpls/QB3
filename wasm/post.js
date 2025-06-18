@@ -1,5 +1,5 @@
 
-// This is part of the QB3 decoder WASM module
+// This is the JS friendly API of the QB3 decoder WASM module
 
 // Get the information about the QB3 raster, returns a JSON object
 Module.getInfo = function (data) {
@@ -50,9 +50,22 @@ Module.decode = function (data, expectedImage) {
         return null;
     }
 
-    // The decoder is fine, but the code that follows is not
-    if (image.dtype != "uint16") {
-        console.error("Unsupported data type: " + image.type);
+    const qb3types = {
+        "uint8": { 'size': 1, 'constructor': Uint8Array },
+        "uint16": { 'size': 2, 'constructor': Uint16Array },
+        "uint32": { 'size': 4, 'constructor': Uint32Array },
+        "uint64": { 'size': 8, 'constructor': BigUint64Array },
+        "int8": { 'size': 1, 'constructor': Int8Array },
+        "int16": { 'size': 2, 'constructor': Int16Array },
+        "int32": { 'size': 4, 'constructor': Int32Array },
+        "int64": { 'size': 8, 'constructor': BigInt64Array }
+    }
+
+    try {
+        var type = qb3types[image.dtype];
+    } 
+    catch (e) {
+        console.error("Unsupported data type: " + image.dtype);
         return null;
     }
 
@@ -61,7 +74,7 @@ Module.decode = function (data, expectedImage) {
     Module.writeArrayToMemory(data, rawqb3);
 
     // Image size in bytes
-    let imageSize = image.xsize * image.ysize * image.nbands * 2;
+    let imageSize = image.xsize * image.ysize * image.nbands * type.size;
     // Allocate the output buffer
     let outPtr = Module._malloc(imageSize);
     // Allocate a buffer for the message
@@ -81,9 +94,7 @@ Module.decode = function (data, expectedImage) {
     }
     Module._free(message);
 
-    // Copy from a typed view, then release it
-    image.data = new Uint16Array(new Uint16Array(Module.HEAPU8.buffer,
-        outPtr, image.xsize * image.ysize * image.nbands));
+    image.data = new type.constructor(Module.HEAPU8.slice(outPtr, outPtr + imageSize).buffer);
     Module._free(outPtr);
     return image;
-}
+};
