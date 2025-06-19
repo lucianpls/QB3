@@ -6,19 +6,16 @@ Module.getInfo = function (data) {
     // Use a small array, to avoid the full size
     if (data.length > 1000)
         data = data.slice(0, 1000);
-    let dataPtr = Module._malloc(data.length);
+    const dataPtr = Module._malloc(data.length);
     Module.writeArrayToMemory(data, dataPtr);
-    let cresult = Module.ccall('GetInfo', // C function name
-        'number', // return type
-        ['number', 'number'], // argument types
-        [dataPtr, data.length]); // arguments
+    const cresult = Module._GetInfo(dataPtr, data.length);
     Module._free(dataPtr);
-    // This is actually a json string
+    // This is a json string
     if (cresult == 0)
         return null;
-    let response = this.UTF8ToString(cresult);
+    const response = JSON.parse(Module.UTF8ToString(cresult));
     Module._free(cresult);
-    return JSON.parse(response);
+    return response;
 }
 
 // Decode the QB3 raster, returns a JSON object that includes the decoded data
@@ -31,6 +28,8 @@ Module.getInfo = function (data) {
 // - ysize: height of the image
 // - nbands: number of bands in the image
 // - dtype: data type of the image <u>int[8|16|32|64]
+// If the data does not match the expected format, the function will return null
+// and log an error to the console.
 Module.decode = function (data, expectedImage) {
     // Check the expected format matches the data
     let image = Module.getInfo(data);
@@ -70,20 +69,16 @@ Module.decode = function (data, expectedImage) {
     }
 
     // Copy the data to wasm
-    let rawqb3 = Module._malloc(data.length);
+    const rawqb3 = Module._malloc(data.length);
     Module.writeArrayToMemory(data, rawqb3);
 
     // Image size in bytes
-    let imageSize = image.xsize * image.ysize * image.nbands * type.size;
-    // Allocate the output buffer
-    let outPtr = Module._malloc(imageSize);
-    // Allocate a buffer for the message
-    let message = Module._malloc(1024);
-    let decoded = ccall('decode',
-        'number', // return type
-        ['number', 'number', 'number', 'number'], // argument types
-        [rawqb3, data.length, outPtr, message] // arguments
-    )
+    const imageSize = image.xsize * image.ysize * image.nbands * type.size;
+    // Allocate the output buffer and the message buffer
+    const outPtr = Module._malloc(imageSize);
+    const message = Module._malloc(1024);
+    // Decode the image, returns 0 on failure, otherwise the number of bytes decoded
+    const decoded = Module._decode(rawqb3, data.length, outPtr, message);
     // Free the raw data buffer
     Module._free(rawqb3);
     if (decoded == 0) {
@@ -94,7 +89,8 @@ Module.decode = function (data, expectedImage) {
     }
     Module._free(message);
 
-    image.data = new type.constructor(Module.HEAPU8.slice(outPtr, outPtr + imageSize).buffer);
+    image.data = new type.constructor(
+        Module.HEAPU8.slice(outPtr, outPtr + imageSize).buffer);
     Module._free(outPtr);
     return image;
 };
