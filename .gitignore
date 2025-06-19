@@ -7,3 +7,4 @@ build
 *.o
 wasm/*.wasm
 wasm/*.mjs
+wasm/json.hpp
