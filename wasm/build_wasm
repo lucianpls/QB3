@@ -8,7 +8,8 @@ OPTS="-O3 -flto"
 # Standard emscripten functions
 EXPORTS=_malloc,_free
 
-emcc $OPTS -c qb3decapi.cpp
+# Place json.hpp in the current folder
+emcc $OPTS -I . -c qb3decapi.cpp
 
 #Build qb3-wasm module, see post.js for API
 emcc $OPTS -o qb3-wasm.mjs qb3decapi.o libQB3.a \
@@ -17,4 +18,5 @@ emcc $OPTS -o qb3-wasm.mjs qb3decapi.o libQB3.a \
     -s ALLOW_MEMORY_GROWTH=1 \
     --no-entry \
     --post-js post.js \
+    -sENVIRONMENT=web,worker \
     -sEXPORTED_RUNTIME_METHODS=[ccall,writeArrayToMemory,UTF8ToString]
