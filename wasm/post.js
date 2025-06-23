@@ -93,4 +93,4 @@ Module.decode = function (data, expectedImage) {
         Module.HEAPU8.slice(outPtr, outPtr + imageSize).buffer);
     Module._free(outPtr);
     return image;
-};
+}
