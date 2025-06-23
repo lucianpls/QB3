@@ -7,7 +7,7 @@
 OPTS="-O3 -flto"
 
 # Place json.hpp in the current folder
-emcc $OPTS -I . -c qb3decapi.cpp
+emcc $OPTS -fno-rtti -fno-exceptions -I . -c qb3decapi.cpp
 
 #Build qb3-wasm module, see post.js for API
 emcc $OPTS -o qb3-wasm.mjs qb3decapi.o libQB3.a \
