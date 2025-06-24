@@ -3,3 +3,8 @@ x64
 .vs
 .vscode
 build
+*.a
+*.o
+wasm/*.wasm
+wasm/*.mjs
+wasm/json.hpp
