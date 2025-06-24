@@ -30,6 +30,8 @@ JPEG and PNG images.
 Another option is to build [GDAL](https://github.com/OSGeo/GDAL) with
 QB3 in MRF enabled.
 
+[Web decoder demo](https://lucianpls.github.io/QB3/)
+
 # C API
 [QB3.h](QB3lib/QB3.h) contains the public C API interface.
 The workflow is to create opaque encoder or decoder control structures, 
