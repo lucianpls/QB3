@@ -84,7 +84,7 @@ void qb3_set_encoder_stride(encsp p, size_t stride) {
 // Valid values are 2 and above
 // sign = true when the input data is signed
 // away = true to round away from zero
-bool qb3_set_encoder_quanta(encsp p, size_t q, bool away) {
+bool qb3_set_encoder_quanta(encsp p, uint64_t q, bool away) {
     if (q < 1)
         return false;
     p->quanta = q;
