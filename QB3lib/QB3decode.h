@@ -139,7 +139,8 @@ static std::pair<size_t, uint64_t> qb3dsztbl(uint64_t val, size_t rung) {
 // At least 56 valid bits in accumulator
 // returns false on failure
 template<bool APPLYSTEP = true, typename T>
-static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits) {
+static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
+{
     assert(((rung > 1) && (abits <= 8))
         || ((rung == 1) && (abits <= 17)) // B2 + 1
         || ((rung == 0) && (abits <= 47))); // 3 * B2 - 1
@@ -157,7 +158,6 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
         s.advance(abits + 1);
         return 1;
     }
-    // Table decoding
     if (sizeof(T) == 1 || rung < (sizeof(DRG) / sizeof(*DRG))) {
         if (1 == rung) {
             // Use inline constants as nibble tables
@@ -172,13 +172,11 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             }
             s.advance(abits);
         }
-        else if (2 == rung) { // max symbol len is 4, there are at least 14 in the accumulator
-            // Use inline constants as nibble tables
+        else if (2 == rung) { // max symbol len is 4, there is space for at least 14 in the accumulator
             // Faster than a double value table decode, but only in this specific code organization
             // Cleaning it up, for example doing a peek at the start then looping 16 times makes it slower
-            // The masks and inline constants could be smaller for size, but that eliminates the
-            // common expression, making it slower
-            // pre-shift accumulator, top 2 bits are not needed
+            // The masks and inline constants could be smaller for size, but that eliminates thecommon 
+            // expression, making it slower. Pre-shift accumulator, top 2 bits are dropped
             acc <<= 2;
             uint8_t size;
             int i = 0;
@@ -222,10 +220,9 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             } while (++i < B2);
             s.advance(abits);
         }
-        else { // Last part of table decoding, rungs 6-7
+        else { // Last part of table decoding, rungs 6-7, three reads, 6-4-6
             auto drg = DRG[rung];
             const auto m = 0x1ffull >> (7 - rung);
-            // Three total reads, 6 4 6
             int i = 0;
             do {
                 auto v = drg[acc & m];
@@ -297,12 +294,6 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
     }
     return true;
 }
-
-// Absolute from mag-sign
-template<typename T> static T magsabs(T v) { return (v >> 1) + (v & 1); }
-
-// Multiply v(in magsign) by m(normal, positive)
-template<typename T> static T magsmul(T v, T m) { return magsabs(v) * (m << 1) - (v & 1); }
 
 // Streamlined decoding for FTL mode
 template<typename T>
@@ -572,6 +563,11 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
     return failed || s.avail() > 7;
 }
 
+// Absolute from mag-sign
+template<typename T> static T magsabs(T v) { return (v >> 1) + (v & 1); }
+// Multiply v(in magsign) by m(normal, positive)
+template<typename T> static T magsmul(T v, T m) { return magsabs(v) * (m << 1) - (v & 1); }
+
 // reports most but not all errors, for example if the input stream is too short for the last block
 template<typename T>
 static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
@@ -674,7 +670,7 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
                             runbits[c] = topbit(v);
                         }
                     }
-                    else { // IDX decoding
+                    else { // index decoding
                         cs = dsw[acc & LONG_MASK]; // rung, no flag
                         runbits[c] = rung = (runbits[c] + cs) & NORM_MASK;
                         failed |= rung == 63; // TODO: Deal with 64bit overflow
