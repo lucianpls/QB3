@@ -33,6 +33,8 @@ QB3 in MRF enabled.
 [Web decoder demo](https://lucianpls.github.io/QB3/). This is a very simple leaflet 
 based browser of a Landsat scene containing 8 bands of 16bit integer data. The QB3 tiles 
 are decoded using the WASM decoder module every time the screen needs to be refreshed.
+In QB3 format, this Landsat scene is half the size of the standard COG (TIFF) which uses 
+LZW compression.
 
 # C API
 [QB3.h](QB3lib/QB3.h) contains the public C API interface.
