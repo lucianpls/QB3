@@ -9,10 +9,7 @@ multiple color bands. QB3 is portable, low complexity, single pass compression a
 no measurable memory overhead and no external dependencies, which makes it very easy to use.
 The compression speed depends on the input, but less so than in other formats. It is able to 
 compress and decompress a full HD 1080P sequence of frames at 60 frames per second while 
-using a single thread of a modern CPU.
-
-## Introduction
-
+using a single thread of a modern CPU.  
 This document describes the performance of the QB3 image compression compared to PNG, on the same hardware.
 PNG (Portable Network Graphics) is a widely used lossless image format, based on the DEFLATE compression 
 algorithm used by the ZIP archives. The image specific part of the PNG format isa filter applied 
