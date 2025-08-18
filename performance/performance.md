@@ -2,23 +2,24 @@
 
 ## Abstract
 
-QB3 is a lossless image compression algorithm that is able to compress natural images very well, 
-measurably better than PNG for most inputs while being forty times faster than PNG for 8 bit 
-data. In addition to 8 bit data, QB3 also handles 16, 32 and 64 bit integer raster data, with 
-multiple color bands. QB3 is portable, low complexity, single pass compression algorithm with 
-no measurable memory overhead and no external dependencies, which makes it very easy to use.
-The compression speed depends on the input, but less so than in other formats. It is able to 
-compress and decompress a full HD 1080P sequence of frames at 60 frames per second while 
-using a single thread of a modern CPU.  
-This document describes the performance of the QB3 image compression compared to PNG, on the same hardware.
-PNG (Portable Network Graphics) is a widely used lossless image format, based on the DEFLATE compression 
-algorithm used by the ZIP archives. The image specific part of the PNG format isa filter applied 
-to the image data before compressing it with DEFLATE. The filter is selected from a set of algorithms 
-that predict the value of a pixel based on the values of the pixels seen previously, filtering which 
-tends to make the data more compressible. PNG can handle images with 8-bit and 16-bit unsigned values.
-Similarly, QB3 is an integer lossless image compression format. It is also using a predictor filter 
-to make the data more compressible, followed by a fixed entropy coding scheme. QB3 can handle all integer 
-types from 8 to 64 bits.
+QB3 is a lossless image compression algorithm able to compress natural images measurably better 
+than PNG, while being forty times faster than PNG for 8 bit data. QB3 
+can compress all integer type raster data, with multiple color bands. QB3 is based on a
+portable, low complexity, single pass compression algorithm with no measurable memory overhead 
+and no external dependencies.
+The compression speed depends on the input, but less so than in most other formats. QB3 is able to 
+compress and decompress a full HD 1080P sequence of frames at 60 frames per second while using a 
+single thread of a modern CPU.  
+This document describes the performance of the QB3 image compression compared to PNG, tested on 
+the same hardware.
+PNG (Portable Network Graphics) is a widely used lossless image format, based on the DEFLATE 
+compression algorithm used by the ZIP archives. The image specific part of the PNG format is a 
+filter applied to the input data before compressing it with DEFLATE. The filter is selected from 
+a small set of algorithms that predict the value of a pixel based on the values of the previous 
+pixels, filtering which makes the image data more compressible. PNG can handle images with 8-bit 
+and 16-bit unsigned values.
+Similarly, QB3 is also using a predictor filter to make the data more compressible, followed by 
+a fixed entropy coding scheme.
 
 ## Method
 This comparison is done on the reference images from the 
@@ -32,9 +33,9 @@ generated images. The input images are compressed using the cqb3 tool, using var
 Then the qb3 output images are converted back to PNG, also using the cqb3 conversion utility, which in turn 
 relies on libpng 1.6.44 and zlib 1.3.1.1 at the default settings. The PNG images used in comparison are the 
 restored PNGs, not the original ones.
-The computer used has an AMD 5955W CPU with sufficient memory, running Windows 11. QB3 V1.3.2 compiled 
-using Visual Studio 22 with the CLang-CL compiler was used. The timings used are the ones recorded by the 
-cqb3 tool, which measures only the time spent for the compression itself, from raw image to compressed 
+The computer used has an AMD Threadripper Pro 5955Wx CPU with sufficient memory, running Windows 11. 
+QB3 V1.3.2 compiled using Visual Studio 22 with the CLang-CL compiler was used. The timings used are the ones 
+measured by the cqb3 tool, which include only the time spent for the compression from raw image to compressed 
 image, in memory. Finally, a Jupyter notebook was used to analyze the timings and the size of the image 
 files and to plot various graphs.
 
@@ -42,15 +43,13 @@ files and to plot various graphs.
 
 ### Compressed size
 The following graph shows the size of the compressed images relative to the raw size, for the 
-various QB3 settings. QB3 modes include FAST, BASE and BEST. In addition to the default R-G, G, B-G band filter, 
-cqb3 can try all the possible RGB band combinations and pick the one that results in the smallest file. 
-This option was applied in combination with the best mode, resulting in the smallest file size achievable 
-with QB3 only. The compression in BEST plus band mix mode is better or equal to the BEST mode, which is better 
-or equal to the BASE mode, which is better or equal to the FAST mode. 
-It is possible to apply an external post processing step with DEFLATE or ZSTD to the QB3 compressed image, 
+various QB3 settings. QB3 modes include FAST, BASE and BEST, in the order of increasing compression and time. 
+In addition to the default R-G, G, B-G band filter, cqb3 can try all the possible RGB band combinations and 
+pick the one that results in the smallest file.
+This option was applied in combination with the best mode, which results in the smallest file size achievable 
+with QB3 only. It is possible to apply DEFLATE or ZSTD to the QB3 compressed image as a post-processing step, 
 which frequently reduces the file size even further. This second step has a larger impact for synthetic, 
-computer generated images, which benefit from the reduction of repeated sequences, which are not taken 
-advantage of in the QB3 compression.
+computer generated images which benefit from the reduction of identical input sequences.
 
 ![Size of compressed images](CID22_QB3vsPNG.svg)
 
@@ -67,13 +66,13 @@ compression for these images more than it does for the photographs.
 Another way of looking at the compression quality is to look at the aggregate size savings of the QB3 
 compression vs PNG.
 
-![Aggregated savings](CID22_savings.svg)
+![Aggregate savings](CID22_savings.svg)
 
-The savings are cumulative, for the 248 images, split in two groups. The first group, for images 0 to 
+The savings are cumulative for the 248 images, split in two groups. The first group, for images 0 to 
 60, are the images where images compressed with QB3 FAST mode are larger than the corresponding PNG, 
-resulting in negative savings. The second group are the rest of the images, where QB3 FAST is equal to 
+resulting in negative savings. The second group are the rest of the images, where QB3 FAST is equal 
 or smaller than the corresponding PNG, thus the size savings are positive. Within each group, the 
-images are sorted from the smallest absolute savings to the largest. In other words, the slope of the 
+images are sorted from the smallest difference to the largest. In other words, the slope of the 
 graph is steeper when the difference in size between the two compression methods is larger, 
 either positive or negative, while the slope is almost flat where the difference is small. This order
 makes it easier to see inflection point, or the ratio of image where QB3 is better than PNG. The other 
@@ -82,9 +81,9 @@ for the complete dataset all the QB3 modes are better than PNG, saving between 6
 90MB of PNG images. The difference between the QB3 modes is small, with the FAST and BASE 
 mode being almost identical. The BEST + band mix brings a significant improvement, especially for 
 the images where the FAST QB3 mode is larger than the PNG. Adding ZSTD increases the savings by an 
-extra 4 MB, which is very significant.
-In best mode, the total savings vs PNG are 7.42%, which is already very good for a lossless compression, 
-and increasing to 11.56% with zstd post processing. This size of saving can be extremely significant 
+extra 3 MB, which is very significant.
+In best mode, the total savings vs PNG are 7.42%, which is very good for a lossless compression, 
+increasing to 11.59% with zstd post processing. The size of savings can be extremely significant 
 for long term storage.
 
 #### Aggregate savings vs PNG by QB3 compression mode
@@ -93,27 +92,25 @@ Total size of input PNGs: 90431161, 46.3666% of raw
 QB3 fast: 6219876 6.88%
 QB3 base: 6334365 7.0%
 QB3 best: 6706606 7.42%
-QB3 best + band mix: 7445604 8.23%
-QB3 best + band mix + zstd: 10450694 11.56%
-Total QB3 output: 88.44% of the PNGs
-QB3 41.0082% of raw
+QB3 best + band mix: 7473708 8.26%
+QB3 best + band mix + zstd: 10477718 11.59%
+Total QB3 output: 88.41% of the PNGs
+QB3 40.9944% of raw
 ```
 
 
 ### Compression speed
 
-The next thing to look at is the compression speed, which is the main advantage of the QB3 format.
-
 ![Compression speed](CID22_speed.svg)
 
-In this graph, the images are sorted by the compression time of the PNG, which tends to be roughly 
+In the graph above, the images are sorted by the compression time of the PNG, which tends to be roughly 
 proportional to the PNG output size, the thicker purple line, varying between 14 and 150 milliseconds, 
 with an average of 83 milliseconds. The QB3 modes are the almost flat lines at the bottom of the graph, 
 taking between 1 and 5 milliseconds to compress a 512x512x3 8 bit image, showing very little 
 variation between images. There is a massive difference between QB3 and PNG in compression speed.
 
-QB3 compression speed is 20-40 times faster than PNG for natural images. Even QB3 BEST + Band mix, which 
-compresses the input image 9 times in sequence, is still faster than the PNG compression in most cases. 
+QB3 compression speed is 20-50 times faster than PNG for natural images. Even QB3 BEST + Band mix, which 
+compresses the input image 10 times in sequence, is still faster than the PNG compression in most cases. 
 This is the red line on the graph above, which is the only one that is even intersecting the PNG line.
 Note the compression rate of QB3, measured based on the raw data volume, which for the FAST mode averages 
 383 MB/s, with a peak of 891 MB/s! The PNG average compression rate is 9.49 MB/s, which is 40 times 
