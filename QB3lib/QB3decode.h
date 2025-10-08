@@ -328,7 +328,8 @@ static bool decodeFTL(uint8_t* src, size_t len, T* image, const decs& info)
             for (int c = 0; c < bands; c++) {
                 auto prv = prev[c];
                 T* const blockp = image + y * stride + x * bands + c;
-                uint64_t cs(0), abits(1), acc(s.peek());
+                uint64_t acc(s.peek());
+                uint32_t cs(0), abits(1);
                 if (acc & 1) { // Rung change
                     cs = dsw[(acc >> 1) & LONG_MASK];
                     abits = cs >> 12;
@@ -427,7 +428,8 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
             for (int c = 0; c < bands; c++) {
                 auto prv = prev[c];
                 auto const blockp = image + y * stride + x * bands + c;
-                uint64_t cs(0), abits(1), acc(s.peek());
+                auto acc(s.peek());
+                uint32_t cs(0), abits(1);
                 if (acc & 1) { // Rung change
                     cs = dsw[(acc >> 1) & LONG_MASK];
                     abits = cs >> 12;
@@ -601,7 +603,8 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
             if (x + B > xsize)
                 x = xsize - B;
             for (int c = 0; c < bands; c++) {
-                uint64_t cs(0), abits(1), acc(s.peek());
+                uint64_t acc(s.peek());
+                uint32_t cs(0), abits(1);
                 if (acc & 1) { // Rung change
                     cs = dsw[(acc >> 1) & LONG_MASK];
                     abits = cs >> 12;
@@ -683,8 +686,8 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
                         // 16 index values in group, max group value is 7, always rung 2
                         T maxidx(0);
                         for (int i = 0; i < B2; i++) {
-                            uint32_t size = (0x4232423242324232ull >> (acc & 0b111100)) & 0xf;
-                            group[i] = T((0x7130612051304120ull >> (acc & 0b111100)) & 0xf);
+                            uint32_t size = (0x4232 >> (acc & 0b1100)) & 0xf;
+                            group[i] = T((0x7130612051304120ll >> (acc & 0b111100)) & 0xf);
                             acc >>= size;
                             abits += size;
                             if (maxidx < group[i])
