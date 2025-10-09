@@ -167,8 +167,8 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             // Preshift accumulator
             acc <<= 2;
             for (int i=0; i < B2; i++) {
-                auto size = (0x31213121 >> (acc & 0b11100)) & 0xf;
-                group[i] = T((0x30102010 >> (acc & 0b11100)) & 0xf);
+                auto size = (0x31213121u >> (acc & 0b11100)) & 0xf;
+                group[i] = T((0x30102010u >> (acc & 0b11100)) & 0xf);
                 abits += size;
                 acc >>= size;
             }
@@ -361,7 +361,7 @@ static bool decodeFTL(uint8_t* src, size_t len, T* image, const decs& info)
                         // Shift the accumulator to the left to place the selector in the right place
                         acc <<= 2;
                         for (size_t i = 0; i < B2; i++) {
-                            auto size = (0x31213121 >> (acc & 0b11100)) & 0xf;
+                            auto size = (0x31213121u >> (acc & 0b11100)) & 0xf;
                             blockp[offset[i]] = prv += smag(T((0x30102010u >> (acc & 0b11100)) & 0xf));
                             abits += size;
                             acc >>= size;
@@ -428,7 +428,7 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
             for (int c = 0; c < bands; c++) {
                 auto prv = prev[c];
                 auto const blockp = image + y * stride + x * bands + c;
-                auto acc(s.peek());
+                uint64_t acc(s.peek());
                 uint32_t cs(0), abits(1);
                 if (acc & 1) { // Rung change
                     cs = dsw[(acc >> 1) & LONG_MASK];
@@ -460,7 +460,7 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
                         // Shift the accumulator to the left to place the selector in the right place
                         acc <<= 2;
                         for (int i = 0; i < B2; i++) {
-                            auto size = (0x3121 >> (acc & 0b1100)) & 0xf;
+                            auto size = (0x3121u >> (acc & 0b1100)) & 0xf;
                             blockp[offset[i]] = prv += smag(uint8_t((0x30102010 >> (acc & 0b11100)) & 0xf));
                             abits += size;
                             acc >>= size;
