@@ -16,6 +16,8 @@ Contributors:  Lucian Plesea
 */
 
 #include "QB3common.h"
+#include <fstream>
+
 
 namespace QB3 {
 // Encoding tables for rungs up to 8, for speedup. Rung 0 and 1 are special
@@ -447,6 +449,22 @@ template<bool SKIPSTEP>
 static int ef(const uint8_t* image, oBits& s, encs& info) {
     constexpr size_t UBITS(3);
 
+    // Build a table of output streams by number of bits used
+    std::ofstream *ftbls[8];
+    // Initialize, open files
+    for (size_t i = 0; i < 8; i++) {
+        std::string fname = "0.bin";
+        fname[0] = static_cast<char>('0' + i);
+        ftbls[i] = new std::ofstream(fname, std::ios::binary);
+        if (!ftbls[i]->is_open()) {
+            for (size_t j = 0; j < i; j++) {
+                ftbls[j]->close();
+                delete ftbls[j];
+            }
+            return 3; // File open error
+        }
+    }
+
     if (check_info(info))
         return check_info(info);
     const size_t xsize(info.xsize), ysize(info.ysize), bands(info.nbands), * cband(info.cband);
@@ -503,6 +521,11 @@ static int ef(const uint8_t* image, oBits& s, encs& info) {
                     }
                 }
                 prev[c] = prv;
+                // Write to the appropriate stream based on bitsused
+                auto ftbl = ftbls[topbit(bitsused | 1)];
+                for (auto b : group)
+                    ftbl->put(static_cast<char>(b));
+
                 uint64_t acc = csw3[(topbit(bitsused | 1) - runbits[c]) & ((1ull << UBITS) - 1)];
                 groupencode<uint8_t, SKIPSTEP>(group, bitsused, s, acc & TBLMASK, static_cast<size_t>(acc >> 12));
                 runbits[c] = topbit(bitsused | 1);
