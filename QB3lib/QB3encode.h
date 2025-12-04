@@ -147,7 +147,6 @@ template <typename T, bool SKIPSTEP = false>
 static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t abits)
 {
     assert(abits <= 64);
-    const size_t rung = topbit(bitsused | 1);
     if (1 >= bitsused) { // only 1s and 0s, rung is -1 or 0
         acc |= static_cast<uint64_t>(bitsused) << abits++;
         if (0 != bitsused)
@@ -156,6 +155,7 @@ static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t 
         s.push(acc, abits);
         return;
     }
+    const size_t rung = topbit(bitsused | 1);
     size_t stepp(B2 + 1);
     if (!SKIPSTEP) {
         // Flip the last set rung bit if the rung bit sequence is a step down
@@ -172,8 +172,12 @@ static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t 
     auto t = CRG[rung];
     // For small tables, it's faster to encode with separate values
     if (rung == 1) { // 2 bits per value
-        static const uint8_t values[] = { 0, 1, 3, 7 };
-        static const uint8_t lens[] = { 1, 2, 3, 3 };
+        //static const uint8_t values[] = { 0, 1, 3, 7 };
+        //static const uint8_t lens[]   = { 1, 2, 3, 3 };
+
+        // Swap 1 and 2 input values
+        static const uint8_t values[] = { 0, 3, 1, 7 };
+        static const uint8_t lens[]   = { 1, 3, 2, 3 };
         for (int i = 0; i < B2; i++)
         {
             acc |= uint64_t(values[group[i]]) << abits;
@@ -183,8 +187,12 @@ static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t 
     }
     else
     if (rung == 2) {
-        static const uint8_t values[] = { 0, 2, 1, 5, 3, 7, 11, 15 };
-        static const uint8_t lens[] = { 2, 2, 3, 3, 4, 4, 4, 4 };
+        //static const uint8_t values[] = { 0, 2, 1, 5, 3, 7, 11, 15 };
+        //static const uint8_t lens[]   = { 2, 2, 3, 3, 4, 4,  4,  4 };
+
+        // Swap 3 and 4 input values
+        static const uint8_t values[] = { 0, 2, 1, 3, 5, 7, 11, 15 };
+        static const uint8_t lens[] =   { 2, 2, 3, 4, 3, 4,  4,  4 };
         for (int i = 0; i < 14; i++)
         {
             acc |= uint64_t(values[group[i]]) << abits;
