@@ -176,12 +176,12 @@ static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t 
         //static const uint8_t lens[]   = { 1, 2, 3, 3 };
 
         // Swap 1 and 2 input values
-        static const uint8_t values[] = { 0, 3, 1, 7 };
-        static const uint8_t lens[]   = { 1, 3, 2, 3 };
+        static const uint8_t val[] = { 0, 3, 1, 7 };
+        static const uint8_t len[] = { 1, 3, 2, 3 };
         for (int i = 0; i < B2; i++)
         {
-            acc |= uint64_t(values[group[i]]) << abits;
-            abits += lens[group[i]];
+            acc |= uint64_t(val[group[i]]) << abits;
+            abits += len[group[i]];
         }
         s.push(acc, abits);
     }
@@ -191,12 +191,12 @@ static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t 
         //static const uint8_t lens[]   = { 2, 2, 3, 3, 4, 4,  4,  4 };
 
         // Swap 3 and 4 input values
-        static const uint8_t values[] = { 0, 2, 1, 3, 5, 7, 11, 15 };
-        static const uint8_t lens[] =   { 2, 2, 3, 4, 3, 4,  4,  4 };
+        static const uint8_t val[] = { 0, 2, 1, 3, 5, 7, 11, 15 };
+        static const uint8_t len[] = { 2, 2, 3, 4, 3, 4,  4,  4 };
         for (int i = 0; i < 14; i++)
         {
-            acc |= uint64_t(values[group[i]]) << abits;
-            abits += lens[group[i]];
+            acc |= uint64_t(val[group[i]]) << abits;
+            abits += len[group[i]];
         }
         if (abits > 56) { // Rare, thus predictable
             s.push(acc, abits);
@@ -204,8 +204,8 @@ static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t 
         }
         for (int i = 14; i < B2; i++)
         {
-            acc |= uint64_t(values[group[i]]) << abits;
-            abits += lens[group[i]];
+            acc |= uint64_t(val[group[i]]) << abits;
+            abits += len[group[i]];
         }
         s.push(acc, abits);
     }
