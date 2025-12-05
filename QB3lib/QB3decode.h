@@ -167,8 +167,8 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             // Preshift accumulator
             acc <<= 2;
             for (int i=0; i < B2; i++) {
-                auto size = (0x31213121u >> (acc & 0b11100)) & 0xf;
-                group[i] = T((0x30102010u >> (acc & 0b11100)) & 0xf);
+                auto size = (0x3121 >> (acc & 0b1100)) & 0xf;
+                group[i] = T((0x30201020 >> (acc & 0b11100)) & 0xf);
                 abits += size;
                 acc >>= size;
             }
@@ -184,7 +184,7 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             int i = 0;
             do {
                 size = (0x4232 >> (acc & 0b1100)) & 0xf;
-                group[i] = T((0x7130612051304120ull >> (acc & 0b111100)) & 0xf);
+                group[i] = T((0x7140612051403120ll >> (acc & 0b111100)) & 0xf);
                 abits += size;
                 acc >>= size;
             } while (++i < 14);
@@ -195,7 +195,7 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             }
             do {
                 size = (0x4232 >> (acc & 0b1100)) & 0xf;
-                group[i] = T((0x7130612051304120ull >> (acc & 0b111100)) & 0xf);
+                group[i] = T((0x7140612051403120ll >> (acc & 0b111100)) & 0xf);
                 acc >>= size;
                 abits += size;
             } while (++i < B2);
@@ -361,8 +361,8 @@ static bool decodeFTL(uint8_t* src, size_t len, T* image, const decs& info)
                         // Shift the accumulator to the left to place the selector in the right place
                         acc <<= 2;
                         for (size_t i = 0; i < B2; i++) {
-                            auto size = (0x31213121u >> (acc & 0b11100)) & 0xf;
-                            blockp[offset[i]] = prv += smag(T((0x30102010u >> (acc & 0b11100)) & 0xf));
+                            auto size = (0x3121u >> (acc & 0b1100)) & 0xf;
+                            blockp[offset[i]] = prv += smag(T((0x30201020 >> (acc & 0b11100)) & 0xf));
                             abits += size;
                             acc >>= size;
                         }
