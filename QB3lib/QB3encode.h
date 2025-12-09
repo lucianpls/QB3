@@ -23,9 +23,15 @@ namespace QB3 {
 // Tables could be generated for more rungs, but the speedup is not worth it
 // See tables.py for how they are generated
 static const uint16_t crg0[] = { 0x1000, 0x1001 };
-// Don't swap rungs 1 and 2 when using tables (special case, CF and index)
+// Don't swap rungs 1 and 2 when using tables, special case, used mostly by index encoding
 static const uint16_t crg1[] = { 0x1000, 0x2001, 0x3003, 0x3007 };
 static const uint16_t crg2[] = { 0x2000, 0x2002, 0x3001, 0x3005, 0x4003, 0x4007, 0x400b, 0x400f };
+
+// The probability of values just past the half point are larger than the ones just before, per rung
+// because of the way the rungs are separated (at least one value is in the top half).
+// Swapping the values just above the middle point with the ones just before makes the encoding length
+// shorter overall. This swap is mirrored in the decoding tables
+
 static const uint16_t crg3[] = { 0x3000, 0x3002, 0x3004, 0x3006, 0x4001, 0x4005, 0x4009, 0x5003, 0x400d, 0x5007, 0x500b, 0x500f,
 0x5013, 0x5017, 0x501b, 0x501f };
 static const uint16_t crg4[] = { 0x4000, 0x4002, 0x4004, 0x4006, 0x4008, 0x400a, 0x400c, 0x400e, 0x5001, 0x5005, 0x5009, 0x500d,
