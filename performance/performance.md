@@ -58,7 +58,7 @@ limits of the QB3 modes are the blue and the yellow lines, which are the FAST an
 lines are the best band mix sizes combined with ZSTD at the default level of 3.  
 It is clear that QB3 is able to compress these images better than PNG even in the least compression (FAST) mode, 
 with few exceptions. Especially significant is the large difference between the QB3 and PNG size for the 
-largest images. The noticeable drop in size in the first 20 images or so are due to the fact that these images 
+largest images. The noticeable drop in size in the first 20 images is due to the fact that these images 
 are computer generated, very suitable for the PNG compression which reaches compression ratios of 1:4 
 or better. Yet even for these images QB3 is competitive. Adding the ZSTD post processing step improves the 
 compression for these images more than it does for the photographs.
@@ -69,7 +69,7 @@ compression vs PNG.
 ![Aggregate savings](CID22_savings.svg)
 
 The savings are cumulative for the 248 images, split in two groups. The first group, for images 0 to 
-60, are the images where images compressed with QB3 FAST mode are larger than the corresponding PNG, 
+50, are the images where images compressed with QB3 FAST mode are larger than the corresponding PNG, 
 resulting in negative savings. The second group are the rest of the images, where QB3 FAST is equal 
 or smaller than the corresponding PNG, thus the size savings are positive. Within each group, the 
 images are sorted from the smallest difference to the largest. In other words, the slope of the 
@@ -78,24 +78,23 @@ either positive or negative, while the slope is almost flat where the difference
 makes it easier to see inflection point, or the ratio of image where QB3 is better than PNG. The other 
 QB3 modes are plotted on the same scale, using the QB3 FAST image order. The conclusion here is that 
 for the complete dataset all the QB3 modes are better than PNG, saving between 6 and 7 MB out of the 
-90MB of PNG images. The difference between the QB3 modes is small, with the FAST and BASE 
-mode being almost identical. The BEST + band mix brings a significant improvement, especially for 
-the images where the FAST QB3 mode is larger than the PNG. Adding ZSTD increases the savings by an 
-extra 3 MB, which is very significant.
-In best mode, the total savings vs PNG are 7.42%, which is very good for a lossless compression, 
-increasing to 11.59% with zstd post processing. The size of savings can be extremely significant 
-for long term storage.
+90MB of PNG images. The difference between the QB3 modes is not large, with the FAST and BASE 
+modes being almost identical. The BEST + band mix brings a significant improvement. Adding ZSTD 
+increases the savings further, by an extra 3 MB, which is very significant in this context.
+In best mode, the total savings vs PNG are 7.67%, which is very good for any lossless compression, 
+with the savings increasing to 11.59% with zstd post processing. The size of savings can be 
+extremely significant for long term archival.
 
 #### Aggregate savings vs PNG by QB3 compression mode
 ```
 Total size of input PNGs: 90431161, 46.3666% of raw
-QB3 fast: 6219876 6.88%
-QB3 base: 6334365 7.0%
-QB3 best: 6706606 7.42%
-QB3 best + band mix: 7473708 8.26%
-QB3 best + band mix + zstd: 10477718 11.59%
-Total QB3 output: 88.41% of the PNGs
-QB3 40.9944% of raw
+QB3 fast: 6476630 7.16%
+QB3 base: 6564826 7.26%
+QB3 best: 6937677 7.67%
+QB3 best + band mix: 7706053 8.52%
+QB3 best + band mix + zstd: 10645888 11.77%
+Total QB3 output: 88.23% of the PNGs
+QB3 40.9082% of raw
 ```
 
 
@@ -103,38 +102,41 @@ QB3 40.9944% of raw
 
 ![Compression speed](CID22_speed.svg)
 
-In the graph above, the images are sorted by the compression time of the PNG, which tends to be roughly 
-proportional to the PNG output size, the thicker purple line, varying between 14 and 150 milliseconds, 
-with an average of 83 milliseconds. The QB3 modes are the almost flat lines at the bottom of the graph, 
-taking between 1 and 5 milliseconds to compress a 512x512x3 8 bit image, showing very little 
-variation between images. There is a massive difference between QB3 and PNG in compression speed.
+In the graph above, the images are sorted by the compression time of the PNG, which tends to 
+be roughly proportional to the PNG output size, the thicker purple line, varying between 14 
+and 150 milliseconds, with an average of 83 milliseconds. The QB3 modes are the almost flat 
+lines at the bottom of the graph, taking between 1 and 5 milliseconds to compress a 512x512x3 
+8 bit image, showing very little variation between images. There is a massive difference 
+between QB3 and PNG in compression speed.
 
-QB3 compression speed is 20-50 times faster than PNG for natural images. Even QB3 BEST + Band mix, which 
-compresses the input image 10 times in sequence, is still faster than the PNG compression in most cases. 
-This is the red line on the graph above, which is the only one that is even intersecting the PNG line.
-Note the compression rate of QB3, measured based on the raw data volume, which for the FAST mode averages 
-383 MB/s, with a peak of 891 MB/s! The PNG average compression rate is 9.49 MB/s, which is 40 times 
-slower than the average of QB3 FAST mode. The difference is even larger at the extreme, for the slowest 
-image to compress, the QB3 FAST mode is more than 55 times faster than PNG.
-Within QB3 modes, the FAST mode is 10 to 20 % faster than the BASE mode, which is twice as fast as the QB3 BEST.
-As a reference point, raw data rate for HD video (1920x1080), 8 bit RGB at 60 FPS is 356MB/s, which is under 
-the average compression rate for QB3 FAST mode during this test, single thread, on a 4.5 GHz Zen 3 CPU, without 
-CPU pinning. This means that it is possible to losslessly compress HD video at 60 frames per second in real time 
-using QB3 using a single thread on a modern CPU.
+QB3 compression speed is 20-50 times faster than PNG for natural images. Even the QB3 
+BEST + Band mix mode, which compresses the input image 10 times in sequence, is still faster 
+than the PNG compression in most cases. This is the red line on the graph above, which is 
+the only one that is even intersecting the PNG line. Note the compression rate of QB3, 
+measured based on the raw data volume, which for the FAST mode averages 397 MB/s, with 
+a peak of 1057 MB/s! The PNG average compression rate is 9.5 MB/s, which is more than 
+40 times slower than the average of QB3 FAST mode. The difference is even larger at the 
+extreme, for the slowest image to compress, the QB3 FAST mode is more than 57 times 
+faster than PNG. Within QB3 modes, the FAST mode is 10 to 20 % faster than the BASE mode, 
+which is twice as fast as the QB3 BEST. As a reference point, raw data rate for HD video 
+(1920x1080), 8 bit RGB at 60 FPS is 356MB/s, which is under the average compression rate 
+for QB3 FAST mode during this test, single thread, on the 4.5 GHz Zen 3 CPU, even without 
+CPU pinning. This means that it is possible to losslessly compress HD video at 60 frames 
+per second in real time using QB3 using a single thread on a modern CPU.  
 Summarizing the results in just a few numbers:
 
 |Time (ms)|FAST|BASE|BEST|PNG|
 |---|---|---|---|---|
-|Max|2.66|2.93|6.90|150|
-|Avg|2.05|2.23|5.21|82.90|
-|Min|0.88|0.95|1.51|12|
+|Max|2.60|3.22|6.66|150|
+|Avg|1.98|2.40|4.89|82.90|
+|Min|0.74|0.98|1.38|12|
 
 
 |Rate (MB/s)|FAST|BASE|BEST|PNG|
 |---|---|---|---|---|
-|Max|890.84|831.59|521.58||
-|Avg|382.82|352.94|150.83|9.49|
-|Min|295.85|268.80|113.98||
+|Max|1057.17|800.93|569.30||
+|Avg| 397.76|327.44|160.93|9.50|
+|Min| 302.57|244.26|118.17||
 
 
 ### Decompression speed
