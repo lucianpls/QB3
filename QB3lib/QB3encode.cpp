@@ -25,7 +25,7 @@ Contributors:  Lucian Plesea
 // constructor
 encsp qb3_create_encoder(size_t w, size_t h, size_t b, qb3_dtype dt)
 {
-    if (w < 4 || w > 0x10000ul || h < 4 || h > 0x10000ul 
+    if (w < 4 || w > 0x10000ull || h < 4 || h > 0x10000ull
         || b == 0 || b > QB3_MAXBANDS || dt > int(QB3_I64))
         return nullptr;
     auto p = new encs;
