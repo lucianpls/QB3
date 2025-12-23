@@ -81,20 +81,20 @@ for the complete dataset all the QB3 modes are better than PNG, saving between 6
 90MB of PNG images. The difference between the QB3 modes is not large, with the FAST and BASE 
 modes being almost identical. The BEST + band mix brings a significant improvement. Adding ZSTD 
 increases the savings further, by an extra 3 MB, which is very significant in this context.
-In best mode, the total savings vs PNG are 7.67%, which is very good for any lossless compression, 
-with the savings increasing to 11.59% with zstd post processing. The size of savings can be 
-extremely significant for long term archival.
+In best mode, the total savings vs PNG are 7.66%, which is very good for any lossless compression, 
+increasing to 8.51% with the best band mix, and finally increasing to 11.75% with zstd post 
+processing. This type of savings are very significant for long term archival.
 
 #### Aggregate savings vs PNG by QB3 compression mode
 ```
 Total size of input PNGs: 90431161, 46.3666% of raw
-QB3 fast: 6476630 7.16%
-QB3 base: 6564826 7.26%
-QB3 best: 6937677 7.67%
-QB3 best + band mix: 7706053 8.52%
-QB3 best + band mix + zstd: 10645888 11.77%
-Total QB3 output: 88.23% of the PNGs
-QB3 40.9082% of raw
+QB3 fast: 6461485 7.15%
+QB3 base: 6555068 7.25%
+QB3 best: 6927795 7.66%
+QB3 best + band mix: 7696225 8.51%
+QB3 best + band mix + zstd: 10629785 11.75%
+Total QB3 output: 88.25% of the PNGs
+QB3 40.9164% of raw
 ```
 
 
