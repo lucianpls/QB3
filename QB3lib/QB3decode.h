@@ -136,9 +136,8 @@ static std::pair<size_t, uint64_t> qb3dsztbl(uint64_t val, size_t rung) {
 
 // Decode a B2 sized group of QB3 values from s and acc
 // At least 56 valid bits in accumulator
-// returns false on failure
 template<bool APPLYSTEP = true, typename T>
-static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
+static void gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
 {
     assert(((rung > 1) && (abits <= 8))
         || ((rung == 1) && (abits <= 17)) // B2 + 1
@@ -155,7 +154,7 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             for (int i = 0; i < B2; i++)
                 group[i] = static_cast<T>(0);
         s.advance(abits + 1);
-        return 1;
+        return;
     }
     if (sizeof(T) == 1 || rung < (sizeof(DRG) / sizeof(*DRG))) {
         auto drg = DRG[rung];
@@ -202,8 +201,8 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             for (int i = 0; i < B2 / 2; i++) {
                 auto v = drg[acc & m];
                 group[i] = T(v & TBLMASK);
-                abits += v >> 12;
                 acc >>= v >> 12;
+                abits += v >> 12;
             }
             s.advance(abits);
             acc = s.peek();
@@ -211,8 +210,8 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             for (int i = B2 / 2; i < B2; i++) {
                 auto v = drg[acc & m];
                 group[i] = T(v & TBLMASK);
-                abits += v >> 12;
                 acc >>= v >> 12;
+                abits += v >> 12;
             }
             s.advance(abits);
         }
@@ -286,7 +285,6 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
         if (stepv < B2)
             group[stepv] ^= T(1ull << rung);
     }
-    return true;
 }
 
 // Streamlined decoding for FTL mode
@@ -368,7 +366,7 @@ static bool decodeFTL(uint8_t* src, size_t len, T* image, const decs& info)
                     continue;
                 }
                 // longer codes
-                failed |= !gdecode<false>(s, rung, group, acc, abits);
+                gdecode<false>(s, rung, group, acc, abits);
                 // Undo delta encoding for this block
                 for (int i = 0; i < B2; i++)
                     blockp[offset[i]] = prv += smag(group[i]);
@@ -622,7 +620,7 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
                 if (0 != (cs & TBLMASK) || 0 == cs) { // Normal decoding, not a signal
                     // abits is never > 8, so it's safe to call gdecode
                     auto rung = runbits[c] = (runbits[c] + cs) & NORM_MASK;
-                    failed |= !gdecode(s, rung, group, acc, abits);
+                    gdecode(s, rung, group, acc, abits);
                 }
                 else { // extra encoding
                     cs = dsw[acc & LONG_MASK]; // rung, no flag
@@ -659,7 +657,7 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
                         cf += 2; // Use it unbiased
                         if (rung) {
                             s.advance(abits);
-                            failed |= !gdecode(s, rung, group, s.peek(), 0);
+                            gdecode(s, rung, group, s.peek(), 0);
                             // Multiply group by CF and get the max for the actual rung
                             T usedbits = 0;
                             for (int i = 0; i < B2; i++)
