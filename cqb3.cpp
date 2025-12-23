@@ -187,12 +187,12 @@ bool parse_args(int argc, char** argv, options& opt) {
     auto status = std::filesystem::status(opt.in_fname);
     opt.is_folder = std::filesystem::is_directory(status);
 
-    // output name must be a folder or empty
-    if (!opt.out_fname.empty()) {
-        auto status = std::filesystem::status(opt.out_fname);
+    // output name must be a folder or empty when input is a folder
+    if (opt.is_folder && !opt.out_fname.empty()) {
+        status = std::filesystem::status(opt.out_fname);
         if (!std::filesystem::is_directory(status)) {
-            cerr << "Output name must be empty or a folder when input is a folder\n";
-            return 1;
+            opt.error = "Output name must be empty or a folder when input is a folder";
+            return false;
         }
     }
 
