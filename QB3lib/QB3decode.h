@@ -166,7 +166,7 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             // Preshift accumulator
             acc <<= 2;
             for (int i=0; i < B2; i++) {
-                auto size = (0x3121 >> (acc & 0b1100)) & 0xf;
+                uint8_t size = (0x31213121 >> (acc & 0b11100)) & 0xf;
                 group[i] = T((0x30201020 >> (acc & 0b11100)) & 0xf);
                 abits += size;
                 acc >>= size;
@@ -180,43 +180,40 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             // expression, making it slower. Pre-shift accumulator, top 2 bits are dropped
             acc <<= 2;
             uint8_t size;
-            int i = 0;
-            do {
+            for (size_t i = 0; i < 14; i++) {
                 size = (0x4232 >> (acc & 0b1100)) & 0xf;
-                group[i] = T((0x7140612051403120ll >> (acc & 0b111100)) & 0xf);
+                group[i] = T((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
                 abits += size;
                 acc >>= size;
-            } while (++i < 14);
+            }
             if (abits > 54) { // Rare, max is 60, need 8 + 2 bits
                 s.advance(abits - 2);
                 acc = s.peek();
                 abits = 2;
             }
-            do {
-                size = (0x4232 >> (acc & 0b1100)) & 0xf;
-                group[i] = T((0x7140612051403120ll >> (acc & 0b111100)) & 0xf);
-                acc >>= size;
-                abits += size;
-            } while (++i < B2);
-            s.advance(abits);
+            // Unroll the last two values
+            size = (0x4232 >> (acc & 0b1100)) & 0xf;
+            group[14] = T((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
+            acc >>= size;
+            group[15] = T((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
+            s.advance(abits + size + ((0x4232 >> (acc & 0b1100)) & 0xf));
         }
         else if (6 > rung) { // Table decode at 3,4 and 5, half of the values per accumulator
-            int i = 0;
-            do {
+            for (int i = 0; i < B2 / 2; i++) {
                 auto v = drg[acc & m];
                 group[i] = T(v & TBLMASK);
                 abits += v >> 12;
                 acc >>= v >> 12;
-            } while (++i < B2 / 2);
+            }
             s.advance(abits);
             acc = s.peek();
             abits = 0;
-            do {
+            for (int i = B2 / 2; i < B2; i++) {
                 auto v = drg[acc & m];
                 group[i] = T(v & TBLMASK);
                 abits += v >> 12;
                 acc >>= v >> 12;
-            } while (++i < B2);
+            }
             s.advance(abits);
         }
         else { // Last part of table decoding, rungs 6-7, three reads, 6-4-6

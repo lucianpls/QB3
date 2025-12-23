@@ -564,7 +564,7 @@ int main(int argc, char **argv)
             }
             cout << "Decode time " << time_span << " rate " << image.size() / time_span / 1024 / 1024 << " MB/s" << endl;
 
-            cout << "Size\tRatio %\tEnc (MB/s)\t(s)\tDec (MB/s)\t(s)\tT_Size\n\n";
+            cout << "Size\t\t%input\tEnc\ttime\tDec\ttime\tT_Size\tFactor\n\n";
 
             //cout << "Stride decode\n";
             //check_stride_decode<uint8_t>(image, raster, raster.size.x * raster.size.c + 10, true);
@@ -587,24 +587,24 @@ int main(int argc, char **argv)
 
             //cout << endl;
 
-            cout << "Stride encode\n";
+            //cout << "Stride encode\n";
 
-            // Check stride encode with a divider of 2
-            check_stride_encode<uint8_t>(image, raster, raster.size.x - 23,
-                false, 2);
-            cout << endl;
+            //// Check stride encode with a divider of 2
+            //check_stride_encode<uint8_t>(image, raster, raster.size.x - 23,
+            //    false, 2);
+            //cout << endl;
 
-            check_stride_encode<uint16_t>(image, raster, raster.size.x - 25,
-                false, 3);
-            cout << endl;
+            //check_stride_encode<uint16_t>(image, raster, raster.size.x - 25,
+            //    false, 3);
+            //cout << endl;
 
-            // Make the line size smaller than the real image, 10 is arbitrary
-            check_stride_encode<uint8_t>(image, raster, raster.size.x - 10);
-            cout << endl;
+            //// Make the line size smaller than the real image, 10 is arbitrary
+            //check_stride_encode<uint8_t>(image, raster, raster.size.x - 10);
+            //cout << endl;
 
-            // Make the line size smaller than the real image
-            check_stride_encode<uint32_t>(image, raster, raster.size.x - 20);
-            cout << endl;
+            //// Make the line size smaller than the real image
+            //check_stride_encode<uint32_t>(image, raster, raster.size.x - 20);
+            //cout << endl;
 
             // The sign really messes things up for normal images, because transitions through 128 are frequent
             // and become massive
