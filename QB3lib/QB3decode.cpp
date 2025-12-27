@@ -356,7 +356,7 @@ static bool dec(uint8_t* source, size_t len, T* image, const decs& info)
     return failed; // success
 }
 
-static size_t qb3_stored_decode(decsp p, void* source, size_t src_sz, void* dst)
+static size_t stored_decode(decsp p, void* source, size_t src_sz, void* dst)
 {
     auto src = reinterpret_cast<uint8_t *>(source);
     // If the data is stored and size is right, just copy it
@@ -386,7 +386,7 @@ static size_t qb3_decode(decsp p, void* source, size_t src_sz, void* dst)
     auto src = reinterpret_cast<uint8_t *>(source);
     // If the data is stored and size is right, just copy it
     if (p->mode == qb3_mode::QB3M_STORED)
-        return qb3_stored_decode(p, source, src_sz, dst);
+        return stored_decode(p, source, src_sz, dst);
 
     // Tiny inputs are stored, reject otherwise
     if (p->xsize * p->ysize < B2) {

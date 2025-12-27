@@ -354,11 +354,14 @@ int decode_main(options& opts) {
     //params.compression_level = 9;
 
     storage_manager png_src(raw.data(), raw.size());
-    vector<uint8_t> png_buffer(raw.size() + raw.size() / 10); // Pad by 10%
+    vector<uint8_t> png_buffer(1024 + size_t(raw.size()*1.1)); // Pad by 10%
     storage_manager png_blob(png_buffer.data(), png_buffer.size());
     auto t1 = high_resolution_clock::now();
+    // Can't assign directly to error string since it will return nullptr if no error
     auto err_message = png_encode(params, png_src, png_blob);
     time_span = duration_cast<duration<double>>(high_resolution_clock::now() - t1).count();
+    if (err_message && err_message[0])
+        opts.error = err_message;
     if (opts.error.size()) {
         cerr << "PNG encoding failed: " << err_message << endl;
         return 2;

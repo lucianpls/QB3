@@ -344,7 +344,7 @@ static bool is_fast(qb3_mode mode) {
 // Common entry point, the header has already been written
 template<typename T> static int enc(const T *source, oBits &s, encsp p)
 {
-    assert(p->xsize > B || p->ysize > B);
+    assert(p->xsize >= B || p->ysize >= B);
     // These two are only used for images narrower or shorter than B
     encs smallimg(*p);
     std::vector<T> tempbuf; // Vector to handle memory management
@@ -488,7 +488,7 @@ static size_t qb3_stored_encode(encsp p, void* source, void* destination) {
 // The encode public API, returns 0 if an error is detected
 size_t qb3_encode(encsp p, void* source, void* destination) {
     // Just store images smaller than B x B
-    if (p->xsize * p->ysize < B2)
+    if (p->xsize * p->ysize <= B2)
         return qb3_stored_encode(p, source, destination);
 
     // Turn off the RLE for now
