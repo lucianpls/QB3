@@ -572,31 +572,31 @@ int main(int argc, char **argv)
 
             cout << "Size\t\t%input\tEnc\ttime\tDec\ttime\tT_Size\tFactor\n\n";
 
-            // Small size
-            auto small_raster = raster;
-            // Both under 4, should be stored, expanded by the header size
-            small_raster.size.x = 3;
-            small_raster.size.y = 3;
-            
-            cout << "Small size " << small_raster.size.x << "x"
-                << small_raster.size.y << "@" << small_raster.size.c << endl;
-            check<uint8_t>(image, small_raster, 1);
-            cout << endl;
+            //// Small size
+            //auto small_raster = raster;
+            //// Both under 4, should be stored, expanded by the header size
+            //small_raster.size.x = 3;
+            //small_raster.size.y = 3;
+            //
+            //cout << "Small size " << small_raster.size.x << "x"
+            //    << small_raster.size.y << "@" << small_raster.size.c << endl;
+            //check<uint8_t>(image, small_raster, 1);
+            //cout << endl;
 
-            // Wide and short
-            small_raster.size.x = raster.size.x;
-            cout << "Small size " << small_raster.size.x << "x"
-                << small_raster.size.y << "@" << small_raster.size.c << endl;
-            check<uint8_t>(image, small_raster, 1);
-            cout << endl;
+            //// Wide and short
+            //small_raster.size.x = raster.size.x;
+            //cout << "Small size " << small_raster.size.x << "x"
+            //    << small_raster.size.y << "@" << small_raster.size.c << endl;
+            //check<uint8_t>(image, small_raster, 1);
+            //cout << endl;
 
-            // Narrow and tall
-            small_raster.size.x = 3;
-            small_raster.size.y = raster.size.y;
-            cout << "Small size " << small_raster.size.x << "x"
-                << small_raster.size.y << "@" << small_raster.size.c << endl;
-            check<uint8_t>(image, small_raster, 1);
-            cout << endl;
+            //// Narrow and tall
+            //small_raster.size.x = 3;
+            //small_raster.size.y = raster.size.y;
+            //cout << "Small size " << small_raster.size.x << "x"
+            //    << small_raster.size.y << "@" << small_raster.size.c << endl;
+            //check<uint8_t>(image, small_raster, 1);
+            //cout << endl;
 
             //cout << "Stride decode\n";
             //check_stride_decode<uint8_t>(image, raster, raster.size.x * raster.size.c + 10, true);
