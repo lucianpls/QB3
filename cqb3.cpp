@@ -524,11 +524,6 @@ int encode_main(options& opts) {
         << raster.size.c << "\nSize " << fsize
         << ((raster.dt != ICDT_Byte) ? " 16bit\n" : "\n");
 
-    if (raster.size.x < 4 || raster.size.y < 4) {
-        cerr << "QB3 requires input size between 4 and 65536 pixels\n";
-        return 2;
-    }
-
     if (raster.dt != ICDT_Byte && raster.dt != ICDT_UInt16 && raster.dt != ICDT_Short) {
         cerr << "Only conversion from 8 and 16 bit data implemented\n";
         return 2;
