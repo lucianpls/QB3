@@ -68,6 +68,8 @@ void check(vector<uint8_t> &image, const Raster &raster,
     size_t bands = raster.size.c;
     high_resolution_clock::time_point t1, t2;
     double time_span;
+    // Only compare the raster size, in bytes
+    auto imgsize = raster.size.x * raster.size.y * raster.size.c;
 
     auto img = to(image, static_cast<T>(m));
     qb3_dtype tp = qb3_dtype::QB3_U8;
@@ -80,6 +82,10 @@ void check(vector<uint8_t> &image, const Raster &raster,
             sizeof(T) == 2 ? qb3_dtype::QB3_U16 : qb3_dtype::QB3_U8;
     }
     auto qenc = qb3_create_encoder(xsize, ysize, bands, tp);
+    if (!qenc) {
+        cerr << "Can't create QB3 encoder\n";
+        return;
+    }
     vector<uint8_t> outvec(qb3_max_encoded_size(qenc));
 
     if (main_band != 1) {
@@ -102,8 +108,8 @@ void check(vector<uint8_t> &image, const Raster &raster,
     qb3_destroy_encoder(qenc);
     qenc = nullptr;
 
-    cout << std::setprecision(5) << outsize << '\t' << outsize * 100.0 / image.size() / sizeof(T) 
-        << '\t' << image.size() * sizeof(T) / time_span / 1024 / 1024 
+    cout << std::setprecision(5) << outsize << '\t' << outsize * 100.0 / imgsize / sizeof(T) 
+        << '\t' << imgsize * sizeof(T) / time_span / 1024 / 1024 
         << '\t' << time_span << '\t';
     if (err)
         cout << "\nFailed\n";
@@ -136,12 +142,12 @@ void check(vector<uint8_t> &image, const Raster &raster,
     qb3_destroy_decoder(qdec);
 
     time_span = duration_cast<duration<double>>(t2 - t1).count();
-    cout << sizeof(T) * image.size() /time_span / 1024 / 1024 << '\t'
+    cout << sizeof(T) * imgsize /time_span / 1024 / 1024 << '\t'
         << time_span << '\t' << sizeof(T) << '\t' << m << '\t' << (ftl ? "FTL" : fast ? "Fast" : "");
 
     if (q > 1) {
         auto hq = T(q / 2); // precision
-        for (size_t i = 0; i < img.size(); i++) {
+        for (size_t i = 0; i < imgsize; i++) {
             auto x = img[i];
             auto y = re[i];
             if (!((x == y) || ((x > y) && (y + hq >= x)) || ((y > x) && (x + hq >= y)))) {
@@ -155,7 +161,7 @@ void check(vector<uint8_t> &image, const Raster &raster,
         }
     }
     else {
-        for (size_t i = 0; i < img.size(); i++)
+        for (size_t i = 0; i < imgsize; i++)
             if (img[i] != re[i]) {
                 cout << endl << "Difference at " << i << " expect "
                     << hex << uint64_t(img[i]) << " got " << uint64_t(re[i]) << dec;
@@ -566,6 +572,32 @@ int main(int argc, char **argv)
 
             cout << "Size\t\t%input\tEnc\ttime\tDec\ttime\tT_Size\tFactor\n\n";
 
+            // Small size
+            auto small_raster = raster;
+            // Both under 4, should be stored, expanded by the header size
+            small_raster.size.x = 3;
+            small_raster.size.y = 3;
+            
+            cout << "Small size " << small_raster.size.x << "x"
+                << small_raster.size.y << "@" << small_raster.size.c << endl;
+            check<uint8_t>(image, small_raster, 1);
+            cout << endl;
+
+            // Wide and short
+            small_raster.size.x = raster.size.x;
+            cout << "Small size " << small_raster.size.x << "x"
+                << small_raster.size.y << "@" << small_raster.size.c << endl;
+            check<uint8_t>(image, small_raster, 1);
+            cout << endl;
+
+            // Narrow and tall
+            small_raster.size.x = 3;
+            small_raster.size.y = raster.size.y;
+            cout << "Small size " << small_raster.size.x << "x"
+                << small_raster.size.y << "@" << small_raster.size.c << endl;
+            check<uint8_t>(image, small_raster, 1);
+            cout << endl;
+
             //cout << "Stride decode\n";
             //check_stride_decode<uint8_t>(image, raster, raster.size.x * raster.size.c + 10, true);
             //cout << endl;
@@ -611,16 +643,13 @@ int main(int argc, char **argv)
             cout << 2 << "q  ";
             check<uint8_t>(image, raster, 1, 1, true, 2);
             cout << endl;
-
-            //// Hardly any difference from the one above from rounding away from 0
+            // Hardly any difference from the one above from rounding away from 0
             cout << 2 << "q- ";
             check<uint8_t>(image, raster, 1, 1, true, 2, true);
             cout << endl;
-
             cout << 3 << "q  ";
             check<uint8_t>(image, raster, 1, 1, true, 3);
             cout << endl;
-
             // Same exact as above, for odd quanta there is no difference
             cout << 3 << "q- ";
             check<uint8_t>(image, raster, 1, 1, true, 3, true);
@@ -630,24 +659,19 @@ int main(int argc, char **argv)
             cout << "Stride decoding and quanta \n3q  ";
             check_stride_decode<uint8_t>(image, raster, raster.size.x* raster.size.c + 9, true, 3);
             cout << endl;
-
             cout << 4 << "q  ";
             check<uint8_t>(image, raster, 1, 1, true, 4);
             cout << endl;
-
             cout << 4 << "q- ";
             check<uint8_t>(image, raster, 1, 1, true, 4, true);
             cout << endl;
-
             cout << 10 << "q  ";
             check<uint8_t>(image, raster, 1, 1, true, 10);
             cout << endl;
-
             cout << 10 << "qb ";
             check<uint8_t>(image, raster, 1, 1, false, 10);
-            cout << endl;
-            cout << endl;
 
+            cout << "\n\nCommon factor data\n";
             check<uint64_t>(image, raster, 5, 1);
             cout << endl;
             check<uint64_t>(image, raster, (1ull << 56), 1);

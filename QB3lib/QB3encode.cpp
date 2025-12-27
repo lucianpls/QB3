@@ -25,9 +25,9 @@ Contributors:  Lucian Plesea
 // constructor
 encsp qb3_create_encoder(size_t w, size_t h, size_t b, qb3_dtype dt)
 {
-    if (w < 4 || w > 0x10000ull || h < 4 || h > 0x10000ull
+    if (w == 0 || w > 0x10000ull || h == 0 || h > 0x10000ull
         || b == 0 || b > QB3_MAXBANDS || dt > int(QB3_I64))
-        return nullptr;
+            return nullptr;
     auto p = new encs;
     memset(p, 0, sizeof(encs));
     p->xsize = w;
@@ -341,10 +341,55 @@ static bool is_fast(qb3_mode mode) {
     return (QB3M_BASE_H == mode) || (QB3M_BASE_Z == mode) || (QB3M_FTL == mode);
 }
 
-// ONLY QB3M_BASE and QB3M_CF are supported here
+// Common entry point, the header has already been written
 template<typename T> static int enc(const T *source, oBits &s, encsp p)
 {
-    int error(0);
+    assert(p->xsize > B || p->ysize > B);
+    // These two are only used for images narrower or shorter than B
+    encs smallimg(*p);
+    std::vector<T> tempbuf; // Vector to handle memory management
+    // Deal with small images here by copying data to a temporary buffer
+    // This is far from optimal and copies the data, but deals with small inputs
+    // Always pad to B x B groups to avoid duplicating lines or columns
+    if (p->xsize < B || p->ysize < B) {
+        size_t ngroups = (p->xsize * p->ysize + B2 - 1) / B2;
+        size_t bufsize =  p->nbands * ngroups * B2;
+        tempbuf.resize(bufsize); // This initializes the vector with zeros
+        auto dst = tempbuf.data();
+        // Stride in T units
+        size_t stride = p->stride ? p->stride : (p->xsize * p->nbands);
+        // Preserve locality by copying pixels in the short dimension first
+        // This is not optimal, but small images are not performance critical
+        if (p->xsize < B) { // Narrow and tall
+            // Copy line by line, until we run out of lines
+            size_t line = p->xsize * p->nbands;
+            for (size_t y = 0; y < p->ysize; y++) {
+                auto src = source + y * stride;
+                memcpy(dst, src, line * sizeof(T));
+                dst += line;
+            }
+            smallimg.xsize = B; // Larger than original
+            smallimg.ysize = ngroups * B; // Does not overflow
+        }
+        else { // Short and wide
+            // Copy columnn by column, sort of transposing
+            for (size_t x = 0; x < p->xsize; x++) {
+                for (size_t y = 0; y < p->ysize; y++) {
+                    auto src = source + y * stride + x * p->nbands;
+                    memcpy(dst, src, p->nbands * sizeof(T));
+                    dst += p->nbands;
+                }
+            }
+            smallimg.xsize = ngroups * B; // Does not overflow
+            smallimg.ysize = B; // Larger than original
+        }
+        // Adjust smallimg parameters
+        smallimg.stride = 0; // No stride in encoding the small image
+        source = tempbuf.data();
+        p = &smallimg;
+    }
+
+    int error(0);    
     if (p->quanta < 2) {
         if (is_fast(p->mode)) {
             if (p->mode == QB3M_FTL)
@@ -414,10 +459,40 @@ template<typename T> static int enc(const T *source, oBits &s, encsp p)
     return error;
 }
 
+static size_t qb3_stored_encode(encsp p, void* source, void* destination) {
+    auto d = reinterpret_cast<uint8_t*>(destination);
+    oBits s(d);
+    p->mode = QB3M_STORED; // Force raw mode
+    write_headers(p, s);
+    if (p->error)
+        return 0;
+    // Copy the raw data at the current position, they are not overlapping
+    if (p->stride == 0 || p->stride == p->xsize * p->nbands) // Contiguous
+    {
+        memcpy(d + s.tobyte(), source, raw_size(p));
+        // Return the new size
+        return s.tobyte() + raw_size(p);
+    }
+    // Non contiguous, copy line by line
+    size_t linesize = p->xsize * p->nbands * typesizes[p->type];
+    d += s.tobyte();
+    auto src = reinterpret_cast<uint8_t*>(source);
+    for (size_t y = 0; y < p->ysize; y++) {
+        memcpy(d, src, linesize);
+        d += p->stride;
+        src += linesize;
+    }
+    return s.tobyte() + raw_size(p);
+}
+
 // The encode public API, returns 0 if an error is detected
 size_t qb3_encode(encsp p, void* source, void* destination) {
-    auto const mode = p->mode; // save the user chosen mode
+    // Just store images smaller than B x B
+    if (p->xsize * p->ysize < B2)
+        return qb3_stored_encode(p, source, destination);
+
     // Turn off the RLE for now
+    auto const mode = p->mode; // save the user chosen mode
     bool rle = (QB3M_RLE == mode || QB3M_CF_RLE == mode || QB3M_CF_RLE_H == mode || QB3M_RLE_H == mode);
     if (rle) {
         switch (mode) {
@@ -491,19 +566,10 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
         }
     }
 
+    if (p->error)
+        return 0;
     // Maybe stored mode is better
-    if (!p->error && raw_size(p) <= len) {
-        // new stream, same buffer
-        oBits sraw(d);
-        p->mode = QB3M_STORED; // Force raw mode
-        write_headers(p, sraw);
-        if (p->error)
-            return 0;
-        // Copy the raw data at the current position, they are not overlapping
-        memcpy(d + sraw.tobyte(), source, raw_size(p));
-        p->mode = mode; // restore the user selected mode, in case of reuse
-        // Return the new size
-        return sraw.tobyte() + raw_size(p);
-    }
-    return (p->error) ? 0 : s.tobyte();
+    if (raw_size(p) > len)
+        return s.tobyte();
+    return qb3_stored_encode(p, source, destination);
 }
