@@ -168,8 +168,8 @@ static void gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             // Preshift accumulator
             acc <<= 2;
             for (int i=0; i < B2; i++) {
-                uint8_t size = (0x31213121 >> (acc & 0b11100)) & 0xf;
-                group[i] = T((0x30201020 >> (acc & 0b11100)) & 0xf);
+                uint8_t size = (0x31213121u >> (acc & 0b11100)) & 0xf;
+                group[i] = T((0x30201020u >> (acc & 0b11100)) & 0xf);
                 abits += size;
                 acc >>= size;
             }
@@ -178,12 +178,11 @@ static void gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
         else if (2 == rung) { // max symbol len is 4, there is space for at least 14 in the accumulator
             // Faster than a double value table decode, but only in this specific code organization
             // Cleaning it up, for example doing a peek at the start then looping 16 times makes it slower
-            // The masks and inline constants could be smaller for size, but that eliminates thecommon 
-            // expression, making it slower. Pre-shift accumulator, top 2 bits are dropped
+            // Pre-shift accumulator, top 2 bits are dropped
             acc <<= 2;
             uint8_t size;
             for (size_t i = 0; i < 14; i++) {
-                size = (0x4232 >> (acc & 0b1100)) & 0xf;
+                size = (0x4232u >> (acc & 0b1100)) & 0xf;
                 group[i] = T((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
                 abits += size;
                 acc >>= size;
@@ -194,7 +193,7 @@ static void gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
                 abits = 2;
             }
             // Unroll the last two values
-            size = (0x4232 >> (acc & 0b1100)) & 0xf;
+            size = (0x4232u >> (acc & 0b1100)) & 0xf;
             group[14] = T((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
             acc >>= size;
             group[15] = T((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
@@ -336,7 +335,7 @@ static bool decodeFTL(uint8_t* src, size_t len, T* image, const decs& info)
                 // abits is never > 8, so it's safe to call gdecode
                 auto rung = (runbits[c] + cs) & NORM_MASK;
                 runbits[c] = rung;
-                if (rung < 2) { // decode inlined
+                if (rung < 3) { // decode inlined
                     if (rung == 0) { // single bits or all zeros
                         abits++;
                         if (0 != (acc & 1)) {
@@ -351,21 +350,45 @@ static bool decodeFTL(uint8_t* src, size_t len, T* image, const decs& info)
                             for (int i = 0; i < B2; i++)
                                 blockp[offset[i]] = prv;
                         }
+                        s.advance(abits);
+                        continue;
                     }
-                    else { // rung == 1
+                    if (rung == 1) {
                         // Use inline constants as nibble tables
                         // The lower two bits of the accumulator determine the size
                         // Shift the accumulator to the left to place the selector in the right place
                         acc <<= 2;
                         for (size_t i = 0; i < B2; i++) {
                             auto size = (0x3121u >> (acc & 0b1100)) & 0xf;
-                            blockp[offset[i]] = prv += smag(T((0x30201020 >> (acc & 0b11100)) & 0xf));
+                            blockp[offset[i]] = prv += smag(T((0x30201020u >> (acc & 0b11100)) & 0xf));
                             abits += size;
                             acc >>= size;
                         }
                         prev[c] = prv;
+                        s.advance(abits);
+                        continue;
                     }
-                    s.advance(abits);
+                    // rung 2
+                    acc <<= 2;
+                    uint8_t size;
+                    for (int i = 0; i < 14; i++) {
+                        size = (0x4232u >> (acc & 0b1100)) & 0xf;
+                        blockp[offset[i]] = prv += (T)smag((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
+                        abits += size;
+                        acc >>= size;
+                    }
+                    if (abits > 54) { // Rare, max is 60, need 8 + 2 bits
+                        s.advance(abits - 2);
+                        acc = s.peek();
+                        abits = 2;
+                    }
+                    // Unroll the last two values
+                    size = (0x4232 >> (acc & 0b1100)) & 0xf;
+                    blockp[offset[14]] = prv += (T)smag((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
+                    acc >>= size;
+                    blockp[offset[15]] = prv += (T)smag((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
+                    s.advance(abits + size + ((0x4232u >> (acc & 0b1100)) & 0xf));
+                    prev[c] = prv;
                     continue;
                 }
                 // longer codes
@@ -436,69 +459,53 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
                 // abits is never > 8, so it's safe to call gdecode
                 auto rung = (runbits[c] + cs) & NORM_MASK;
                 runbits[c] = rung;
-                if (rung < 2) { // decode inlined
-                    if (rung == 0) { // single bits or all zeros
-                        abits++;
-                        if (0 != (acc & 1)) {
-                            for (int i = 0; i < B2; i++) {
-                                acc >>= 1;
-                                blockp[offset[i]] = prv -= (1 & acc);
-                            }
-                            abits += B2;
-                        }
-                        else {
-                            for (int i = 0; i < B2; i++)
-                                blockp[offset[i]] = prv;
-                        }
-                    }
-                    else { // rung == 1
-                        // Use inline constants as nibble tables
-                        // The lower two bits of the accumulator determine the size
-                        // Shift the accumulator to the left to place the selector in the right place
-                        acc <<= 2;
-                        //for (int i = 0; i < B2; i++) {
-                        //    auto size = (0x3121u >> (acc & 0b1100)) & 0xf;
-                        //    blockp[offset[i]] = prv += smag(uint8_t((0x30102010 >> (acc & 0b11100)) & 0xf));
-                        //    abits += size;
-                        //    acc >>= size;
-                        //}
+                if (rung == 0) { // single bits or all zeros
+                    abits++;
+                    if (0 != (acc & 1)) {
                         for (int i = 0; i < B2; i++) {
-                            // This one is faster
-                            auto size = (0x3121u >> (acc & 0b1100)) & 0xf;
-                            //auto size = (0x31213121u >> (acc & 0b11100)) & 0xf;
-                            //blockp[offset[i]] = prv += smag(uint8_t((0x30102010 >> (acc & 0b11100)) & 0xf));
-                            blockp[offset[i]] = prv += smag(uint8_t((0x30201020 >> (acc & 0b11100)) & 0xf));
-                            abits += size;
-                            acc >>= size;
+                            acc >>= 1;
+                            blockp[offset[i]] = prv -= (1 & acc);
                         }
+                        abits += B2;
+                    }
+                    else {
+                        for (int i = 0; i < B2; i++)
+                            blockp[offset[i]] = prv;
+                    }
+                }
+                else if (rung == 1) { // rung == 1
+                    // Use inline constants as nibble tables
+                    // The lower two bits of the accumulator determine the size
+                    // Shift the accumulator to the left to place the selector in the right place
+                    acc <<= 2;
+                    for (int i = 0; i < B2; i++) {
+                        auto size = (0x3121u >> (acc & 0b1100)) & 0xf;
+                        blockp[offset[i]] = prv += smag(uint8_t((0x30201020 >> (acc & 0b11100)) & 0xf));
+                        abits += size;
+                        acc >>= size;
                     }
                 }
                 else if (rung == 2) {
                     acc <<= 2;
                     uint8_t size;
-                    int i = 0;
-                    do {
-                        size = (0x4232 >> (acc & 0b1100)) & 0xf;
-                        //blockp[offset[i]] = prv += smag(uint8_t((0x7130612051304120ll >> (acc & 0b111100)) & 0xf));
-                        // Swap 3 and 4
-                        blockp[offset[i]] = prv += smag(uint8_t((0x7140612051403120ll >> (acc & 0b111100)) & 0xf));
+                    for (int i = 0; i < 14; i++) {
+                        size = (0x4232u >> (acc & 0b1100)) & 0xf;
+                        blockp[offset[i]] = prv += (uint8_t)smag((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
                         abits += size;
                         acc >>= size;
-                    } while (++i < B2 - 2);
-                    // This is not always needed, but the test is unpredictable and more expensive
-                    s.advance(abits - 2);
-                    acc = s.peek();
-                    abits = 2;
-                    do {
-                        size = (0x4232 >> (acc & 0b1100)) & 0xf;
-                        //blockp[offset[i]] = prv += smag(uint8_t((0x7130612051304120ll >> (acc & 0b111100)) & 0xf));
-                        // Swap 3 and 4
-                        blockp[offset[i]] = prv += smag(uint8_t((0x7140612051403120ll >> (acc & 0b111100)) & 0xf));
-                        abits += size;
-                        acc >>= size;
-                    } while (++i < B2);
+                    }
+                    if (abits > 54) { // Rare, max is 60, need 8 + 2 bits
+                        s.advance(abits - 2);
+                        acc = s.peek();
+                        abits = 2;
+                    }
+                    // Unroll the last two values
+                    size = (0x4232 >> (acc & 0b1100)) & 0xf;
+                    blockp[offset[14]] = prv += (uint8_t)smag((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
+                    acc >>= size;
+                    blockp[offset[15]] = prv += (uint8_t)smag((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
+                    s.advance(abits + size + ((0x4232u >> (acc & 0b1100)) & 0xf));
                     prev[c] = prv;
-                    s.advance(abits);
                     continue;
                 }
                 else {

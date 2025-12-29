@@ -313,12 +313,12 @@ static bool needs_rle(qb3_mode mode) {
 
 // Main decode template, deals with small images
 template<typename T>
-static bool dec(uint8_t* source, size_t len, T* image, const decs& info)
+bool dec(uint8_t* source, size_t len, T* image, const decs& info)
 {
     if (info.xsize >= B && info.ysize >= B)
         return QB3::decode(source, len, image, info);
 
-    // Small images, need to use a temporary buffer
+    // Small image, use a temporary buffer
     decs actual(info);
     size_t ngroups = (info.xsize * info.ysize + B2 - 1) / B2;
     size_t bufsz = ngroups * B2 * info.nbands;
@@ -326,25 +326,22 @@ static bool dec(uint8_t* source, size_t len, T* image, const decs& info)
     actual.stride = 0; // contiguous
     actual.xsize = info.xsize < B ? B : ngroups * B;
     actual.ysize = info.xsize < B ? ngroups * B : B;
-
-    // Decode to temporary buffer
-    auto failed = QB3::decode(source, len, tempbuf.data(), actual);
-    if (failed)
-        return failed;
+    if (QB3::decode(source, len, tempbuf.data(), actual))
+        return true; // failure
     // It worked, now copy the data into the destination
-        // Copy line by line, until we run out of lines
+    // Copy line by line, until we run out of lines
     size_t linesize = info.xsize * info.nbands;
     // Stride in T units
     size_t stride = info.stride ? info.stride : linesize;
     auto data = tempbuf.data();
-    if (info.xsize < B) { // narrow an tall
+    if (info.xsize < B) { // narrow and tall, copy line by line
         for (size_t y = 0; y < info.ysize; y++) {
             auto dst = image + y * stride;
             memcpy(dst, data, linesize * sizeof(T));
             data += linesize;
         }
     }
-    else { // short and wide, copy pixel by pixel
+    else { // wide and short, copy pixel by pixel
         for (size_t x = 0; x < info.xsize; x++) {
             for (size_t y = 0; y < info.ysize; y++) {
                 auto dst = image + y * stride + x * info.nbands;
@@ -353,7 +350,7 @@ static bool dec(uint8_t* source, size_t len, T* image, const decs& info)
             }
         }
     }
-    return failed; // success
+    return false; // success
 }
 
 static size_t stored_decode(decsp p, void* source, size_t src_sz, void* dst)

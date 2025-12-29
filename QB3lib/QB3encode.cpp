@@ -223,7 +223,7 @@ bool static is_banddiff(encsp p) {
 
 // Header for cbands, does nothing if not needed
 void static write_cband_header(encsp p, oBits& s) {
-    if (!is_banddiff(p)) // Is it needed
+    if (p->mode == QB3M_STORED || !is_banddiff(p))
         return;
     push_sig("CB", s);
     s.push(p->nbands, 16); // size of payload
@@ -459,7 +459,7 @@ template<typename T> static int enc(const T *source, oBits &s, encsp p)
     return error;
 }
 
-static size_t qb3_stored_encode(encsp p, void* source, void* destination) {
+static size_t stored_encode(encsp p, void* source, void* destination) {
     auto d = reinterpret_cast<uint8_t*>(destination);
     oBits s(d);
     p->mode = QB3M_STORED; // Force raw mode
@@ -489,7 +489,7 @@ static size_t qb3_stored_encode(encsp p, void* source, void* destination) {
 size_t qb3_encode(encsp p, void* source, void* destination) {
     // Just store images smaller than B x B
     if (p->xsize * p->ysize <= B2)
-        return qb3_stored_encode(p, source, destination);
+        return stored_encode(p, source, destination);
 
     // Turn off the RLE for now
     auto const mode = p->mode; // save the user chosen mode
@@ -571,5 +571,5 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
     // Maybe stored mode is better
     if (raw_size(p) > len)
         return s.tobyte();
-    return qb3_stored_encode(p, source, destination);
+    return stored_encode(p, source, destination);
 }
