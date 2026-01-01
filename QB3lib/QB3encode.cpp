@@ -345,13 +345,12 @@ static bool is_fast(qb3_mode mode) {
 template<typename T> static int enc(const T *source, oBits &s, encsp p)
 {
     assert(p->xsize >= B || p->ysize >= B);
-    // These two are only used for images narrower or shorter than B
-    encs smallimg(*p);
-    std::vector<T> tempbuf; // Vector to handle memory management
     // Deal with small images here by copying data to a temporary buffer
     // This is far from optimal and copies the data, but deals with small inputs
     // Always pad to B x B groups to avoid duplicating lines or columns
     if (p->xsize < B || p->ysize < B) {
+        encs smallimg(*p);
+        std::vector<T> tempbuf; // Vector to handle memory management
         size_t ngroups = (p->xsize * p->ysize + B2 - 1) / B2;
         size_t bufsize =  p->nbands * ngroups * B2;
         tempbuf.resize(bufsize); // This initializes the vector with zeros
