@@ -200,7 +200,7 @@ static void gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             s.advance(abits + size + ((0x4232 >> (acc & 0b1100)) & 0xf));
         }
         else if (6 > rung) { // Table decode at 3,4 and 5, half of the values per accumulator
-            for (int i = 0; i < B2 / 2; i++) {
+            for (int i = 0; i < B2 / 2; ++i) {
                 auto v = drg[acc & m];
                 group[i] = T(v & TBLMASK);
                 acc >>= v >> 12;
@@ -209,7 +209,7 @@ static void gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             s.advance(abits);
             acc = s.peek();
             abits = 0;
-            for (int i = B2 / 2; i < B2; i++) {
+            for (int i = B2 / 2; i < B2; ++i) {
                 auto v = drg[acc & m];
                 group[i] = T(v & TBLMASK);
                 acc >>= v >> 12;
@@ -512,22 +512,21 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
                     auto drg = DRG[rung];
                     const auto m = (1ull << (rung + 2)) - 1;
                     if (6 > rung) { // Table decode at 3,4 and 5, two reads
-                        int i = 0;
-                        do {
+                        for (int i = 0; i < B2 / 2; ++i) {
                             auto v = drg[acc & m];
                             blockp[offset[i]] = prv += smag(uint8_t(v));
                             abits += v >> 12;
                             acc >>= v >> 12;
-                        } while (++i < B2 / 2);
+                        }
                         s.advance(abits);
                         acc = s.peek();
                         abits = 0;
-                        do {
+                        for (int i = B2 / 2; i < B2; ++i) {
                             auto v = drg[acc & m];
                             blockp[offset[i]] = prv += smag(uint8_t(v));
                             abits += v >> 12;
                             acc >>= v >> 12;
-                        } while (++i < B2);
+                        }
                         prev[c] = prv;
                         s.advance(abits);
                         continue;
