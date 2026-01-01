@@ -312,7 +312,6 @@ static bool decodeFTL(uint8_t* src, size_t len, T* image, const decs& info)
         offset[i] = ((n >> 2) & 0b11) * stride + (n & 0b11) * bands;
     }
     iBits s(src, len);
-    bool failed(false);
     for (size_t y = 0; y < ysize; y += B) {
         // If the last row is partial, roll it up
         if (y + B > ysize)
@@ -329,7 +328,6 @@ static bool decodeFTL(uint8_t* src, size_t len, T* image, const decs& info)
                 if (acc & 1) { // Rung change
                     cs = dsw[(acc >> 1) & LONG_MASK];
                     abits = cs >> 12;
-                    failed |= (0 == (cs & TBLMASK)); // no signals
                 }
                 acc >>= abits;
                 // abits is never > 8, so it's safe to call gdecode
@@ -398,9 +396,7 @@ static bool decodeFTL(uint8_t* src, size_t len, T* image, const decs& info)
                     blockp[offset[i]] = prv += smag(group[i]);
                 prev[c] = prv;
             } // Per band per block
-            if (failed) break;
         } // per block
-        if (failed) break;
         // For performance apply band delta per block strip, in linear order
         for (size_t j = 0; j < B; j++) {
             for (int c = 0; c < bands; c++) if (c != cband[c]) {
@@ -411,8 +407,8 @@ static bool decodeFTL(uint8_t* src, size_t len, T* image, const decs& info)
             }
         }
     } // per strip
-    // It might not catch all errors
-    return failed || s.avail() > 7;
+    // Only fails when extra input was provided
+    return s.avail() > 7;
 }
 
 template<>
@@ -435,8 +431,6 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
         offset[i] = ((n >> 2) & 0b11) * stride + (n & 0b11) * bands;
     }
     iBits s(src, len);
-    bool failed(false);
-
     for (size_t y = 0; y < ysize; y += B) {
         // If the last row is partial, roll it up
         if (y + B > ysize)
@@ -453,7 +447,6 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
                 if (acc & 1) { // Rung change
                     cs = dsw[(acc >> 1) & LONG_MASK];
                     abits = cs >> 12;
-                    failed |= (0 == (cs & TBLMASK)); // no signals
                 }
                 acc >>= abits;
                 // abits is never > 8, so it's safe to call gdecode
@@ -562,9 +555,7 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
                 prev[c] = prv;
                 s.advance(abits);
             } // Per band per block
-            if (failed) break;
         } // per block
-        if (failed) break;
         // For performance apply band delta per block strip, in linear order
         for (size_t j = 0; j < B; j++) {
             for (int c = 0; c < bands; c++) if (c != cband[c]) {
@@ -575,8 +566,7 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
             }
         }
     } // per strip
-    // It might not catch all errors
-    return failed || s.avail() > 7;
+    return s.avail() > 7; // Only fails when input was too short
 }
 
 // Absolute from mag-sign
