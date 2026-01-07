@@ -2,6 +2,9 @@
 
 #Build qb3-wasm decoder as an JS6 module using emscripten
 # Assume libQB3.a is already built and available in the current folder
+# To build it on a system with emcc installed, run something like this
+# CC=emcc CXX=emcc cmake -DBUILD_SHARED_LIBS=Off -B build .
+#
 # Assume json.hpp is in the include path for emcc
 
 OPTS="-O3 -flto"
