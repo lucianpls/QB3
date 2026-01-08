@@ -1,5 +1,5 @@
 /*
-Content: QB3 parts used by both the encoder and the decoder
+Content: QB3 internal common definitions
 
 Copyright 2020-2025 Esri
 Licensed under the Apache License, Version 2.0 (the "License");
