@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.15...4.3)
 cmake_policy(SET CMP0076 NEW)
 
 # Has to be before project()
@@ -21,7 +21,8 @@ set(namespace "QB3")
 add_library(${PROJECT_NAME})
 
 include(CheckCXXCompilerFlag)
-if("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "x86_64" AND ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" OR "${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU"))
+if("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "x86_64" AND 
+        ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" OR "${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU"))
     check_cxx_compiler_flag("-mavx2" HAVE_AVX2)
     if (HAVE_AVX2)
         option(ENABLE_AVX2 "Enable AVX2 optimizations" ON)

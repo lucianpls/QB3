@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.15...4.3)
 cmake_policy(SET CMP0076 NEW)
 
 # Has to be before project()
@@ -13,7 +13,7 @@ project(QB3
 )
 
 set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CSS_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_subdirectory(QB3lib)
 
@@ -26,6 +26,8 @@ option(QB3_DEV "QB3 development utility, internal use only" OFF)
 if (${BUILD_CQB3})
     add_executable(cqb3 cqb3.cpp)
     find_package(libicd CONFIG REQUIRED)
+    # C++17 is needed for filesystem library
+    set_property(TARGET cqb3 PROPERTY CXX_STANDARD 17)
     if (MSVC)
         add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
     endif (MSVC)

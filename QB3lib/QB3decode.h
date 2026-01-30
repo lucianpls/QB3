@@ -19,28 +19,30 @@ Contributors:  Lucian Plesea
 
 namespace QB3 {
 // Decoding tables, twice as large as the encoding ones, 2k for 0-7
+// The top nibble is the symbol length, low three nibbles are the decoded symbol value
+// The tables for rungs 3 to 7 match the middle swap of the encoding tables
 static const uint16_t drg0[] = { 0x1000, 0x1001, 0x1000, 0x1001 };
 static const uint16_t drg1[] = { 0x1000, 0x2001, 0x1000, 0x3002, 0x1000, 0x2001, 0x1000, 0x3003 };
 static const uint16_t drg2[] = { 0x2000, 0x3002, 0x2001, 0x4004, 0x2000, 0x3003, 0x2001, 0x4005, 0x2000, 0x3002, 0x2001, 0x4006,
 0x2000, 0x3003, 0x2001, 0x4007 };
-static const uint16_t drg3[] = { 0x3000, 0x4004, 0x3001, 0x5008, 0x3002, 0x4005, 0x3003, 0x5009, 0x3000, 0x4006, 0x3001, 0x500a,
-0x3002, 0x4007, 0x3003, 0x500b, 0x3000, 0x4004, 0x3001, 0x500c, 0x3002, 0x4005, 0x3003, 0x500d, 0x3000, 0x4006, 0x3001, 0x500e,
-0x3002, 0x4007, 0x3003, 0x500f };
-static const uint16_t drg4[] = { 0x4000, 0x5008, 0x4001, 0x6010, 0x4002, 0x5009, 0x4003, 0x6011, 0x4004, 0x500a, 0x4005, 0x6012,
+static const uint16_t drg3[] = { 0x3000, 0x4004, 0x3001, 0x5007, 0x3002, 0x4005, 0x3003, 0x5009, 0x3000, 0x4006, 0x3001, 0x500a,
+0x3002, 0x4008, 0x3003, 0x500b, 0x3000, 0x4004, 0x3001, 0x500c, 0x3002, 0x4005, 0x3003, 0x500d, 0x3000, 0x4006, 0x3001, 0x500e,
+0x3002, 0x4008, 0x3003, 0x500f };
+static const uint16_t drg4[] = { 0x4000, 0x5008, 0x4001, 0x600f, 0x4002, 0x5009, 0x4003, 0x6011, 0x4004, 0x500a, 0x4005, 0x6012,
 0x4006, 0x500b, 0x4007, 0x6013, 0x4000, 0x500c, 0x4001, 0x6014, 0x4002, 0x500d, 0x4003, 0x6015, 0x4004, 0x500e, 0x4005, 0x6016,
-0x4006, 0x500f, 0x4007, 0x6017, 0x4000, 0x5008, 0x4001, 0x6018, 0x4002, 0x5009, 0x4003, 0x6019, 0x4004, 0x500a, 0x4005, 0x601a,
+0x4006, 0x5010, 0x4007, 0x6017, 0x4000, 0x5008, 0x4001, 0x6018, 0x4002, 0x5009, 0x4003, 0x6019, 0x4004, 0x500a, 0x4005, 0x601a,
 0x4006, 0x500b, 0x4007, 0x601b, 0x4000, 0x500c, 0x4001, 0x601c, 0x4002, 0x500d, 0x4003, 0x601d, 0x4004, 0x500e, 0x4005, 0x601e,
-0x4006, 0x500f, 0x4007, 0x601f };
-static const uint16_t drg5[] = { 0x5000, 0x6010, 0x5001, 0x7020, 0x5002, 0x6011, 0x5003, 0x7021, 0x5004, 0x6012, 0x5005, 0x7022,
+0x4006, 0x5010, 0x4007, 0x601f };
+static const uint16_t drg5[] = { 0x5000, 0x6010, 0x5001, 0x701f, 0x5002, 0x6011, 0x5003, 0x7021, 0x5004, 0x6012, 0x5005, 0x7022,
 0x5006, 0x6013, 0x5007, 0x7023, 0x5008, 0x6014, 0x5009, 0x7024, 0x500a, 0x6015, 0x500b, 0x7025, 0x500c, 0x6016, 0x500d, 0x7026,
 0x500e, 0x6017, 0x500f, 0x7027, 0x5000, 0x6018, 0x5001, 0x7028, 0x5002, 0x6019, 0x5003, 0x7029, 0x5004, 0x601a, 0x5005, 0x702a,
 0x5006, 0x601b, 0x5007, 0x702b, 0x5008, 0x601c, 0x5009, 0x702c, 0x500a, 0x601d, 0x500b, 0x702d, 0x500c, 0x601e, 0x500d, 0x702e,
-0x500e, 0x601f, 0x500f, 0x702f, 0x5000, 0x6010, 0x5001, 0x7030, 0x5002, 0x6011, 0x5003, 0x7031, 0x5004, 0x6012, 0x5005, 0x7032,
+0x500e, 0x6020, 0x500f, 0x702f, 0x5000, 0x6010, 0x5001, 0x7030, 0x5002, 0x6011, 0x5003, 0x7031, 0x5004, 0x6012, 0x5005, 0x7032,
 0x5006, 0x6013, 0x5007, 0x7033, 0x5008, 0x6014, 0x5009, 0x7034, 0x500a, 0x6015, 0x500b, 0x7035, 0x500c, 0x6016, 0x500d, 0x7036,
 0x500e, 0x6017, 0x500f, 0x7037, 0x5000, 0x6018, 0x5001, 0x7038, 0x5002, 0x6019, 0x5003, 0x7039, 0x5004, 0x601a, 0x5005, 0x703a,
 0x5006, 0x601b, 0x5007, 0x703b, 0x5008, 0x601c, 0x5009, 0x703c, 0x500a, 0x601d, 0x500b, 0x703d, 0x500c, 0x601e, 0x500d, 0x703e,
-0x500e, 0x601f, 0x500f, 0x703f };
-static const uint16_t drg6[] = { 0x6000, 0x7020, 0x6001, 0x8040, 0x6002, 0x7021, 0x6003, 0x8041, 0x6004, 0x7022, 0x6005, 0x8042,
+0x500e, 0x6020, 0x500f, 0x703f };
+static const uint16_t drg6[] = { 0x6000, 0x7020, 0x6001, 0x803f, 0x6002, 0x7021, 0x6003, 0x8041, 0x6004, 0x7022, 0x6005, 0x8042,
 0x6006, 0x7023, 0x6007, 0x8043, 0x6008, 0x7024, 0x6009, 0x8044, 0x600a, 0x7025, 0x600b, 0x8045, 0x600c, 0x7026, 0x600d, 0x8046,
 0x600e, 0x7027, 0x600f, 0x8047, 0x6010, 0x7028, 0x6011, 0x8048, 0x6012, 0x7029, 0x6013, 0x8049, 0x6014, 0x702a, 0x6015, 0x804a,
 0x6016, 0x702b, 0x6017, 0x804b, 0x6018, 0x702c, 0x6019, 0x804c, 0x601a, 0x702d, 0x601b, 0x804d, 0x601c, 0x702e, 0x601d, 0x804e,
@@ -48,7 +50,7 @@ static const uint16_t drg6[] = { 0x6000, 0x7020, 0x6001, 0x8040, 0x6002, 0x7021,
 0x6006, 0x7033, 0x6007, 0x8053, 0x6008, 0x7034, 0x6009, 0x8054, 0x600a, 0x7035, 0x600b, 0x8055, 0x600c, 0x7036, 0x600d, 0x8056,
 0x600e, 0x7037, 0x600f, 0x8057, 0x6010, 0x7038, 0x6011, 0x8058, 0x6012, 0x7039, 0x6013, 0x8059, 0x6014, 0x703a, 0x6015, 0x805a,
 0x6016, 0x703b, 0x6017, 0x805b, 0x6018, 0x703c, 0x6019, 0x805c, 0x601a, 0x703d, 0x601b, 0x805d, 0x601c, 0x703e, 0x601d, 0x805e,
-0x601e, 0x703f, 0x601f, 0x805f, 0x6000, 0x7020, 0x6001, 0x8060, 0x6002, 0x7021, 0x6003, 0x8061, 0x6004, 0x7022, 0x6005, 0x8062,
+0x601e, 0x7040, 0x601f, 0x805f, 0x6000, 0x7020, 0x6001, 0x8060, 0x6002, 0x7021, 0x6003, 0x8061, 0x6004, 0x7022, 0x6005, 0x8062,
 0x6006, 0x7023, 0x6007, 0x8063, 0x6008, 0x7024, 0x6009, 0x8064, 0x600a, 0x7025, 0x600b, 0x8065, 0x600c, 0x7026, 0x600d, 0x8066,
 0x600e, 0x7027, 0x600f, 0x8067, 0x6010, 0x7028, 0x6011, 0x8068, 0x6012, 0x7029, 0x6013, 0x8069, 0x6014, 0x702a, 0x6015, 0x806a,
 0x6016, 0x702b, 0x6017, 0x806b, 0x6018, 0x702c, 0x6019, 0x806c, 0x601a, 0x702d, 0x601b, 0x806d, 0x601c, 0x702e, 0x601d, 0x806e,
@@ -56,8 +58,8 @@ static const uint16_t drg6[] = { 0x6000, 0x7020, 0x6001, 0x8040, 0x6002, 0x7021,
 0x6006, 0x7033, 0x6007, 0x8073, 0x6008, 0x7034, 0x6009, 0x8074, 0x600a, 0x7035, 0x600b, 0x8075, 0x600c, 0x7036, 0x600d, 0x8076,
 0x600e, 0x7037, 0x600f, 0x8077, 0x6010, 0x7038, 0x6011, 0x8078, 0x6012, 0x7039, 0x6013, 0x8079, 0x6014, 0x703a, 0x6015, 0x807a,
 0x6016, 0x703b, 0x6017, 0x807b, 0x6018, 0x703c, 0x6019, 0x807c, 0x601a, 0x703d, 0x601b, 0x807d, 0x601c, 0x703e, 0x601d, 0x807e,
-0x601e, 0x703f, 0x601f, 0x807f };
-static const uint16_t drg7[] = { 0x7000, 0x8040, 0x7001, 0x9080, 0x7002, 0x8041, 0x7003, 0x9081, 0x7004, 0x8042, 0x7005, 0x9082,
+0x601e, 0x7040, 0x601f, 0x807f };
+static const uint16_t drg7[] = { 0x7000, 0x8040, 0x7001, 0x907f, 0x7002, 0x8041, 0x7003, 0x9081, 0x7004, 0x8042, 0x7005, 0x9082,
 0x7006, 0x8043, 0x7007, 0x9083, 0x7008, 0x8044, 0x7009, 0x9084, 0x700a, 0x8045, 0x700b, 0x9085, 0x700c, 0x8046, 0x700d, 0x9086,
 0x700e, 0x8047, 0x700f, 0x9087, 0x7010, 0x8048, 0x7011, 0x9088, 0x7012, 0x8049, 0x7013, 0x9089, 0x7014, 0x804a, 0x7015, 0x908a,
 0x7016, 0x804b, 0x7017, 0x908b, 0x7018, 0x804c, 0x7019, 0x908c, 0x701a, 0x804d, 0x701b, 0x908d, 0x701c, 0x804e, 0x701d, 0x908e,
@@ -73,7 +75,7 @@ static const uint16_t drg7[] = { 0x7000, 0x8040, 0x7001, 0x9080, 0x7002, 0x8041,
 0x7026, 0x8073, 0x7027, 0x90b3, 0x7028, 0x8074, 0x7029, 0x90b4, 0x702a, 0x8075, 0x702b, 0x90b5, 0x702c, 0x8076, 0x702d, 0x90b6,
 0x702e, 0x8077, 0x702f, 0x90b7, 0x7030, 0x8078, 0x7031, 0x90b8, 0x7032, 0x8079, 0x7033, 0x90b9, 0x7034, 0x807a, 0x7035, 0x90ba,
 0x7036, 0x807b, 0x7037, 0x90bb, 0x7038, 0x807c, 0x7039, 0x90bc, 0x703a, 0x807d, 0x703b, 0x90bd, 0x703c, 0x807e, 0x703d, 0x90be,
-0x703e, 0x807f, 0x703f, 0x90bf, 0x7000, 0x8040, 0x7001, 0x90c0, 0x7002, 0x8041, 0x7003, 0x90c1, 0x7004, 0x8042, 0x7005, 0x90c2,
+0x703e, 0x8080, 0x703f, 0x90bf, 0x7000, 0x8040, 0x7001, 0x90c0, 0x7002, 0x8041, 0x7003, 0x90c1, 0x7004, 0x8042, 0x7005, 0x90c2,
 0x7006, 0x8043, 0x7007, 0x90c3, 0x7008, 0x8044, 0x7009, 0x90c4, 0x700a, 0x8045, 0x700b, 0x90c5, 0x700c, 0x8046, 0x700d, 0x90c6,
 0x700e, 0x8047, 0x700f, 0x90c7, 0x7010, 0x8048, 0x7011, 0x90c8, 0x7012, 0x8049, 0x7013, 0x90c9, 0x7014, 0x804a, 0x7015, 0x90ca,
 0x7016, 0x804b, 0x7017, 0x90cb, 0x7018, 0x804c, 0x7019, 0x90cc, 0x701a, 0x804d, 0x701b, 0x90cd, 0x701c, 0x804e, 0x701d, 0x90ce,
@@ -89,10 +91,10 @@ static const uint16_t drg7[] = { 0x7000, 0x8040, 0x7001, 0x9080, 0x7002, 0x8041,
 0x7026, 0x8073, 0x7027, 0x90f3, 0x7028, 0x8074, 0x7029, 0x90f4, 0x702a, 0x8075, 0x702b, 0x90f5, 0x702c, 0x8076, 0x702d, 0x90f6,
 0x702e, 0x8077, 0x702f, 0x90f7, 0x7030, 0x8078, 0x7031, 0x90f8, 0x7032, 0x8079, 0x7033, 0x90f9, 0x7034, 0x807a, 0x7035, 0x90fa,
 0x7036, 0x807b, 0x7037, 0x90fb, 0x7038, 0x807c, 0x7039, 0x90fc, 0x703a, 0x807d, 0x703b, 0x90fd, 0x703c, 0x807e, 0x703d, 0x90fe,
-0x703e, 0x807f, 0x703f, 0x90ff };
+0x703e, 0x8080, 0x703f, 0x90ff };
 static const uint16_t* DRG[] = { drg0, drg1, drg2, drg3, drg4, drg5, drg6, drg7 };
 
-// Decoding tables for codeswitch
+// Decoding tables for codeswitch for the different data types
 static const uint16_t dsw3[] = { 0x3001, 0x4002, 0x3007, 0x5003, 0x3001, 0x4006, 0x3007, 0x5005, 0x3001, 0x4002, 0x3007, 0x5000,
 0x3001, 0x4006, 0x3007, 0x5004 };
 static const uint16_t dsw4[] = { 0x4001, 0x5003, 0x400f, 0x6005, 0x4002, 0x500d, 0x400e, 0x600b, 0x4001, 0x5004, 0x400f, 0x6006,
@@ -137,9 +139,8 @@ static std::pair<size_t, uint64_t> qb3dsztbl(uint64_t val, size_t rung) {
 
 // Decode a B2 sized group of QB3 values from s and acc
 // At least 56 valid bits in accumulator
-// returns false on failure
 template<bool APPLYSTEP = true, typename T>
-static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
+static void gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
 {
     assert(((rung > 1) && (abits <= 8))
         || ((rung == 1) && (abits <= 17)) // B2 + 1
@@ -156,7 +157,7 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             for (int i = 0; i < B2; i++)
                 group[i] = static_cast<T>(0);
         s.advance(abits + 1);
-        return 1;
+        return;
     }
     if (sizeof(T) == 1 || rung < (sizeof(DRG) / sizeof(*DRG))) {
         auto drg = DRG[rung];
@@ -167,8 +168,8 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             // Preshift accumulator
             acc <<= 2;
             for (int i=0; i < B2; i++) {
-                auto size = (0x31213121u >> (acc & 0b11100)) & 0xf;
-                group[i] = T((0x30102010u >> (acc & 0b11100)) & 0xf);
+                uint8_t size = (0x31213121u >> (acc & 0b11100)) & 0xf;
+                group[i] = T((0x30201020u >> (acc & 0b11100)) & 0xf);
                 abits += size;
                 acc >>= size;
             }
@@ -177,47 +178,43 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
         else if (2 == rung) { // max symbol len is 4, there is space for at least 14 in the accumulator
             // Faster than a double value table decode, but only in this specific code organization
             // Cleaning it up, for example doing a peek at the start then looping 16 times makes it slower
-            // The masks and inline constants could be smaller for size, but that eliminates thecommon 
-            // expression, making it slower. Pre-shift accumulator, top 2 bits are dropped
+            // Pre-shift accumulator, top 2 bits are dropped
             acc <<= 2;
             uint8_t size;
-            int i = 0;
-            do {
-                size = (0x4232 >> (acc & 0b1100)) & 0xf;
-                group[i] = T((0x7130612051304120ull >> (acc & 0b111100)) & 0xf);
+            for (size_t i = 0; i < 14; i++) {
+                size = (0x4232u >> (acc & 0b1100)) & 0xf;
+                group[i] = T((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
                 abits += size;
                 acc >>= size;
-            } while (++i < 14);
+            }
             if (abits > 54) { // Rare, max is 60, need 8 + 2 bits
                 s.advance(abits - 2);
                 acc = s.peek();
                 abits = 2;
             }
-            do {
-                size = (0x4232 >> (acc & 0b1100)) & 0xf;
-                group[i] = T((0x7130612051304120ull >> (acc & 0b111100)) & 0xf);
-                acc >>= size;
-                abits += size;
-            } while (++i < B2);
-            s.advance(abits);
+            // Unroll the last two values
+            size = (0x4232u >> (acc & 0b1100)) & 0xf;
+            group[14] = T((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
+            acc >>= size;
+            group[15] = T((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
+            s.advance(abits + size + ((0x4232 >> (acc & 0b1100)) & 0xf));
         }
         else if (6 > rung) { // Table decode at 3,4 and 5, half of the values per accumulator
-            int i = 0;
-            do {
+            for (int i = 0; i < B2 / 2; ++i) {
                 auto v = drg[acc & m];
                 group[i] = T(v & TBLMASK);
-                abits += v >> 12;
                 acc >>= v >> 12;
-            } while (++i < B2 / 2);
+                abits += v >> 12;
+            }
             s.advance(abits);
             acc = s.peek();
             abits = 0;
-            do {
+            for (int i = B2 / 2; i < B2; ++i) {
                 auto v = drg[acc & m];
                 group[i] = T(v & TBLMASK);
-                abits += v >> 12;
                 acc >>= v >> 12;
-            } while (++i < B2);
+                abits += v >> 12;
+            }
             s.advance(abits);
         }
         else { // Last part of table decoding, rungs 6-7, three reads, 6-4-6
@@ -290,7 +287,6 @@ static bool gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
         if (stepv < B2)
             group[stepv] ^= T(1ull << rung);
     }
-    return true;
 }
 
 // Streamlined decoding for FTL mode
@@ -316,7 +312,6 @@ static bool decodeFTL(uint8_t* src, size_t len, T* image, const decs& info)
         offset[i] = ((n >> 2) & 0b11) * stride + (n & 0b11) * bands;
     }
     iBits s(src, len);
-    bool failed(false);
     for (size_t y = 0; y < ysize; y += B) {
         // If the last row is partial, roll it up
         if (y + B > ysize)
@@ -333,13 +328,12 @@ static bool decodeFTL(uint8_t* src, size_t len, T* image, const decs& info)
                 if (acc & 1) { // Rung change
                     cs = dsw[(acc >> 1) & LONG_MASK];
                     abits = cs >> 12;
-                    failed |= (0 == (cs & TBLMASK)); // no signals
                 }
                 acc >>= abits;
                 // abits is never > 8, so it's safe to call gdecode
                 auto rung = (runbits[c] + cs) & NORM_MASK;
                 runbits[c] = rung;
-                if (rung < 2) { // decode inlined
+                if (rung < 3) { // decode inlined
                     if (rung == 0) { // single bits or all zeros
                         abits++;
                         if (0 != (acc & 1)) {
@@ -354,33 +348,55 @@ static bool decodeFTL(uint8_t* src, size_t len, T* image, const decs& info)
                             for (int i = 0; i < B2; i++)
                                 blockp[offset[i]] = prv;
                         }
+                        s.advance(abits);
+                        continue;
                     }
-                    else { // rung == 1
+                    if (rung == 1) {
                         // Use inline constants as nibble tables
                         // The lower two bits of the accumulator determine the size
                         // Shift the accumulator to the left to place the selector in the right place
                         acc <<= 2;
                         for (size_t i = 0; i < B2; i++) {
-                            auto size = (0x31213121u >> (acc & 0b11100)) & 0xf;
-                            blockp[offset[i]] = prv += smag(T((0x30102010u >> (acc & 0b11100)) & 0xf));
+                            auto size = (0x3121u >> (acc & 0b1100)) & 0xf;
+                            blockp[offset[i]] = prv += smag(T((0x30201020u >> (acc & 0b11100)) & 0xf));
                             abits += size;
                             acc >>= size;
                         }
                         prev[c] = prv;
+                        s.advance(abits);
+                        continue;
                     }
-                    s.advance(abits);
+                    // rung 2
+                    acc <<= 2;
+                    uint8_t size;
+                    for (int i = 0; i < 14; i++) {
+                        size = (0x4232u >> (acc & 0b1100)) & 0xf;
+                        blockp[offset[i]] = prv += (T)smag((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
+                        abits += size;
+                        acc >>= size;
+                    }
+                    if (abits > 54) { // Rare, max is 60, need 8 + 2 bits
+                        s.advance(abits - 2);
+                        acc = s.peek();
+                        abits = 2;
+                    }
+                    // Unroll the last two values
+                    size = (0x4232 >> (acc & 0b1100)) & 0xf;
+                    blockp[offset[14]] = prv += (T)smag((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
+                    acc >>= size;
+                    blockp[offset[15]] = prv += (T)smag((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
+                    s.advance(abits + size + ((0x4232u >> (acc & 0b1100)) & 0xf));
+                    prev[c] = prv;
                     continue;
                 }
                 // longer codes
-                failed |= !gdecode<false>(s, rung, group, acc, abits);
+                gdecode<false>(s, rung, group, acc, abits);
                 // Undo delta encoding for this block
                 for (int i = 0; i < B2; i++)
                     blockp[offset[i]] = prv += smag(group[i]);
                 prev[c] = prv;
             } // Per band per block
-            if (failed) break;
         } // per block
-        if (failed) break;
         // For performance apply band delta per block strip, in linear order
         for (size_t j = 0; j < B; j++) {
             for (int c = 0; c < bands; c++) if (c != cband[c]) {
@@ -391,8 +407,8 @@ static bool decodeFTL(uint8_t* src, size_t len, T* image, const decs& info)
             }
         }
     } // per strip
-    // It might not catch all errors
-    return failed || s.avail() > 7;
+    // Only fails when extra input was provided
+    return s.avail() > 7;
 }
 
 template<>
@@ -415,8 +431,6 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
         offset[i] = ((n >> 2) & 0b11) * stride + (n & 0b11) * bands;
     }
     iBits s(src, len);
-    bool failed(false);
-
     for (size_t y = 0; y < ysize; y += B) {
         // If the last row is partial, roll it up
         if (y + B > ysize)
@@ -433,84 +447,79 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
                 if (acc & 1) { // Rung change
                     cs = dsw[(acc >> 1) & LONG_MASK];
                     abits = cs >> 12;
-                    failed |= (0 == (cs & TBLMASK)); // no signals
                 }
                 acc >>= abits;
                 // abits is never > 8, so it's safe to call gdecode
                 auto rung = (runbits[c] + cs) & NORM_MASK;
                 runbits[c] = rung;
-                if (rung < 2) { // decode inlined
-                    if (rung == 0) { // single bits or all zeros
-                        abits++;
-                        if (0 != (acc & 1)) {
-                            for (int i = 0; i < B2; i++) {
-                                acc >>= 1;
-                                blockp[offset[i]] = prv -= (1 & acc);
-                            }
-                            abits += B2;
-                        }
-                        else {
-                            for (int i = 0; i < B2; i++)
-                                blockp[offset[i]] = prv;
-                        }
-                    }
-                    else { // rung == 1
-                        // Use inline constants as nibble tables
-                        // The lower two bits of the accumulator determine the size
-                        // Shift the accumulator to the left to place the selector in the right place
-                        acc <<= 2;
+                if (rung == 0) { // single bits or all zeros
+                    abits++;
+                    if (0 != (acc & 1)) {
                         for (int i = 0; i < B2; i++) {
-                            auto size = (0x3121u >> (acc & 0b1100)) & 0xf;
-                            blockp[offset[i]] = prv += smag(uint8_t((0x30102010 >> (acc & 0b11100)) & 0xf));
-                            abits += size;
-                            acc >>= size;
+                            acc >>= 1;
+                            blockp[offset[i]] = prv -= (1 & acc);
                         }
+                        abits += B2;
+                    }
+                    else {
+                        for (int i = 0; i < B2; i++)
+                            blockp[offset[i]] = prv;
+                    }
+                }
+                else if (rung == 1) { // rung == 1
+                    // Use inline constants as nibble tables
+                    // The lower two bits of the accumulator determine the size
+                    // Shift the accumulator to the left to place the selector in the right place
+                    acc <<= 2;
+                    for (int i = 0; i < B2; i++) {
+                        auto size = (0x3121u >> (acc & 0b1100)) & 0xf;
+                        blockp[offset[i]] = prv += smag(uint8_t((0x30201020 >> (acc & 0b11100)) & 0xf));
+                        abits += size;
+                        acc >>= size;
                     }
                 }
                 else if (rung == 2) {
                     acc <<= 2;
                     uint8_t size;
-                    int i = 0;
-                    do {
-                        size = (0x4232 >> (acc & 0b1100)) & 0xf;
-                        blockp[offset[i]] = prv += smag(uint8_t((0x7130612051304120ll >> (acc & 0b111100)) & 0xf));
+                    for (int i = 0; i < 14; i++) {
+                        size = (0x4232u >> (acc & 0b1100)) & 0xf;
+                        blockp[offset[i]] = prv += (uint8_t)smag((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
                         abits += size;
                         acc >>= size;
-                    } while (++i < B2 - 2);
-                    // This is not always needed, but the test is unpredictable and more expensive
-                    s.advance(abits - 2);
-                    acc = s.peek();
-                    abits = 2;
-                    do {
-                        size = (0x4232 >> (acc & 0b1100)) & 0xf;
-                        blockp[offset[i]] = prv += smag(uint8_t((0x7130612051304120ll >> (acc & 0b111100)) & 0xf));
-                        abits += size;
-                        acc >>= size;
-                    } while (++i < B2);
+                    }
+                    if (abits > 54) { // Rare, max is 60, need 8 + 2 bits
+                        s.advance(abits - 2);
+                        acc = s.peek();
+                        abits = 2;
+                    }
+                    // Unroll the last two values
+                    size = (0x4232 >> (acc & 0b1100)) & 0xf;
+                    blockp[offset[14]] = prv += (uint8_t)smag((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
+                    acc >>= size;
+                    blockp[offset[15]] = prv += (uint8_t)smag((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
+                    s.advance(abits + size + ((0x4232u >> (acc & 0b1100)) & 0xf));
                     prev[c] = prv;
-                    s.advance(abits);
                     continue;
                 }
                 else {
                     auto drg = DRG[rung];
                     const auto m = (1ull << (rung + 2)) - 1;
                     if (6 > rung) { // Table decode at 3,4 and 5, two reads
-                        int i = 0;
-                        do {
+                        for (int i = 0; i < B2 / 2; ++i) {
                             auto v = drg[acc & m];
                             blockp[offset[i]] = prv += smag(uint8_t(v));
                             abits += v >> 12;
                             acc >>= v >> 12;
-                        } while (++i < B2 / 2);
+                        }
                         s.advance(abits);
                         acc = s.peek();
                         abits = 0;
-                        do {
+                        for (int i = B2 / 2; i < B2; ++i) {
                             auto v = drg[acc & m];
                             blockp[offset[i]] = prv += smag(uint8_t(v));
                             abits += v >> 12;
                             acc >>= v >> 12;
-                        } while (++i < B2);
+                        }
                         prev[c] = prv;
                         s.advance(abits);
                         continue;
@@ -546,9 +555,7 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
                 prev[c] = prv;
                 s.advance(abits);
             } // Per band per block
-            if (failed) break;
         } // per block
-        if (failed) break;
         // For performance apply band delta per block strip, in linear order
         for (size_t j = 0; j < B; j++) {
             for (int c = 0; c < bands; c++) if (c != cband[c]) {
@@ -559,8 +566,7 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
             }
         }
     } // per strip
-    // It might not catch all errors
-    return failed || s.avail() > 7;
+    return s.avail() > 7; // Only fails when input was too short
 }
 
 // Absolute from mag-sign
@@ -613,7 +619,7 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
                 if (0 != (cs & TBLMASK) || 0 == cs) { // Normal decoding, not a signal
                     // abits is never > 8, so it's safe to call gdecode
                     auto rung = runbits[c] = (runbits[c] + cs) & NORM_MASK;
-                    failed |= !gdecode(s, rung, group, acc, abits);
+                    gdecode(s, rung, group, acc, abits);
                 }
                 else { // extra encoding
                     cs = dsw[acc & LONG_MASK]; // rung, no flag
@@ -650,7 +656,7 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
                         cf += 2; // Use it unbiased
                         if (rung) {
                             s.advance(abits);
-                            failed |= !gdecode(s, rung, group, s.peek(), 0);
+                            gdecode(s, rung, group, s.peek(), 0);
                             // Multiply group by CF and get the max for the actual rung
                             T usedbits = 0;
                             for (int i = 0; i < B2; i++)
@@ -687,6 +693,7 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
                         T maxidx(0);
                         for (int i = 0; i < B2; i++) {
                             uint32_t size = (0x4232 >> (acc & 0b1100)) & 0xf;
+                            // Straight drg2 decoding, no middle swap
                             group[i] = T((0x7130612051304120ll >> (acc & 0b111100)) & 0xf);
                             acc >>= size;
                             abits += size;

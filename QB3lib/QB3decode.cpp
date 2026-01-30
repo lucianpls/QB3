@@ -311,6 +311,69 @@ static bool needs_rle(qb3_mode mode) {
         || QB3M_CF_RLE == mode || QB3M_CF_RLE_H == mode);
 }
 
+// Main decode template, deals with small images
+template<typename T>
+bool dec(uint8_t* source, size_t len, T* image, const decs& info)
+{
+    if (info.xsize >= B && info.ysize >= B)
+        return QB3::decode(source, len, image, info);
+
+    // Small image, use a temporary buffer
+    decs actual(info);
+    size_t ngroups = (info.xsize * info.ysize + B2 - 1) / B2;
+    size_t bufsz = ngroups * B2 * info.nbands;
+    std::vector<T> tempbuf(bufsz);
+    actual.stride = 0; // contiguous
+    actual.xsize = info.xsize < B ? B : ngroups * B;
+    actual.ysize = info.xsize < B ? ngroups * B : B;
+    if (QB3::decode(source, len, tempbuf.data(), actual))
+        return true; // failure
+    // It worked, now copy the data into the destination
+    // Copy line by line, until we run out of lines
+    size_t linesize = info.xsize * info.nbands;
+    // Stride in T units
+    size_t stride = info.stride ? info.stride : linesize;
+    auto data = tempbuf.data();
+    if (info.xsize < B) { // narrow and tall, copy line by line
+        for (size_t y = 0; y < info.ysize; y++) {
+            auto dst = image + y * stride;
+            memcpy(dst, data, linesize * sizeof(T));
+            data += linesize;
+        }
+    }
+    else { // wide and short, copy pixel by pixel
+        for (size_t x = 0; x < info.xsize; x++) {
+            for (size_t y = 0; y < info.ysize; y++) {
+                auto dst = image + y * stride + x * info.nbands;
+                memcpy(dst, data, info.nbands * sizeof(T));
+                data += info.nbands;
+            }
+        }
+    }
+    return false; // success
+}
+
+static size_t stored_decode(decsp p, void* source, size_t src_sz, void* dst)
+{
+    auto src = reinterpret_cast<uint8_t *>(source);
+    // If the data is stored and size is right, just copy it
+    if (src_sz != qb3_decoded_size(p)) {
+        p->error = QB3E_EINV;
+        return 0;
+    }
+    if (p->stride == 0) { // contiguous data
+        memcpy(dst, source, src_sz);
+        return src_sz;
+    }
+    // With stride, need to copy line by line
+    size_t linesize = p->xsize * p->nbands * typesizes[p->type];
+    auto d = reinterpret_cast<uint8_t*>(dst);
+    for (size_t y = 0; y < p->ysize; y++) {
+        memcpy(d + y * p->stride, src + y * linesize, linesize);
+    }
+    return src_sz;
+}
+
 // returns 0 if an error is detected
 // TODO: Error reporting
 // source points to data to decode
@@ -319,15 +382,15 @@ static size_t qb3_decode(decsp p, void* source, size_t src_sz, void* dst)
     int error_code = 0;
     auto src = reinterpret_cast<uint8_t *>(source);
     // If the data is stored and size is right, just copy it
-    if (p->mode == qb3_mode::QB3M_STORED) {
-        // Only if the size is what we expect
-        if (src_sz != qb3_decoded_size(p)) {
-            p->error = QB3E_EINV;
-            return 0;
-        }
-        memcpy(dst, source, src_sz);
-        return src_sz;
+    if (p->mode == qb3_mode::QB3M_STORED)
+        return stored_decode(p, source, src_sz, dst);
+
+    // Tiny inputs are stored, reject otherwise
+    if (p->xsize * p->ysize < B2) {
+        p->error = QB3E_EINV;
+        return 0;
     }
+
     std::vector<uint8_t> buffer;
     // If RLE is needed, it is expensive, allocates a whole new buffer
     if (needs_rle(p->mode)) {
@@ -349,7 +412,7 @@ static size_t qb3_decode(decsp p, void* source, size_t src_sz, void* dst)
         src_sz = sz;
     }
 
-#define DEC(T) QB3::decode(src, src_sz, reinterpret_cast<T*>(dst), *p)
+#define DEC(T) dec(src, src_sz, reinterpret_cast<T*>(dst), *p)
     switch (p->type) {
     case qb3_dtype::QB3_U8:
     case qb3_dtype::QB3_I8:

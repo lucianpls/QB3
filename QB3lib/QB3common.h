@@ -29,11 +29,11 @@ Contributors:  Lucian Plesea
 #endif
 
 // Tables have 12bits of data, top 4 bits are size
-constexpr auto TBLMASK(0xfffull);
+constexpr auto TBLMASK = 0xfffull;
 
 // Block is 4x4 pixels
-constexpr size_t B(4);
-constexpr size_t B2(B * B);
+constexpr size_t B = 4;
+constexpr size_t B2 = B * B;
 
 #if QB3_MAXBANDS > 256
 #error QB3_MAXBANDS too large

@@ -24,6 +24,7 @@ Contributors:  Lucian Plesea
 #include <string>
 #include <vector>
 #include <utility>
+#include <filesystem>
 
 // From https://github.com/lucianpls/libicd
 #include <icd_codecs.h>
@@ -43,6 +44,7 @@ struct options {
         legacy(false), // legacy mode
         verbose(false),
         ftl(false),
+        is_folder(false), // Input name is a folder
         decode(false)
     {};
 
@@ -58,27 +60,29 @@ struct options {
     bool legacy; // Legacy mode
     bool verbose;
     bool ftl; // Fastest compression
+    bool is_folder; // Input name is a folder
     bool away; // quantize away from zero
     bool decode;
 };
 
 int Usage(const options &opt) {
-    cerr << opt.error << endl << endl
-        << "cqb3 [options] <input_filename> [output_filename]\n"
-        << "Options:\n"
-        << "\t-v : verbose\n"
-        << "\t-d : decode from QB3\n"
-        << "\n"
-        << "Compression only options:\n"
-        << "\t-b : best compression\n"
-        << "\t-f : fastest compression\n"
-        << "\t-l : legacy mode (deprecated)\n"
-        << "\t-q <n> : quanta\n"
-        << "\t-r : reverse RLE behavior, off for best, on for fast\n"
-        << "\t     RLE is only used if applicable\n"
-        << "\t-t : trim input to multiple of 4x4 pixels\n"
-        << "\t-m <b,b,b> : core band mapping\n"
-        << "\t-m x : exhaustive band mapping search\n"
+    cerr << opt.error << "\n\n"
+        "cqb3 [options] <input_filename> [output_filename]\n"
+        "Options:\n"
+        "\t-v : verbose\n"
+        "\t-d : decode from QB3\n"
+        "\n"
+        "Compression only options:\n"
+        "\t-b : best compression\n"
+        "\t-f : fastest compression\n"
+        "\t-l : legacy mode (deprecated)\n"
+        "\t-q <n> : quanta\n"
+        "\t-r : reverse RLE behavior, off for best, on for fast\n"
+        "\t     RLE is only used if applicable\n"
+        "\t-t : trim input to multiple of 4x4 pixels\n"
+        "\t-m <b,b,b> : core band mapping\n"
+        "\t-m x : exhaustive band mapping search\n\n"
+        "\tIf input is a folder, all .png or .qb3 files will be processed\n"
         ;
     return 1;
 }
@@ -180,6 +184,18 @@ bool parse_args(int argc, char** argv, options& opt) {
         return false;
     }
 
+    auto status = std::filesystem::status(opt.in_fname);
+    opt.is_folder = std::filesystem::is_directory(status);
+
+    // output name must be a folder or empty when input is a folder
+    if (opt.is_folder && !opt.out_fname.empty()) {
+        status = std::filesystem::status(opt.out_fname);
+        if (!std::filesystem::is_directory(status)) {
+            opt.error = "Output name must be empty or a folder when input is a folder";
+            return false;
+        }
+    }
+
     // best, rle with ftl , turn them off
     // In theory, legacy mode would work with ftl, but not supported
     if (opt.ftl) {
@@ -189,7 +205,7 @@ bool parse_args(int argc, char** argv, options& opt) {
     }
 
     // If output file name is not provided, extract from input file name
-    if (opt.out_fname.empty()) {
+    if (!opt.is_folder && opt.out_fname.empty()) {
         string fname(opt.in_fname);
         // Strip input path, write output in current folder
         if (fname.find_last_of("\\/") != string::npos)
@@ -338,11 +354,14 @@ int decode_main(options& opts) {
     //params.compression_level = 9;
 
     storage_manager png_src(raw.data(), raw.size());
-    vector<uint8_t> png_buffer(raw.size() + raw.size() / 10); // Pad by 10%
+    vector<uint8_t> png_buffer(1024 + size_t(raw.size()*1.1)); // Pad by 10%
     storage_manager png_blob(png_buffer.data(), png_buffer.size());
     auto t1 = high_resolution_clock::now();
+    // Can't assign directly to error string since it will return nullptr if no error
     auto err_message = png_encode(params, png_src, png_blob);
     time_span = duration_cast<duration<double>>(high_resolution_clock::now() - t1).count();
+    if (err_message && err_message[0])
+        opts.error = err_message;
     if (opts.error.size()) {
         cerr << "PNG encoding failed: " << err_message << endl;
         return 2;
@@ -505,11 +524,6 @@ int encode_main(options& opts) {
         << raster.size.c << "\nSize " << fsize
         << ((raster.dt != ICDT_Byte) ? " 16bit\n" : "\n");
 
-    if (raster.size.x < 4 || raster.size.y < 4) {
-        cerr << "QB3 requires input size between 4 and 65536 pixels\n";
-        return 2;
-    }
-
     if (raster.dt != ICDT_Byte && raster.dt != ICDT_UInt16 && raster.dt != ICDT_Short) {
         cerr << "Only conversion from 8 and 16 bit data implemented\n";
         return 2;
@@ -596,5 +610,34 @@ int main(int argc, char** argv)
     options opts;
     if (!parse_args(argc, argv, opts))
         return Usage(opts);
+    // If it looks like a folder, process all images in the folder
+    if (opts.is_folder) {
+        string out_ext = opts.decode ? ".png" : ".qb3";
+        string in_ext = opts.decode ? ".qb3" : ".png";
+        for (const auto& entry : std::filesystem::directory_iterator(opts.in_fname)) {
+            if (!entry.is_regular_file() || entry.path().extension() != in_ext)
+                continue; // Only files with the right extension
+
+            options subopts = opts;
+            subopts.in_fname = entry.path().string();
+            // If the out_fname is empty, use the current folder
+            if (opts.out_fname.empty())
+                subopts.out_fname = "./";
+
+            // Derive output name from the input
+            string outname = entry.path().filename().string();
+            outname = outname.substr(0, outname.find_first_of("."));
+            subopts.out_fname = (std::filesystem::path(subopts.out_fname) / outname).string()
+                + out_ext;
+            if (opts.verbose)
+                cout << subopts.in_fname << endl;
+            auto stat = subopts.decode ? decode_main(subopts) : encode_main(subopts);
+            if (stat != 0) {
+                cerr << "Error processing " << subopts.in_fname << endl;
+                return stat;
+            }
+        }
+        return 0;
+    }
     return opts.decode ? decode_main(opts) : encode_main(opts);
 }
