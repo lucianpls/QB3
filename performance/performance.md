@@ -34,7 +34,7 @@ Then the qb3 output images are converted back to PNG, also using the cqb3 conver
 relies on libpng 1.6.44 and zlib 1.3.1.1 at the default settings. The PNG images used in comparison are the 
 restored PNGs, not the original ones.
 The computer used has an AMD Threadripper Pro 5955Wx CPU with sufficient memory, running Windows 11. 
-QB3 V1.3.2 compiled using Visual Studio 22 with the CLang-CL compiler was used. The timings used are the ones 
+QB3 V 2.0 compiled using Visual Studio 22 with the CLang-CL compiler was used. The timings used are the ones 
 measured by the cqb3 tool, which include only the time spent for the compression from raw image to compressed 
 image, in memory. Finally, a Jupyter notebook was used to analyze the timings and the size of the image 
 files and to plot various graphs.
