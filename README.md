@@ -76,7 +76,7 @@ while narrow or short images are encoded after reordering the pixel values
 while preserving the locality as much as possible.
 - cqb3 conversion program can convert all PNG files found in a folder.
 
-## [Change Log](doc/changelog.md)
+## [Change Log](doc/changeLog.md)
 
 ## License
 
