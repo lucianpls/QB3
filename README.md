@@ -1,8 +1,8 @@
 # QB3: Image/Raster Compression, Fast and Efficient 
 
+- Compression and decompression rate of 500MB/sec for byte data, 4GB/sec for 64 bit data
 - Better compression than PNG in most cases
-- Lossless compression and decompression rate of 500MB/sec for byte data, 4GB/sec for 64 bit data
-- All integer types, signed and unsigned, 8 to 64bit per value
+- Up to 256 bands, any integer type
 - Lossless, or lossy by division with a small integer (quanta)
 - No significant memory footprint during encoding or decoding
 - No external dependencies, very low complexity
