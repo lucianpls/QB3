@@ -703,7 +703,6 @@ static int encode_best(const T *image, oBits& s, encs &info) {
                     idxs.rewind();
                     auto idx_size = ienc(group, rung, oldrung, idxs);
                     if (idx_size < size) {
-                        idxs.flush();
                         s.rewind(start);
                         s += idxs;
                     }

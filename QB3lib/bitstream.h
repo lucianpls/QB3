@@ -95,7 +95,7 @@ public:
         acc |= static_cast<uint64_t>(val) << acc_bits;
         if (acc_bits + nbits >= 64) {
             // Flush the accumulator which is now full
-            *reinterpret_cast<uint64_t*>(v + (bitp / 64) * 8) = acc;
+            reinterpret_cast<uint64_t*>(v)[bitp / 64] = acc;
             // Start a new accumulator with the remaining bits, if any
             acc = acc_bits ? val >> (64 - acc_bits) : 0;
         }
@@ -105,17 +105,18 @@ public:
     template<typename T> void push(std::pair<size_t, T> p) { push(p.second, p.first); }
 
     // Append content from other output bitstream, which should be flushed
-    oBits& operator+=(const oBits& other) {
-        auto len = other.bitp;
-        for (auto pv = reinterpret_cast<uint64_t*>(other.v); len >= 64; len -= 64, pv++)
-            push(*pv, 64);
+    oBits& operator+=(oBits& other) {
+        other.flush();
+        // Copy the full 64bit words
+        auto const pv = reinterpret_cast<const uint64_t*>(other.v);
+        for (int i = 0; i < other.bitp / 64; i++)
+            push(pv[i], 64);
 
-        if (other.bitp & 63) { // Partial last word
-            auto val = reinterpret_cast<const uint64_t*>(other.v)[other.bitp / 64];
-            // Mask it to the valid bits, just in case
-            val &= ~0ull >> (64 - (other.bitp & 63));
-            push(val, other.bitp & 63);
-        }
+        // Copy the remaining bits, if any
+        auto acc_bits = other.bitp & 63; // Number of bits in the accumulator
+        if (acc_bits != 0)
+            push(pv[other.bitp / 64] & (~0ull >> (64 - acc_bits)), acc_bits);
+
         return *this;
     }
 

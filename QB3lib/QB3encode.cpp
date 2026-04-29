@@ -463,6 +463,7 @@ static size_t stored_encode(encsp p, void* source, void* destination) {
     oBits s(d);
     p->mode = QB3M_STORED; // Force raw mode
     write_headers(p, s);
+    // It is safe to call position() / 8 because the stream is byte aligned
     if (p->error)
         return 0;
     // Copy the raw data at the current position, they are not overlapping
@@ -482,7 +483,6 @@ static size_t stored_encode(encsp p, void* source, void* destination) {
         d += p->stride;
         src += linesize;
     }
-    // Don't call tobyte() after the memcpy, the stream accumulator will not match the content
     return s.position() / 8 + raw_size(p);
 }
 
@@ -534,7 +534,7 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
 #undef ENC
 
     s.flush();
-    auto len = (s.position() + 7) / 8; // current output position in bytes, aligned
+    auto len = (s.position() + 7) / 8; // byte aligned current output position
     if (rle) {
         p->mode = mode; // restore the user selected mode that includes RLE
         if (p->error) // Bail out if there was an error
