@@ -65,7 +65,7 @@ private:
 // Output bitstream, assumes enough space
 class oBits {
 public:
-    oBits(uint8_t * data) : acc(0), v(data), bitp(0) {}
+    oBits(uint8_t * data) : acc(0), bitp(0), v(data) {}
 
     // Number of bits written
     size_t position() const { return bitp; }
@@ -84,59 +84,57 @@ public:
         return bitp; // curent position
     }
 
+    // Push 1 to 64 bits into the stream
     // Do not call with val having bits above "nbits" set
     template<typename T>
     void push(T val, size_t nbits) {
         static_assert(std::is_integral<T>::value && std::is_unsigned<T>::value,
             "Only works with unsigned integral types");
         assert(nbits < 65);
-        auto acc_bits = bitp & 63; // Number of bits in the accumulator
+        size_t acc_bits = bitp & 63; // bits in the accumulator
         // Add the new bits to the accumulator
         acc |= static_cast<uint64_t>(val) << acc_bits;
         if (acc_bits + nbits >= 64) {
-            // Flush the accumulator which is now full
+            // Flush the full accumulator
             reinterpret_cast<uint64_t*>(v)[bitp / 64] = acc;
             // Start a new accumulator with the remaining bits, if any
-            acc = acc_bits ? val >> (64 - acc_bits) : 0;
+            // When acc_bits == 0, the shift result is undefined, but we don't use it
+            // instead we set acc to 0 by masking with (acc_bits != 0)
+            acc = (val >> (64 - acc_bits)) * (acc_bits != 0);
         }
         bitp += nbits;
     }
 
     template<typename T> void push(std::pair<size_t, T> p) { push(p.second, p.first); }
 
-    // Append content from other output bitstream, which should be flushed
-    oBits& operator+=(oBits& other) {
-        other.flush();
+    // Append content from other output bitstream
+    oBits& operator+=(const oBits& other) {
         // Copy the full 64bit words
         auto const pv = reinterpret_cast<const uint64_t*>(other.v);
+        // This is fairly efficient when other.bitp is small, no need to optimize
         for (int i = 0; i < other.bitp / 64; i++)
             push(pv[i], 64);
-
-        // Copy the remaining bits, if any
-        auto acc_bits = other.bitp & 63; // Number of bits in the accumulator
-        if (acc_bits != 0)
-            push(pv[other.bitp / 64] & (~0ull >> (64 - acc_bits)), acc_bits);
-
+        // Remainig bits from the other accumulator
+        size_t oacc_bits = other.bitp & 63;
+        if (oacc_bits)
+            push(other.acc, oacc_bits);
         return *this;
     }
 
-    // Flush stream, making sure that bytes are writtent to the buffer
-    void flush() {
-        if (bitp & 63)
-            reinterpret_cast<uint64_t*>(v)[bitp / 64] = acc;
-    }
-
-    // Flush and round position to byte boundary
+    // Flush accumulator and round position to byte boundary
     size_t tobyte() {
-        flush();
+        // Write the accumulator, it might have some unwrittent bits
+        reinterpret_cast<uint64_t*>(v)[bitp / 64] = acc;
+        // Clear the next 64 bits
+        reinterpret_cast<uint64_t*>(v)[bitp / 64 + 1] = 0;
         bitp = (bitp + 7) & ~0x7;
-        if (0 == (bitp & 63)) // Clear the accumulator if at 64 bit boundary
-            acc = 0;
-        return bitp >> 3; // In bytes
+        // Load the new accumulator, except if bitp is at 64 bit boundary, in which case we clear it
+        acc = reinterpret_cast<const uint64_t*>(v)[bitp / 64] & ((1ull << (bitp & 63)) - 1);
+        return position() / 8; // Used size in bytes
     }
 
 private:
     uint64_t acc; // Accumulator for bits not yet written to the output
-    uint8_t *v;
     size_t bitp; // write position, includes up to 63 bits in the accumulator
+    uint8_t *v;
 };

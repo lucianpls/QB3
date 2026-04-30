@@ -510,7 +510,6 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
     uint8_t* const d = reinterpret_cast<uint8_t*>(destination);
     oBits s(d);
     write_headers(p, s);
-    s.flush();
     auto data_position = s.position() / 8; // It is byte aligned already
     if (p->error) return 0;
 
@@ -533,8 +532,7 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
     } // data type
 #undef ENC
 
-    s.flush();
-    auto len = (s.position() + 7) / 8; // byte aligned current output position
+    auto len = s.tobyte(); 
     if (rle) {
         p->mode = mode; // restore the user selected mode that includes RLE
         if (p->error) // Bail out if there was an error
@@ -559,9 +557,8 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
                 write_headers(p, srle);
                 if (p->error)
                     return 0;
-                // Flush, then copy the RLE encoded data at the current position, they are not overlapping
+                // Copy the RLE encoded data at the current position, they are not overlapping
                 memcpy(d + srle.tobyte(), d + len, rle_size);
-                // The stream accumulator is not clean, don't call tobyte() anymore
                 return srle.position() / 8 + rle_size;
             }
         }
