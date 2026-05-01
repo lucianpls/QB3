@@ -72,16 +72,14 @@ public:
 
     // Rewind to a position before the current one
     size_t rewind(size_t pos = 0) {
-        if (pos <= bitp) { // Only backward
-            bitp = pos;
-            acc = 0;
-            if (bitp & 63) {
-                // Assumes that the 64 bit read does not overflow output buffer, caller's responsibility
-                acc = reinterpret_cast<const uint64_t*>(v)[pos / 64];
-                acc &= ~0ull >> (64 - (pos & 63));
-            }
+        if (pos >= bitp)
+            return bitp; // Can't go forward
+        acc = 0;
+        if (pos & 63) {
+            acc = reinterpret_cast<const uint64_t*>(v)[pos / 64];
+            acc &= ~0ull >> (64 - (pos & 63));
         }
-        return bitp; // curent position
+        return bitp = pos; // New position
     }
 
     // Push 1 to 64 bits into the stream
