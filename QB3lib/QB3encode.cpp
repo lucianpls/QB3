@@ -350,8 +350,8 @@ template<typename T> static int enc(const T *source, oBits &s, encsp p)
     // Always pad to B x B groups to avoid duplicating lines or columns
     if (p->xsize < B || p->ysize < B) {
         encs smallimg(*p);
-        std::vector<T> tempbuf; // Vector to handle memory management
-        size_t ngroups = (p->xsize * p->ysize + B2 - 1) / B2;
+        std::vector<T> tempbuf;
+        size_t ngroups = (p->xsize * p->ysize + B2 - 1) / B2; // Padded up
         size_t bufsize =  p->nbands * ngroups * B2;
         tempbuf.resize(bufsize); // This initializes the vector with zeros
         auto dst = tempbuf.data();
@@ -384,8 +384,8 @@ template<typename T> static int enc(const T *source, oBits &s, encsp p)
         }
         // Adjust smallimg parameters
         smallimg.stride = 0; // No stride in encoding the small image
-        source = tempbuf.data();
-        p = &smallimg;
+        // Encode the small image, it will be padded with zeros, which is fine
+        return enc(tempbuf.data(), s, &smallimg);
     }
 
     int error(0);    
