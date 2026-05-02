@@ -384,8 +384,8 @@ template<typename T> static int enc(const T *source, oBits &s, encsp p)
         }
         // Adjust smallimg parameters
         smallimg.stride = 0; // No stride in encoding the small image
-        source = tempbuf.data();
-        p = &smallimg;
+        // Recurse on the small image, using the temporaries
+        return enc(tempbuf.data(), s, &smallimg);
     }
 
     int error(0);    
