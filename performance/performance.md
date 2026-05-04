@@ -109,34 +109,34 @@ lines at the bottom of the graph, taking between 1 and 5 milliseconds to compres
 8 bit image, showing very little variation between images. There is a massive difference 
 between QB3 and PNG in compression speed.
 
-QB3 compression speed is 20-50 times faster than PNG for natural images. Even the QB3 
+QB3 compression speed is 20-60 times faster than PNG for natural images. Even the QB3 
 BEST + Band mix mode, which compresses the input image 10 times in sequence, is still faster 
 than the PNG compression in most cases. This is the red line on the graph above, which is 
-the only one that is even intersecting the PNG line. Note the compression rate of QB3, 
-measured based on the raw data volume, which for the FAST mode averages 397 MB/s, with 
-a peak of 1057 MB/s! The PNG average compression rate is 9.5 MB/s, which is more than 
-40 times slower than the average of QB3 FAST mode. The difference is even larger at the 
-extreme, for the slowest image to compress, the QB3 FAST mode is more than 57 times 
-faster than PNG. Within QB3 modes, the FAST mode is 10 to 20 % faster than the BASE mode, 
-which is twice as fast as the QB3 BEST. As a reference point, raw data rate for HD video 
-(1920x1080), 8 bit RGB at 60 FPS is 356MB/s, which is under the average compression rate 
-for QB3 FAST mode during this test, single thread, on the 4.5 GHz Zen 3 CPU, even without 
-CPU pinning. This means that it is possible to losslessly compress HD video at 60 frames 
-per second in real time using QB3 using a single thread on a modern CPU.  
+the only one that is even close to the PNG line. Note the compression rate of QB3, 
+measured based on the raw data volume, which for the FAST mode averages 560MB/s, with 
+a peak of 910MB/s! The PNG average compression rate is 9.5MB/s, which is almost 60 times 
+slower than the average of QB3 FAST mode. The difference is even larger at the 
+extreme, for the slowest image to compress, the QB3 FAST compression is 100 times faster than 
+PNG. Within QB3 modes, the FAST mode is 10 to 20 % faster than the BASE mode, 
+which is more than twice as fast as the QB3 BEST. As a reference point, raw data rate for 
+HD video (1920x1080), 8 bit RGB at 60 FPS is 356MB/s, which is considerably under the average 
+compression rate for QB3 FAST and BASE modes during this test, single thread, on the 4.5 GHz 
+Zen 3 CPU. This means that it is possible to losslessly compress HD video at 60 frames 
+per second in real time using QB3 on a single thread of a modern CPU.  
 Summarizing the results in just a few numbers:
 
 |Time (ms)|FAST|BASE|BEST|PNG|
 |---|---|---|---|---|
-|Max|2.60|3.22|6.66|150|
-|Avg|1.98|2.40|4.89|82.90|
-|Min|0.74|0.98|1.38|12|
+|Max|1.73|1.85|5.52|150|
+|Avg|1.40|1.51|4.08|82.90|
+|Min|0.86|0.88|1.17|12|
 
 
 |Rate (MB/s)|FAST|BASE|BEST|PNG|
 |---|---|---|---|---|
-|Max|1057.17|800.93|569.30||
-|Avg| 397.76|327.44|160.93|9.50|
-|Min| 302.57|244.26|118.17||
+|Max|910.54|894.69|672.57||
+|Avg|560.30|519.51|192.70|9.50|
+|Min|454.30|425.33|142.40||
 
 
 ### Decompression speed
@@ -150,17 +150,16 @@ These results are for the QB3 FAST mode, they would be 10-20% slower for the BAS
 
 |Rate (MB/s)|QB3|PNG|
 |---|---|---|
-|Max|426.02|587.68|
-|Avg|354.57|240.17|
-|Min|331.56|190.15|
+|Max|442.94|652.91|
+|Avg|366.19|235.07|
+|Min|336.19|180.64|
 
-In contrast to most compression algorithms, QB3 speed is almost symmetrical, with the decompression 
-being slightly slower than the compression, except in the BEST mode, where compression is slower. 
-This is due to the longer dependency chain during decompression, and also because it is harder for 
-the compiler to vectorize. The decompression speed values shown here are for the QB3 FAST mode. It 
-is very close to being sufficiently fast to decode a full RGB HD video stream at 60 FPS.
-Decompression speed for QB3 BASE or BEST mode is only about 20% slower than in FAST mode, and more 
-dependent on the data.
+In contrast to most compression algorithms, QB3 decompression is slower than the compression, 
+except in the BEST mode. This is due to the very long dependency chain when decompressing, which
+lowers the instruction level parallelism, and because it is harder for the compiler to vectorize.
+The decompression speed values shown here are for the QB3 FAST mode. It is very close to being 
+sufficiently fast to decode a full RGB HD video stream at 60 FPS. Decompression speed for QB3 BASE 
+or BEST mode is about 30% slower than in FAST mode, and more dependent on the data.
 
 ## 16 bit images
 
