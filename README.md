@@ -1,7 +1,7 @@
 # QB3: Image/Raster Compression, Fast and Efficient 
 
 - Better compression than PNG in most cases
-- Lossless compression and decompression rate of 500MB/sec for byte data, 4GB/sec for 64 bit data
+- Lossless compression and decompression rate of 600MB/sec for byte RGB data
 - All integer types, signed and unsigned, 8 to 64bit per value
 - Lossless, or lossy by division with a small integer (quanta)
 - No significant memory footprint during encoding or decoding
@@ -9,7 +9,7 @@
 
 # Performance
 Compared with PNG on a public image dataset, QB3 is 
-[7% smaller while being 40 times faster](performance/performance.md)
+[7% smaller while being 60 times faster](performance/performance.md)
 
 ![Compression vs PNG](performance/CID22_QB3vsPNG.svg)
 
@@ -58,6 +58,10 @@ as C++ templates.
 The higher level C API and the binary format serialization and deserialization
 is located in qb3encode.cpp and qb3decode.cpp. Lossy compression by 
 pre-quantization of input values is also implemented in these files.
+
+## Version 2.1.0
+- 60% faster compression, achieved by optimizing the output bitstream
+- Fixed memory leak in the encoding of very narrow of short images
 
 ## Version 2.0.0
 Version 2.0.0 is an update to the QB3 codec that breaks backward compatibility

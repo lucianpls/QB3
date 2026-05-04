@@ -1,6 +1,6 @@
 # QB3 Performance vs PNG
 
-## Abstract
+## Introduction
 
 QB3 is a lossless image compression algorithm able to compress natural images measurably better 
 than PNG, while being forty times faster than PNG for 8 bit data. QB3 
@@ -10,34 +10,34 @@ and no external dependencies.
 The compression speed depends on the input, but less so than in most other formats. QB3 is able to 
 compress and decompress a full HD 1080P sequence of frames at 60 frames per second while using a 
 single thread of a modern CPU.  
-This document describes the performance of the QB3 image compression compared to PNG, tested on 
-the same hardware.
+This document describes the performance of the QB3 image compression compared to PNG.
 PNG (Portable Network Graphics) is a widely used lossless image format, based on the DEFLATE 
-compression algorithm used by the ZIP archives. The image specific part of the PNG format is a 
-filter applied to the input data before compressing it with DEFLATE. The filter is selected from 
+compression algorithm used by the ZIP archives. The image specific part of PNG is a filter 
+applied to the input data before compressing it with DEFLATE. The filter is selected from 
 a small set of algorithms that predict the value of a pixel based on the values of the previous 
-pixels, filtering which makes the image data more compressible. PNG can handle images with 8-bit 
+pixels, which makes the image data more compressible. PNG can handle images with 8-bit 
 and 16-bit unsigned values.
-Similarly, QB3 is also using a predictor filter to make the data more compressible, followed by 
-a fixed entropy coding scheme.
+Similar to PNG, QB3 consist of a predictor filter to make the data more compressible, followed by 
+a much simpler coding scheme.
 
 ## Method
-This comparison is done on the reference images from the 
+This comparison is done on the images from the 
 [Cloudinary Image Dataset ’22](https://cloudinary.com/labs/cid22) (CID22) dataset, shown below.  
 
 ![images](https://cloudinary-marketing-res.cloudinary.com/image/upload/f_auto,q_auto/v1682016607/CID22_full_set)
 
-The 512x512 8bit RGB reference images are used, with the two single band (grayscale) images being removed. 
-The images are mostly natural photographs, plus a few illustrations and computer 
-generated images. The input images are compressed using the cqb3 tool, using various QB3 settings available. 
+The 512x512 8bit RGB reference images are used, with the two single band (grayscale) images being ignored. 
+The images are mostly natural photographs plus a few illustrations and computer generated images. 
+The input images are compressed using the cqb3 tool, using various QB3 settings available. 
 Then the qb3 output images are converted back to PNG, also using the cqb3 conversion utility, which in turn 
 relies on libpng 1.6.44 and zlib 1.3.1.1 at the default settings. The PNG images used in comparison are the 
 restored PNGs, not the original ones.
 The computer used has an AMD Threadripper Pro 5955Wx CPU with sufficient memory, running Windows 11. 
-QB3 V1.3.2 compiled using Visual Studio 22 with the CLang-CL compiler was used. The timings used are the ones 
-measured by the cqb3 tool, which include only the time spent for the compression from raw image to compressed 
-image, in memory. Finally, a Jupyter notebook was used to analyze the timings and the size of the image 
-files and to plot various graphs.
+QB3 V2.1.0 was compiled by the Visual Studio 22 with the CLang-CL compiler with AVX2 instruction set enabled. 
+The timings used are the ones reported by the cqb3 tool, which include only the time spent for the compression 
+from raw image to compressed image, in memory.
+Finally, a Jupyter notebook was used to analyze the timings and the size of the image files and to 
+plot various graphs.
 
 ## Results
 
@@ -245,6 +245,7 @@ is about the same as PNG on this set overall, with the expected problems with ar
 noisy images. This set also contains 16 bit images, where QB3 is able to compress significantly 
 better than PNG.
 
+On Windows, the QB3 library compiled using Clang-CL outperforms the MSVC compiled library by about 20%. 
 QB3 also works well on ARM64 architecture. On a g7 (Graviton 3) Linux al2023 instance on AWS, the results for this test 
 are about 10 to 20% slower across the board. On a g8 instance (Graviton 4) the results are 10 to 20% faster than 
 the ones presented here. PNG decompression is much slower on that architecture, making QB3 decompression look better
