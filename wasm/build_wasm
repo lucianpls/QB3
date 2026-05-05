@@ -13,6 +13,8 @@ OPTS="-O3 -flto"
 emcc $OPTS -fno-rtti -fno-exceptions -I . -c qb3decapi.cpp
 
 #Build qb3-wasm module, see post.js for API
+if true
+then
 emcc $OPTS -o qb3-wasm.mjs qb3decapi.o libQB3.a \
     -s EXPORTED_FUNCTIONS=_malloc,_free \
     -s NO_EXIT_RUNTIME=1 \
@@ -21,3 +23,15 @@ emcc $OPTS -o qb3-wasm.mjs qb3decapi.o libQB3.a \
     --post-js post.js \
     -sENVIRONMENT=web,worker \
     -sEXPORTED_RUNTIME_METHODS=[writeArrayToMemory,UTF8ToString]
+else
+# For esri js viewer
+emcc $OPTS -o qb3-wasm.mjs qb3decapi.o libQB3.a \
+    -s MODULARIZE=1 \
+    -s EXPORTED_FUNCTIONS=_malloc,_free \
+    -s EXPORTED_RUNTIME_METHODS=writeArrayToMemory,UTF8ToString \
+    -s ENVIRONMENT=web,worker \
+    -s ALLOW_MEMORY_GROWTH=1 \
+    -s NO_EXIT_RUNTIME=1
+
+# --post-js post.js
+fi
