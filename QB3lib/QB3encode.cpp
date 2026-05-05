@@ -350,8 +350,8 @@ template<typename T> static int enc(const T *source, oBits &s, encsp p)
     // Always pad to B x B groups to avoid duplicating lines or columns
     if (p->xsize < B || p->ysize < B) {
         encs smallimg(*p);
-        std::vector<T> tempbuf; // Vector to handle memory management
-        size_t ngroups = (p->xsize * p->ysize + B2 - 1) / B2;
+        std::vector<T> tempbuf;
+        size_t ngroups = (p->xsize * p->ysize + B2 - 1) / B2; // Padded up
         size_t bufsize =  p->nbands * ngroups * B2;
         tempbuf.resize(bufsize); // This initializes the vector with zeros
         auto dst = tempbuf.data();
@@ -463,14 +463,16 @@ static size_t stored_encode(encsp p, void* source, void* destination) {
     oBits s(d);
     p->mode = QB3M_STORED; // Force raw mode
     write_headers(p, s);
+    // It is safe to call position() / 8 because the stream is byte aligned
     if (p->error)
         return 0;
     // Copy the raw data at the current position, they are not overlapping
     if (p->stride == 0 || p->stride == p->xsize * p->nbands) // Contiguous
     {
         memcpy(d + s.tobyte(), source, raw_size(p));
-        // Return the new size
-        return s.tobyte() + raw_size(p);
+        // Return the new size, don't call tobyte() after the memcpy, 
+        // the stream accumulator will not match the content
+        return s.position() / 8 + raw_size(p);
     }
     // Non contiguous, copy line by line
     size_t linesize = p->xsize * p->nbands * typesizes[p->type];
@@ -481,7 +483,7 @@ static size_t stored_encode(encsp p, void* source, void* destination) {
         d += p->stride;
         src += linesize;
     }
-    return s.tobyte() + raw_size(p);
+    return s.position() / 8 + raw_size(p);
 }
 
 // The encode public API, returns 0 if an error is detected
@@ -507,10 +509,8 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
 
     uint8_t* const d = reinterpret_cast<uint8_t*>(destination);
     oBits s(d);
-    // size of headers
-    size_t data_position(0);
     write_headers(p, s);
-    data_position = (s.position() + 7) / 8; // It is byte aligned already
+    auto data_position = s.position() / 8; // It is byte aligned already
     if (p->error) return 0;
 
 #define ENC(T) enc(reinterpret_cast<const T*>(source), s, p)
@@ -532,7 +532,7 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
     } // data type
 #undef ENC
 
-    auto len = (s.position() + 7) / 8; // current output position in bytes
+    auto len = s.tobyte(); 
     if (rle) {
         p->mode = mode; // restore the user selected mode that includes RLE
         if (p->error) // Bail out if there was an error
@@ -559,8 +559,7 @@ size_t qb3_encode(encsp p, void* source, void* destination) {
                     return 0;
                 // Copy the RLE encoded data at the current position, they are not overlapping
                 memcpy(d + srle.tobyte(), d + len, rle_size);
-                // Return the new size
-                return srle.tobyte() + rle_size;
+                return srle.position() / 8 + rle_size;
             }
         }
     }

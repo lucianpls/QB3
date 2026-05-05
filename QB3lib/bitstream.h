@@ -65,34 +65,41 @@ private:
 // Output bitstream, assumes enough space
 class oBits {
 public:
-    oBits(uint8_t * data) : v(data), bitp(0) {}
+    oBits(uint8_t * data) : acc(0), bitp(0), v(data) {}
 
     // Number of bits written
     size_t position() const { return bitp; }
 
     // Rewind to a position before the current one
     size_t rewind(size_t pos = 0) {
-        if (pos < bitp) { // Only backward
-            bitp = pos;
-            if (pos & 7) // clear last byte partial bits
-                v[pos / 8] &= 0xff >> (8 - (pos & 7));
+        if (pos >= bitp)
+            return bitp; // Can't go forward
+        acc = 0;
+        if (pos & 63) {
+            acc = reinterpret_cast<const uint64_t*>(v)[pos / 64];
+            acc &= ~0ull >> (64 - (pos & 63));
         }
-        return bitp; // final position
+        return bitp = pos; // New position
     }
 
+    // Push 1 to 64 bits into the stream
     // Do not call with val having bits above "nbits" set
     template<typename T>
     void push(T val, size_t nbits) {
         static_assert(std::is_integral<T>::value && std::is_unsigned<T>::value,
             "Only works with unsigned integral types");
         assert(nbits < 65);
-        size_t used = 0;
-        if (bitp % 8 != 0) { // Partial byte at the end
-            v[bitp / 8] |= static_cast<uint8_t>(val << (bitp % 8));
-            used = 8ull - (bitp % 8);
+        size_t acc_bits = bitp & 63; // bits in the accumulator
+        // Add the new bits to the accumulator
+        acc |= static_cast<uint64_t>(val) << acc_bits;
+        if (acc_bits + nbits >= 64) {
+            // Flush the full accumulator
+            reinterpret_cast<uint64_t*>(v)[bitp / 64] = acc;
+            // Start a new accumulator with the remaining bits, if any
+            // When acc_bits == 0, the shift result is undefined, but we don't use it
+            // instead we set acc to 0 by masking with (acc_bits != 0)
+            acc = (val >> (64 - acc_bits)) * (acc_bits != 0);
         }
-        for (; nbits > used; used += 8)
-            v[(bitp + used) / 8] = static_cast<uint8_t>(val >> used);
         bitp += nbits;
     }
 
@@ -100,27 +107,32 @@ public:
 
     // Append content from other output bitstream
     oBits& operator+=(const oBits& other) {
-        auto len = other.bitp;
-        for (auto pv = reinterpret_cast<uint64_t*>(other.v); len >= 64; len -= 64, pv++)
-            push(*pv, 64);
-        // bits at the end
-        if (len) {
-            uint64_t acc = 0;
-            auto pv = other.v + (other.bitp / 64) * 8;
-            for (size_t i = 0; i * 8 < len; i++)
-                acc |= static_cast<uint64_t>(pv[i]) << (i * 8);
-            push(acc, len);
-        }
+        // Copy the full 64bit words
+        auto const pv = reinterpret_cast<const uint64_t*>(other.v);
+        // This is fairly efficient when other.bitp is small, no need to optimize
+        for (int i = 0; i < other.bitp / 64; i++)
+            push(pv[i], 64);
+        // Remainig bits from the other accumulator
+        size_t oacc_bits = other.bitp & 63;
+        if (oacc_bits)
+            push(other.acc, oacc_bits);
         return *this;
     }
 
-    // Round position to byte boundary
+    // Flush accumulator and round position to byte boundary
     size_t tobyte() {
+        // Write the accumulator, it might have some unwrittent bits
+        reinterpret_cast<uint64_t*>(v)[bitp / 64] = acc;
+        // Clear the next 64 bits
+        reinterpret_cast<uint64_t*>(v)[bitp / 64 + 1] = 0;
         bitp = (bitp + 7) & ~0x7;
-        return bitp >> 3; // In bytes
+        // Load the new accumulator, except if bitp is at 64 bit boundary, in which case we clear it
+        acc = reinterpret_cast<const uint64_t*>(v)[bitp / 64] & ((1ull << (bitp & 63)) - 1);
+        return position() / 8; // Used size in bytes
     }
 
 private:
+    uint64_t acc; // Accumulator for bits not yet written to the output
+    size_t bitp; // write position, includes up to 63 bits in the accumulator
     uint8_t *v;
-    size_t bitp; // write position
 };

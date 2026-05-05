@@ -9,7 +9,7 @@
 
 # Performance
 Compared with PNG on a public image dataset, QB3 is 
-[7% smaller while being 40 times faster](performance/performance.md)
+[7% smaller while being 60 times faster](performance/performance.md)
 
 ![Compression vs PNG](performance/CID22_QB3vsPNG.svg)
 
@@ -58,6 +58,10 @@ as C++ templates.
 The higher level C API and the binary format serialization and deserialization
 is located in qb3encode.cpp and qb3decode.cpp. Lossy compression by 
 pre-quantization of input values is also implemented in these files.
+
+## Version 2.1.0
+- 60% faster compression, achieved by optimizing the output bitstream
+- Fixed memory leak in the encoding of very narrow of short images
 
 ## Version 2.0.0
 Version 2.0.0 is an update to the QB3 codec that breaks backward compatibility

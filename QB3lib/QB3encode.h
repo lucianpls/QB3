@@ -701,8 +701,8 @@ static int encode_best(const T *image, oBits& s, encs &info) {
                 size_t size(s.position() - start);
                 if (rung > 3 && rung < 63 && size >= (36 + 3 * UBITS + 2 * rung)) {
                     idxs.rewind();
-                    auto idx = ienc(group, rung, oldrung, idxs);
-                    if (idx < size) {
+                    auto idx_size = ienc(group, rung, oldrung, idxs);
+                    if (idx_size < size) {
                         s.rewind(start);
                         s += idxs;
                     }
