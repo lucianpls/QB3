@@ -2,15 +2,12 @@
 
 ## Introduction
 
-QB3 is a lossless image compression algorithm able to compress natural images measurably better 
-than PNG, while being forty times faster than PNG for 8 bit data. QB3 
-can compress all integer type raster data, with multiple color bands. QB3 is based on a
-portable, low complexity, single pass compression algorithm with no measurable memory overhead 
+This is a performance comparison of the QB3 image compression relative to PNG.
+QB3 is a lossless image compression algorithm sixty times faster than PNG for 8 bit data while
+compressing natural images measurably better. QB3 
+can compress all integer type raster data and multiple color bands. QB3 is based on a
+portable, low complexity, single pass compression algorithm that has no measurable memory overhead 
 and no external dependencies.
-The compression speed depends on the input, but less so than in most other formats. QB3 is able to 
-compress and decompress a full HD 1080P sequence of frames at 60 frames per second while using a 
-single thread of a modern CPU.  
-This document describes the performance of the QB3 image compression compared to PNG.
 PNG (Portable Network Graphics) is a widely used lossless image format, based on the DEFLATE 
 compression algorithm used by the ZIP archives. The image specific part of PNG is a filter 
 applied to the input data before compressing it with DEFLATE. The filter is selected from 
