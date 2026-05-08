@@ -1,4 +1,23 @@
-## Version 1.3.2
+## Version 2.1.0
+- 60% faster compression, achieved by optimizing the output bitstream
+- Fixed memory leak in the encoding of very narrow of short images
+
+## Version 2.0.0
+Version 2.0.0 is an update to the QB3 codec that breaks backward compatibility
+with version 1.x. The API and all the previous features stay the 
+same, but the binary format is different. Version 1.x is deprecated and should
+not be used anymore.
+The main changes are:
+
+- Improved compression ratio by tuning the 8 bit encoding tables to match the 
+expected bit rank distribution of natural images. This change results in a 
+slightly smaller output for all modes, especially for 8 bit images, and it 
+comes with no speed penalty.
+- Encoding of images less than 4 pixels wide or less than 4 pixels tall is 
+now possible. Images with a total of sixteen or fewer pixels are simply stored, 
+while narrow or short images are encoded after reordering the pixel values 
+while preserving the locality as much as possible.
+- cqb3 conversion program can convert all PNG files found in a folder.## Version 1.3.2
  - Significant performance improvements, especially for byte data on x86_64
  - PNG comparison updated to reflect the latest changes
 
