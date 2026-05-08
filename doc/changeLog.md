@@ -19,7 +19,7 @@ while narrow or short images are encoded after reordering the pixel values
 while preserving the locality as much as possible.
 - cqb3 conversion program can convert all PNG files found in a folder.## Version 1.3.2
  - Significant performance improvements, especially for byte data on x86_64
- - PNG comparison updated to reflect the latest changes
+ - PNG comparison updated to reflect the latest changes  
 
 ## Version 1.3.1
 - Made QB3M_FTL the default mode. The output is barely larger than QB3M_BASE 
