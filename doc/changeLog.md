@@ -17,7 +17,9 @@ comes with no speed penalty.
 now possible. Images with a total of sixteen or fewer pixels are simply stored, 
 while narrow or short images are encoded after reordering the pixel values 
 while preserving the locality as much as possible.
-- cqb3 conversion program can convert all PNG files found in a folder.## Version 1.3.2
+- cqb3 conversion program can convert all PNG files found in a folder.
+
+## Version 1.3.2
  - Significant performance improvements, especially for byte data on x86_64
  - PNG comparison updated to reflect the latest changes  
 
