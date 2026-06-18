@@ -61,7 +61,7 @@ pre-quantization of input values is also implemented in these files.
 
 ## Version 2.1.0
 - 60% faster compression, achieved by optimizing the output bitstream
-- Fixed memory leak in the encoding of very narrow of short images
+- Fixed memory leak in the encoding of very narrow or very short images
 
 ## Version 2.0.0
 Version 2.0.0 is an update to the QB3 codec that breaks backward compatibility
