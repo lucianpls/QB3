@@ -149,13 +149,26 @@ static std::pair<size_t, uint64_t> qb3csztbl(uint64_t val, size_t rung) {
     return qb3csz(val, rung);
 }
 
+// If the rung bits of the input values match 1*0*, returns the index of first 0 + 1
+// So we can discern between 0 and 1
+// Return > B2 if no match
+template<typename T>
+static size_t step(T const* v, size_t rung) {
+    uint64_t acc = 0ull;
+    // Accumulate flipped rung bits
+    for (size_t i = 0; i < B2; i++)
+        acc = (acc << 1) | (1 ^ (v[i] >> rung));
+    // Looking for 0+1*, zero is good on decoding
+    bool s = ((acc & (acc + 1)) != 0);
+    return B2 + B2 * 2 * s - topbit(acc * 2 + 1);
+}
+
 // only encode the group entries, not the rung switch
 // bitsused is used to choose the rung for encoding
 // If abits > 0, the accumulator is also pushed into the stream
 template <typename T, bool SKIPSTEP = false>
 static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t abits)
 {
-    assert(abits <= 47); // Might push 17 bits
     if (1 >= bitsused) { // only 1s and 0s, rung is -1 or 0
         acc |= static_cast<uint64_t>(bitsused) << abits++;
         if (0 != bitsused)
@@ -358,6 +371,10 @@ static void cfgenc(const T igrp[B2], T cf, T pcf, size_t oldrung, oBits& bits) {
         }
     }
     // Encode the group only, divided by CF
+    if (abits > 47) {
+        bits.push(acc, abits);
+        acc = abits = 0;
+    }
     groupencode(group, bitsused, bits, acc, abits);
 }
 

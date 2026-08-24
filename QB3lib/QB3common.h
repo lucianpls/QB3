@@ -135,36 +135,6 @@ static T smag(T v) {
     return (v >> 1) ^ (~T(0) * (v & 1));
 }
 
-// If the rung bits of the input values match 1*0*, returns the index of first 0 + 1
-// So we can discern between 0 and 1
-// Return > B2 if no match
-template<typename T>
-static size_t step(T const* v, size_t rung) {
-    uint64_t acc = 0ull;
-    // Accumulate flipped rung bits
-    for (size_t i = 0; i < B2; i++)
-        acc = (acc << 1) | (1 ^ (v[i] >> rung));
-    // Looking for 0+1*, zero is good on decoding
-    bool s = ((acc & (acc + 1)) != 0);
-    return B2 + B2 * 2 * s - topbit(acc * 2 + 1);
-}
-
-// Specialization for 8bit values, loopless, thus faster
-template<>
-size_t step<uint8_t>(uint8_t const* v, size_t rung) {
-    assert(B2 == 16);
-    auto v64 = reinterpret_cast<uint64_t const*>(v);
-    auto v1 = v64[0] & (0x0101010101010101ull << rung);
-    auto v2 = v64[1] & (0x0101010101010101ull << rung);
-    // Accumulate rung bits at the top
-    v1 *= 0x2040810204081ull;
-    v2 *= 0x2040810204081ull;
-    // Shift and combine the valid bits, they are not flipped and are in LSB order
-    auto acc = ((v1 >> (49 + rung)) & 0xff) | ((v2 >> (41 + rung)) & 0xff00);
-    bool s = ((acc & (acc + 1)) != 0);
-    return s * B2 + topbit(acc * 2 + 1);
-}
-
 // QB3 block order, encoded as a single 64bit value
 // each nibble holds the adress of a pixel, two bits for x and two bits for y
 // Use nibble values in the identity matrix, read in the curve order

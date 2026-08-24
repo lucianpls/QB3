@@ -137,6 +137,8 @@ static std::pair<size_t, uint64_t> qb3dsztbl(uint64_t val, size_t rung) {
     return qb3dsz(val, rung);
 }
 
+#define IFSTEP(X) if (APPLYSTEP) {X ;}
+
 // Decode a B2 sized group of QB3 values from s and acc
 // At least 56 valid bits in accumulator
 template<bool APPLYSTEP = true, typename T>
@@ -159,6 +161,7 @@ static void gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
         s.advance(abits + 1);
         return;
     }
+    uint32_t sv = 0; // Accumulator for the top bit vector
     if (sizeof(T) == 1 || rung < (sizeof(DRG) / sizeof(*DRG))) {
         auto drg = DRG[rung];
         const auto m = 0x1ffull >> (7 - rung);
@@ -167,9 +170,10 @@ static void gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             // The lower two bits of the accumulator determine the size
             // Preshift accumulator
             acc <<= 2;
-            for (int i=0; i < B2; i++) {
+            for (int i = 0; i < B2; i++) {
                 uint8_t size = (0x31213121u >> (acc & 0b11100)) & 0xf;
                 group[i] = T((0x30201020u >> (acc & 0b11100)) & 0xf);
+                IFSTEP(sv = sv * 2 + (group[i] >> 1));
                 abits += size;
                 acc >>= size;
             }
@@ -184,6 +188,7 @@ static void gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             for (size_t i = 0; i < 14; i++) {
                 size = (0x4232u >> (acc & 0b1100)) & 0xf;
                 group[i] = T((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
+                IFSTEP(sv = sv * 2 + (group[i] >> 2));
                 abits += size;
                 acc >>= size;
             }
@@ -195,14 +200,17 @@ static void gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             // Unroll the last two values
             size = (0x4232u >> (acc & 0b1100)) & 0xf;
             group[14] = T((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
+            IFSTEP(sv = sv * 2 + (group[14] >> 2));
             acc >>= size;
             group[15] = T((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
+            IFSTEP(sv = sv * 2 + (group[15] >> 2));
             s.advance(abits + size + ((0x4232 >> (acc & 0b1100)) & 0xf));
         }
         else if (6 > rung) { // Table decode at 3,4 and 5, half of the values per accumulator
             for (int i = 0; i < B2 / 2; ++i) {
                 auto v = drg[acc & m];
                 group[i] = T(v & TBLMASK);
+                IFSTEP(sv = sv * 2 + (group[i] >> rung));
                 acc >>= v >> 12;
                 abits += v >> 12;
             }
@@ -212,6 +220,7 @@ static void gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             for (int i = B2 / 2; i < B2; ++i) {
                 auto v = drg[acc & m];
                 group[i] = T(v & TBLMASK);
+                IFSTEP(sv = sv * 2 + (group[i] >> rung));
                 acc >>= v >> 12;
                 abits += v >> 12;
             }
@@ -222,6 +231,7 @@ static void gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             do {
                 auto v = drg[acc & m];
                 group[i] = T(v & TBLMASK);
+                IFSTEP(sv = sv * 2 + (group[i] >> rung));
                 abits += v >> 12;
                 acc >>= v >> 12;
             } while (++i < 6);
@@ -231,6 +241,7 @@ static void gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             do {
                 auto v = drg[acc & m];
                 group[i] = T(v & TBLMASK);
+                IFSTEP(sv = sv * 2 + (group[i] >> rung));
                 abits += v >> 12;
                 acc >>= v >> 12;
             } while (++i < 10);
@@ -240,6 +251,7 @@ static void gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             do {
                 auto v = drg[acc & m];
                 group[i] = T(v & TBLMASK);
+                sv = sv * 2 + (group[i] >> rung);
                 abits += v >> 12;
                 acc >>= v >> 12;
             } while (++i < B2);
@@ -258,6 +270,7 @@ static void gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
                 abits += p.first;
                 acc >>= p.first;
                 group[i] = T(p.second);
+                IFSTEP(sv = sv * 2 + (group[i] >> rung));
             }
             s.advance(abits);
         }
@@ -266,6 +279,7 @@ static void gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             for (int i = 0; i < B2; i++) {
                 auto p = qb3dsz(s.peek(), rung);
                 group[i] = T(p.second);
+                IFSTEP(sv = sv * 2 + (group[i] >> rung));
                 s.advance(p.first);
             }
         }
@@ -278,15 +292,19 @@ static void gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
                 s.advance(p.first ^ ovf);
                 if (ovf) // The next to top bit got dropped, rare
                     group[i] |= s.pull() << 62;
+                IFSTEP(sv = sv * 2 + (group[i] >> rung));
             }
         }
     }
-    // template parameter to avoid a test when not needed
-    if (APPLYSTEP) {
-        auto stepv = step(group, rung);
-        if (stepv < B2)
-            group[stepv] ^= T(1ull << rung);
-    }
+    IFSTEP(
+        sv ^= 0xffff; // Invert the bits, looking for 00001111
+        if (!(sv & (sv + 1))) {
+            // Count the number of zeros from the 16th
+            sv = 16 - topbit(sv * 2 + 1);
+            //std::cerr << "Adjust " << sv << " for rung " << rung << std::endl;
+            group[sv] ^= T(1ull << rung); // Apply the step to the group
+        }
+    )
 }
 
 // Streamlined decoding for FTL mode
