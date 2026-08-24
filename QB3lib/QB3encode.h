@@ -155,7 +155,7 @@ static std::pair<size_t, uint64_t> qb3csztbl(uint64_t val, size_t rung) {
 template <typename T, bool SKIPSTEP = false>
 static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t abits)
 {
-    assert(abits <= 64);
+    assert(abits <= 47); // Might push 17 bits
     if (1 >= bitsused) { // only 1s and 0s, rung is -1 or 0
         acc |= static_cast<uint64_t>(bitsused) << abits++;
         if (0 != bitsused)
@@ -174,11 +174,10 @@ static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t 
         if (stepp <= B2)
             group[stepp - 1] ^= static_cast<T>(1ull << rung);
     }
-    if (abits > 8) { // Just in case, a rung switch is 8 bits at most
+    if (abits > 8) { // Could be large, when called from cfgenc
         s.push(acc, abits);
         acc = abits = 0;
     }
-    auto t = CRG[rung];
     // For small tables, it's faster to encode with separate values
     if (rung == 1) { // 2 bits per value
         // Swap middle input values
@@ -211,6 +210,7 @@ static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t 
     }
     else
     if (6 > rung) { // Half of the group fits in 64 bits
+        auto t = CRG[rung];
         for (size_t i = 0; i < B2 / 2; i++) {
             acc |= (TBLMASK & t[group[i]]) << abits;
             abits += t[group[i]] >> 12;
@@ -225,6 +225,7 @@ static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t 
     }
     // Last part of table encoding, 3 writes 6,6,4
     else if (8 > rung) {
+        auto t = CRG[rung];
         size_t i = 0;
         do { // max 8 + 9 * 6 bits
             acc |= (TBLMASK & t[group[i]]) << abits;
@@ -244,7 +245,7 @@ static void groupencode(T group[B2], T bitsused, oBits& s, uint64_t acc, size_t 
         } while (++i < B2);
         s.push(acc, abits);
     }
-    // rung over 7, no tables work, so we call qb3csz directly
+    // no tables, computed encoding
     else if (1 < sizeof(T)) { // This vanishes in 8 bit mode
         if (sizeof(T) < 8 || rung < 31) { // low rung, can reuse acc
             for (int i = 0; i < B2; i++) {
