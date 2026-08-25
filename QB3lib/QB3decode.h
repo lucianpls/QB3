@@ -251,7 +251,7 @@ static void gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             do {
                 auto v = drg[acc & m];
                 group[i] = T(v & TBLMASK);
-                sv = sv * 2 + (group[i] >> rung);
+                IFSTEP(sv = sv * 2 + (group[i] >> rung));
                 abits += v >> 12;
                 acc >>= v >> 12;
             } while (++i < B2);
