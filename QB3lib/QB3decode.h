@@ -296,14 +296,10 @@ static void gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
             }
         }
     }
-    IFSTEP(
-        sv ^= 0xffff; // Invert the bits, looking for 00001111
-        if (!(sv & (sv + 1))) {
-            // Count the number of zeros from the 16th
-            sv = 16 - topbit(sv * 2 + 1);
-            //std::cerr << "Adjust " << sv << " for rung " << rung << std::endl;
-            group[sv] ^= T(1ull << rung); // Apply the step to the group
-        }
+    IFSTEP( // Invert the bits, look for 00001111, adjust the right value
+        sv ^= 0xffff; 
+        if (0 == (sv & (sv + 1)))
+            group[16 - topbit(sv * 2 + 1)] ^= T(1ull << rung);
     )
 }
 
