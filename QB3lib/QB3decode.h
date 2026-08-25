@@ -290,9 +290,9 @@ static void gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
                 auto ovf = p.first & (p.first >> 6);
                 group[i] = T(p.second);
                 s.advance(p.first ^ ovf);
+                IFSTEP(sv = sv * 2 + (group[i] >> rung)); // Bit 63 is ready
                 if (ovf) // The next to top bit got dropped, rare
                     group[i] |= s.pull() << 62;
-                IFSTEP(sv = sv * 2 + (group[i] >> rung));
             }
         }
     }
