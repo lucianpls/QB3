@@ -463,7 +463,6 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
                     abits = cs >> 12;
                 }
                 acc >>= abits;
-                // abits is never > 8, so it's safe to call gdecode
                 auto rung = (runbits[c] + cs) & NORM_MASK;
                 runbits[c] = rung;
                 if (rung == 0) { // single bits or all zeros
