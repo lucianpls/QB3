@@ -1,3 +1,7 @@
+## Version 2.1.1
+- 5 to 10% faster decompression on normal and best modes
+- Fixed an out of bounds read
+
 ## Version 2.1.0
 - 60% faster compression, achieved by optimizing the output bitstream
 - Fixed memory leak in the encoding of very narrow of short images

@@ -198,7 +198,7 @@ static void gdecode(iBits& s, size_t rung, T* group, uint64_t acc, size_t abits)
                 abits = 2;
             }
             // Unroll the last two values
-            size = (0x4232u >> (acc & 0b1100)) & 0xf;
+            size = (0x4232 >> (acc & 0b1100)) & 0xf;
             group[14] = T((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
             IFSTEP(sv = sv * 2 + (group[14] >> 2));
             acc >>= size;
