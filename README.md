@@ -56,13 +56,11 @@ The higher level C API and the binary format serialization and deserialization
 code is located in qb3encode.cpp and qb3decode.cpp. Lossy compression by 
 pre-quantization of input values is also in these files.
 
-# Change Log
-
-## Version 2.1.1
+# Version 2.1.1
 - 5 to 10% faster decompression on normal and best modes
 - Fixed an out of bounds read
 
-## [Full Change Log](doc/changeLog.md)
+# [Full Change Log](doc/changeLog.md)
 
 # License
 
