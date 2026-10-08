@@ -105,6 +105,11 @@ int main(int argc, char **argv) {
 	int x, y, max_val;
 	read_ppm_header(f, x, y, max_val);
 	printf("%d %d %d\n", x, y, max_val);
+	if (x < 1 || y < 1 || x > 4096 || y > 4096) {
+	  printf("Invalid size");
+	  fclose(f);
+	  return 1;
+	}
 	int raw_size = x * y * 3;
 	printf("Raw size %d\n", raw_size);
 	char *data = static_cast<char *>(malloc(x * y * 3));
