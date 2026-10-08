@@ -125,7 +125,7 @@ template<typename T> static T gcf(const T* group){
     return v[0]; // common factor > 1
 }
 
-// Computed encoding with three codeword lenghts, used for higher rungs
+// Computed encoding with three codeword lengths, used for higher rungs
 // No conditionals, computes all three values and picks one by masking with the condition
 // It is faster than similar code with conditions because the calculations for the three lines get interleaved
 // The "(~0ull * (1 & <cond>))" is to show the compiler that it is a mask operation
@@ -303,7 +303,7 @@ static void cfgenc(const T igrp[B2], T cf, T pcf, size_t oldrung, oBits& bits) {
     // Start with the CF encoding signal
     uint64_t acc = SIGNAL[UBITS] & TBLMASK;
     size_t abits = UBITS + 2; // SIGNAL >> 12
-    // divide raw absolute group values by CF and find the new maxvalue
+    // divide raw absolute group values by CF and find the new max value
     T bitsused = 0;
     T group[B2] = {};
     for (size_t i = 0; i < B2; i++)
