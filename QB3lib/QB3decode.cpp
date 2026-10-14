@@ -156,6 +156,9 @@ decsp qb3_read_start(void* source, size_t source_size, size_t *image_size) {
         delete p;
         return nullptr;
     }
+    // identity band mapping if the CB chunk is missing
+    for (int c = 0; c < p->nbands; c++)
+        p->cband[c] = c;
     p->s_in = static_cast<uint8_t*>(source) + QB3_HDRSZ;
     p->s_size = source_size - QB3_HDRSZ;
 
