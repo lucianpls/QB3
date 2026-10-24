@@ -1,3 +1,7 @@
+## Version 2.1.2
+- Correctly decode multiple bands encoded without band de-correlation
+- Slightly faster FTL decoding
+
 ## Version 2.1.1
 - 5 to 10% faster decompression on normal and best modes
 - Fixed an out of bounds read
