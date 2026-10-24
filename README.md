@@ -57,8 +57,8 @@ code is located in qb3encode.cpp and qb3decode.cpp. Lossy compression by
 pre-quantization of input values is also in these files.
 
 # Version 2.1.1
-- 5 to 10% faster decompression on normal and best modes
-- Fixed an out of bounds read
+- Correctly decode multiple bands encoded without band de-correlation
+- Slightly faster FTL decoding
 
 # [Full Change Log](doc/changeLog.md)
 
