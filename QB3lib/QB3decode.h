@@ -94,7 +94,7 @@ static const uint16_t drg7[] = { 0x7000, 0x8040, 0x7001, 0x907f, 0x7002, 0x8041,
 0x703e, 0x8080, 0x703f, 0x90ff };
 static const uint16_t* DRG[] = { drg0, drg1, drg2, drg3, drg4, drg5, drg6, drg7 };
 
-// Decoding tables for codeswitch for the different data types
+// Decoding tables for codeswitch for the different data types, the size includes the change bit
 static const uint16_t dsw3[] = { 0x3001, 0x4002, 0x3007, 0x5003, 0x3001, 0x4006, 0x3007, 0x5005, 0x3001, 0x4002, 0x3007, 0x5000,
 0x3001, 0x4006, 0x3007, 0x5004 };
 static const uint16_t dsw4[] = { 0x4001, 0x5003, 0x400f, 0x6005, 0x4002, 0x500d, 0x400e, 0x600b, 0x4001, 0x5004, 0x400f, 0x6006,
@@ -371,7 +371,7 @@ static bool decodeFTL(uint8_t* src, size_t len, T* image, const decs& info)
                         // Shift the accumulator to the left to place the selector in the right place
                         acc <<= 2;
                         for (size_t i = 0; i < B2; i++) {
-                            auto size = (0x3121u >> (acc & 0b1100)) & 0xf;
+                            auto size = (0x3121 >> (acc & 0b1100)) & 0xf;
                             blockp[offset[i]] = prv += smag(T((0x30201020u >> (acc & 0b11100)) & 0xf));
                             abits += size;
                             acc >>= size;
@@ -382,10 +382,10 @@ static bool decodeFTL(uint8_t* src, size_t len, T* image, const decs& info)
                     }
                     // rung 2
                     acc <<= 2;
-                    uint8_t size;
+                    int size;
                     for (int i = 0; i < 14; i++) {
-                        size = (0x4232u >> (acc & 0b1100)) & 0xf;
-                        blockp[offset[i]] = prv += (T)smag((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
+                        size = (0x4232 >> (acc & 0b1100)) & 0xf;
+                        blockp[offset[i]] = prv += smag(T((0x7140612051403120ull >> (acc & 0b111100)) & 0xf));
                         abits += size;
                         acc >>= size;
                     }
@@ -396,10 +396,10 @@ static bool decodeFTL(uint8_t* src, size_t len, T* image, const decs& info)
                     }
                     // Unroll the last two values
                     size = (0x4232 >> (acc & 0b1100)) & 0xf;
-                    blockp[offset[14]] = prv += (T)smag((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
+                    blockp[offset[14]] = prv += smag(T((0x7140612051403120ull >> (acc & 0b111100)) & 0xf));
                     acc >>= size;
-                    blockp[offset[15]] = prv += (T)smag((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
-                    s.advance(abits + size + ((0x4232u >> (acc & 0b1100)) & 0xf));
+                    blockp[offset[15]] = prv += smag(T((0x7140612051403120ull >> (acc & 0b111100)) & 0xf));
+                    s.advance(abits + size + ((0x4232 >> (acc & 0b1100)) & 0xf));
                     prev[c] = prv;
                     continue;
                 }
@@ -428,9 +428,12 @@ static bool decodeFTL(uint8_t* src, size_t len, T* image, const decs& info)
 template<>
 bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& info)
 {
+    // Decode rung switch for 8 bit data, with the no-change (0x1000) included
+    static const uint16_t dsw8[] = { 0x1000, 0x3001, 0x1000, 0x4002, 0x1000, 0x3007, 0x1000, 0x5003, 0x1000, 0x3001,
+        0x1000, 0x4006, 0x1000, 0x3007, 0x1000, 0x5005, 0x1000, 0x3001, 0x1000, 0x4002, 0x1000, 0x3007, 0x1000, 0x5000,
+        0x1000, 0x3001, 0x1000, 0x4006, 0x1000, 0x3007, 0x1000, 0x5004 };
     constexpr auto NORM_MASK(7); // UBITS set
-    constexpr auto LONG_MASK(NORM_MASK * 2 + 1); // UBITS + 1 set
-    constexpr auto dsw = dsw3;
+    constexpr auto LONG_MASK(NORM_MASK * 4 + 3); // UBITS + 2 set
     auto xsize(info.xsize), ysize(info.ysize), bands(info.nbands), stride(info.stride);
     auto cband = info.cband;
     uint8_t prev[QB3_MAXBANDS] = {};
@@ -441,7 +444,7 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
     order = order ? order : HILBERT;
     size_t offset[B2] = {};
     for (size_t i = 0; i < B2; i++) {
-        size_t n = (order >> ((B2 - 1 - i) << 2));
+        size_t n = order >> ((B2 - 1 - i) << 2);
         offset[i] = ((n >> 2) & 0b11) * stride + (n & 0b11) * bands;
     }
     iBits s(src, len);
@@ -456,27 +459,23 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
             for (int c = 0; c < bands; c++) {
                 auto prv = prev[c];
                 auto const blockp = image + y * stride + x * bands + c;
-                uint64_t acc(s.peek());
-                uint32_t cs(0), abits(1);
-                if (acc & 1) { // Rung change
-                    cs = dsw[(acc >> 1) & LONG_MASK];
-                    abits = cs >> 12;
-                }
+                auto acc(s.peek());
+                int cs = dsw8[acc & LONG_MASK];
+                auto abits = cs >> 12;
+                auto rung = runbits[c] = (runbits[c] + cs) & NORM_MASK;
                 acc >>= abits;
-                auto rung = (runbits[c] + cs) & NORM_MASK;
-                runbits[c] = rung;
                 if (rung == 0) { // single bits or all zeros
-                    abits++;
                     if (0 != (acc & 1)) {
                         for (int i = 0; i < B2; i++) {
                             acc >>= 1;
                             blockp[offset[i]] = prv -= (1 & acc);
                         }
-                        abits += B2;
+                        abits += B2 + 1;
                     }
                     else {
                         for (int i = 0; i < B2; i++)
                             blockp[offset[i]] = prv;
+                        abits++;
                     }
                 }
                 else if (rung == 1) { // rung == 1
@@ -496,7 +495,7 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
                     uint8_t size;
                     for (int i = 0; i < 14; i++) {
                         size = (0x4232u >> (acc & 0b1100)) & 0xf;
-                        blockp[offset[i]] = prv += (uint8_t)smag((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
+                        blockp[offset[i]] = prv += smag(uint8_t((0x7140612051403120ull >> (acc & 0b111100)) & 0xf));
                         abits += size;
                         acc >>= size;
                     }
@@ -507,9 +506,9 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
                     }
                     // Unroll the last two values
                     size = (0x4232 >> (acc & 0b1100)) & 0xf;
-                    blockp[offset[14]] = prv += (uint8_t)smag((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
+                    blockp[offset[14]] = prv += smag(uint8_t((0x7140612051403120ull >> (acc & 0b111100)) & 0xf));
                     acc >>= size;
-                    blockp[offset[15]] = prv += (uint8_t)smag((0x7140612051403120ull >> (acc & 0b111100)) & 0xf);
+                    blockp[offset[15]] = prv += smag(uint8_t((0x7140612051403120ull >> (acc & 0b111100)) & 0xf));
                     s.advance(abits + size + ((0x4232u >> (acc & 0b1100)) & 0xf));
                     prev[c] = prv;
                     continue;
@@ -537,7 +536,6 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
                         s.advance(abits);
                         continue;
                     }
-
                     // Rungs 6 and 7, three total reads, 6 4 6
                     int i = 0;
                     do {
