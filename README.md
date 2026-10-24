@@ -56,7 +56,7 @@ The higher level C API and the binary format serialization and deserialization
 code is located in qb3encode.cpp and qb3decode.cpp. Lossy compression by 
 pre-quantization of input values is also in these files.
 
-# Version 2.1.1
+# Version 2.1.2
 - Correctly decode multiple bands encoded without band de-correlation
 - Slightly faster FTL decoding
 
