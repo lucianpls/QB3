@@ -428,10 +428,9 @@ static bool decodeFTL(uint8_t* src, size_t len, T* image, const decs& info)
 template<>
 bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& info)
 {
-    // Decode rung switch for 8 bit data, with the no-change (0x1000) included
-    static const uint16_t dsw8[] = { 0x1000, 0x3001, 0x1000, 0x4002, 0x1000, 0x3007, 0x1000, 0x5003, 0x1000, 0x3001,
-        0x1000, 0x4006, 0x1000, 0x3007, 0x1000, 0x5005, 0x1000, 0x3001, 0x1000, 0x4002, 0x1000, 0x3007, 0x1000, 0x5000,
-        0x1000, 0x3001, 0x1000, 0x4006, 0x1000, 0x3007, 0x1000, 0x5004 };
+    // Rung switch table for 8 bit data, with the no-change (0x10) included
+    static const uint8_t dsw[] = { 0x10, 0x31, 0x10, 0x42, 0x10, 0x37, 0x10, 0x53, 0x10, 0x31, 0x10, 0x46, 0x10, 0x37, 
+        0x10, 0x55, 0x10, 0x31, 0x10, 0x42, 0x10, 0x37, 0x10, 0x50, 0x10, 0x31, 0x10, 0x46, 0x10, 0x37, 0x10, 0x54 };
     constexpr auto NORM_MASK(7); // UBITS set
     constexpr auto LONG_MASK(NORM_MASK * 4 + 3); // UBITS + 2 set
     auto xsize(info.xsize), ysize(info.ysize), bands(info.nbands), stride(info.stride);
@@ -460,8 +459,8 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
                 auto prv = prev[c];
                 auto const blockp = image + y * stride + x * bands + c;
                 auto acc(s.peek());
-                int cs = dsw8[acc & LONG_MASK];
-                auto abits = cs >> 12;
+                int cs = dsw[acc & LONG_MASK];
+                auto abits = cs >> 4;
                 auto rung = runbits[c] = (runbits[c] + cs) & NORM_MASK;
                 acc >>= abits;
                 if (rung == 0) { // single bits or all zeros
@@ -484,7 +483,7 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
                     // Shift the accumulator to the left to place the selector in the right place
                     acc <<= 2;
                     for (int i = 0; i < B2; i++) {
-                        auto size = (0x3121u >> (acc & 0b1100)) & 0xf;
+                        auto size = (0x3121 >> (acc & 0b1100)) & 0xf;
                         blockp[offset[i]] = prv += smag(uint8_t((0x30201020 >> (acc & 0b11100)) & 0xf));
                         abits += size;
                         acc >>= size;
@@ -494,7 +493,7 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
                     acc <<= 2;
                     uint8_t size;
                     for (int i = 0; i < 14; i++) {
-                        size = (0x4232u >> (acc & 0b1100)) & 0xf;
+                        size = (0x4232 >> (acc & 0b1100)) & 0xf;
                         blockp[offset[i]] = prv += smag(uint8_t((0x7140612051403120ull >> (acc & 0b111100)) & 0xf));
                         abits += size;
                         acc >>= size;
@@ -509,7 +508,7 @@ bool decodeFTL<uint8_t>(uint8_t* src, size_t len, uint8_t* image, const decs& in
                     blockp[offset[14]] = prv += smag(uint8_t((0x7140612051403120ull >> (acc & 0b111100)) & 0xf));
                     acc >>= size;
                     blockp[offset[15]] = prv += smag(uint8_t((0x7140612051403120ull >> (acc & 0b111100)) & 0xf));
-                    s.advance(abits + size + ((0x4232u >> (acc & 0b1100)) & 0xf));
+                    s.advance(abits + size + ((0x4232 >> (acc & 0b1100)) & 0xf));
                     prev[c] = prv;
                     continue;
                 }
@@ -696,7 +695,7 @@ static bool decode(uint8_t *src, size_t len, T* image, const decs &info)
                         // We might overflow the accumulator, even for byte data
                         // abits at this point is between 9-13, 12-16, 15-19 and 18-22 depending on data type
                         // Anything above 12 could generate an overflow, so it's safer to read a new accumulator
-                        // A maximum of 52 bits are needed, so we can read 62 bits preshifted to the right by 2
+                        // A maximum of 52 bits are needed, so we can read 62 bits preshifted by 2
                         s.advance(abits + (cs >> 12) - 3); // Preshift the next accumulator
                         acc = s.peek();
                         abits = 2;
