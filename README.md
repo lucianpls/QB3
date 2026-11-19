@@ -53,7 +53,7 @@ lossless compression such as ZSTD at a very low effort setting (zip the QB3 outp
 The core QB3 compression is implemented in qb3decode.h and qb3encode.h 
 as C++ templates.  
 The higher level C API and the binary format serialization and deserialization
-code is located in qb3encode.cpp and qb3decode.cpp. Lossy compression by 
+code are located in qb3encode.cpp and qb3decode.cpp. Lossy compression by 
 pre-quantization of input values is also in these files.
 
 # Version 2.1.2
